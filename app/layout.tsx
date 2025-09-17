@@ -14,26 +14,36 @@ export const metadata: Metadata = {
 }
 
 import { Permission } from '@/contexts/PermissionsContext';
+import { Suspense } from 'react';
 
 // Permissions will be set client-side after authentication
 const initialPermissions: Permission[] = [];
 
-export default async function RootLayout({
+// Create a client component wrapper for the providers
+function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <PermissionsProvider permissions={initialPermissions}>
+      {children}
+      <Analytics />
+      <Toaster position="top-center" />
+    </PermissionsProvider>
+  );
+}
+
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  // Initialize with empty permissions, will be updated after login
-  const userPermissions = initialPermissions;
 
   return (
     <html lang="en">
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans`}>
-        <PermissionsProvider permissions={userPermissions}>
-          {children}
-          <Analytics />
-          <Toaster position="top-center" />
-        </PermissionsProvider>
+        <Suspense fallback={<div>Loading...</div>}>
+          <Providers>
+            {children}
+          </Providers>
+        </Suspense>
       </body>
     </html>
   )

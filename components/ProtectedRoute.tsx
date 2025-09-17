@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { usePermissions, type Permission, type UserRoleType } from '@/hooks/use-permissions';
 import { useCheckPermission } from '@/utils/permission-utils';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,8 @@ interface ProtectedRouteProps {
   showForbidden?: boolean;
 }
 
-export default function ProtectedRoute({
+// Inner component that can use useSearchParams
+function ProtectedContent({
   children,
   requiredPermission,
   requiredRole,
@@ -82,17 +83,35 @@ export default function ProtectedRoute({
   const hasAccess = hasRequiredAccess();
 
   // Show forbidden state if needed
-  if (isAuthenticated && !hasAccess && showForbidden) {
+  if (isAuthenticated && !hasAccess) {
+    if (!showForbidden) {
+      return null;
+    }
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4 text-center">
-        <h1 className="text-2xl font-bold">Access Denied</h1>
-        <p className="text-muted-foreground">
-          You don't have permission to view this page.
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
+        <p className="text-muted-foreground mb-6">
+          You don't have permission to access this page.
         </p>
+        <Button onClick={() => router.push(redirectTo)}>
+          Go back
+        </Button>
       </div>
     );
   }
 
   // Show children only if authenticated and has access
-  return isAuthenticated && hasAccess ? <>{children}</> : null;
+  return <>{children}</>;
+}
+
+export default function ProtectedRoute(props: ProtectedRouteProps) {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <ProtectedContent {...props} />
+    </Suspense>
+  );
 }

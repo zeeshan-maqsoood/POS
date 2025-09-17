@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import profileApi, { Profile } from '@/lib/profile-api';
 
+// Check if we're in a browser environment
+const isBrowser = typeof window !== 'undefined';
+
 // Define permission action types
 type PermissionAction = 'CREATE' | 'READ' | 'UPDATE' | 'DELETE';
 
@@ -73,210 +76,246 @@ interface UsePermissionsReturn {
   canManageMenu: boolean;
 }
 
+// Helper to check if we're in a browser environment
+
+// Default permissions for server-side rendering
+const DEFAULT_PERMISSIONS: Permission[] = [];
+
 export const usePermissions = (): UsePermissionsReturn => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [state, setState] = useState<{
+    user: UserProfile | null;
+    permissions: Permission[];
+    isLoading: boolean;
+    error: Error | null;
+  }>(() => ({
+    user: null,
+    permissions: DEFAULT_PERMISSIONS,
+    isLoading: true,
+    error: null,
+  }));
+
+  // Helper to update state safely
+  const updateState = (updates: Partial<typeof state>) => {
+    setState(prev => ({
+      ...prev,
+      ...updates,
+    }));
+  };
 
   const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
+    // Don't fetch on server during build
+    if (!isBrowser) {
+      return null;
+    }
+    
+    // Set loading state
+    updateState({ isLoading: true, error: null });
+
     try {
       const response = await profileApi.getProfile();
-      const profileData = response.data.data; // Extract the actual profile data
-      console.log('Profile data received:', profileData);
+      const profileData = response.data?.data; // Extract the actual profile data
       
-      if (profileData) {
-        const role = (profileData.role || 'CUSTOMER') as UserRoleType;
-        
-        // Use permissions from profile if they exist, otherwise use role-based defaults
-        let permissions: Permission[] = [];
-        
-        if (profileData.permissions && Array.isArray(profileData.permissions)) {
-          // Use permissions from profile
-          permissions = profileData.permissions.filter((p): p is Permission => 
-            typeof p === 'string' && (p as string).includes('_')
-          );
-          console.log('Using permissions from profile:', permissions);
-        } else {
-          // Fall back to role-based permissions
-          console.log('No permissions in profile, using role-based permissions');
-          switch (role) {
-            case 'ADMIN':
-              permissions = [
-                'USER_READ', 'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
-                'ORDER_READ', 'ORDER_CREATE', 'ORDER_UPDATE', 'ORDER_DELETE',
-                'PRODUCT_READ', 'PRODUCT_CREATE', 'PRODUCT_UPDATE', 'PRODUCT_DELETE',
-                'MENU_READ', 'MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE',
-                'MANAGER_READ', 'MANAGER_CREATE', 'MANAGER_UPDATE'
-              ];
-              break;
-            case 'MANAGER':
-              permissions = [
-                'ORDER_READ', 'ORDER_UPDATE',
-                'PRODUCT_READ', 'MENU_READ'
-              ];
-              break;
-            case 'STAFF':
-              permissions = [
-                'ORDER_READ', 'ORDER_CREATE',
-                'PRODUCT_READ', 'MENU_READ'
-              ];
-              break;
-            default:
-              permissions = [];
-          }
-        }
-        
-        // Create user profile with permissions
-        const userProfile: UserProfile = {
-          ...profileData,
-          role,
-          permissions
-        };
-        
-        setUser(userProfile);
-        setPermissions(permissions);
-        
-        // Store minimal user data in localStorage for initial load
-        localStorage.setItem('user', JSON.stringify({
-          id: profileData.id,
-          email: profileData.email,
-          name: profileData.name,
-          role,
-          permissions
-        }));
-        
-        console.log('User profile loaded:', {
-          role,
-          permissions,
-          userProfile
-        });
-        
-        return userProfile;
+      if (!profileData) {
+        throw new Error('No profile data received');
       }
       
-      return null;
+      const role = (profileData.role || 'CUSTOMER') as UserRoleType;
+      
+      // Use permissions from profile if they exist, otherwise use role-based defaults
+      let permissions: Permission[] = [];
+      
+      if (profileData.permissions && Array.isArray(profileData.permissions)) {
+        // Use permissions from profile
+        permissions = profileData.permissions.filter((p): p is Permission => 
+          typeof p === 'string' && p.includes('_')
+        );
+      } else {
+        // Fall back to role-based permissions
+        switch (role) {
+          case 'ADMIN':
+            permissions = [
+              'USER_READ', 'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
+              'ORDER_READ', 'ORDER_CREATE', 'ORDER_UPDATE', 'ORDER_DELETE',
+              'PRODUCT_READ', 'PRODUCT_CREATE', 'PRODUCT_UPDATE', 'PRODUCT_DELETE',
+              'MENU_READ', 'MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE',
+              'MANAGER_READ', 'MANAGER_CREATE', 'MANAGER_UPDATE'
+            ];
+            break;
+          case 'MANAGER':
+            permissions = [
+              'ORDER_READ', 'ORDER_UPDATE',
+              'PRODUCT_READ', 'MENU_READ'
+            ];
+            break;
+          case 'STAFF':
+            permissions = [
+              'ORDER_READ', 'ORDER_CREATE',
+              'PRODUCT_READ', 'MENU_READ'
+            ];
+            break;
+          default:
+            permissions = [];
+        }
+      }
+      
+      // Create user profile with permissions
+      const userProfile: UserProfile = {
+        ...profileData,
+        role,
+        permissions
+      };
+      
+      updateState({ user: userProfile, permissions, isLoading: false });
+      
+      // Store minimal user data in localStorage for initial load
+      localStorage.setItem('user', JSON.stringify({
+        id: profileData.id,
+        email: profileData.email,
+        name: profileData.name,
+        role,
+        permissions
+      }));
+      
+      return userProfile;
     } catch (err) {
-      console.log(err,"err")
       const error = err instanceof Error ? err : new Error('Failed to fetch permissions');
-      setError(error);
+      updateState({ error, isLoading: false });
       throw error;
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
+    // Only run this effect in the browser
+    if (!isBrowser) {
+      updateState({ isLoading: false });
+      return;
+    }
+    
     // Try to get user from localStorage first for instant load
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setPermissions(parsedUser.permissions || []);
+        updateState({ user: parsedUser, permissions: parsedUser.permissions || [], isLoading: false });
       } catch (e) {
         console.error('Failed to parse stored user data', e);
         localStorage.removeItem('user');
       }
     }
     
-    // Then fetch fresh data
-    fetchProfile();
-  }, [fetchProfile]);
+    // Then fetch fresh data from the server
+    const loadProfile = async () => {
+      try {
+        await fetchProfile();
+      } catch (err) {
+        console.error('Failed to load profile:', err);
+        updateState({ error: err instanceof Error ? err : new Error('Failed to load profile'), isLoading: false });
+      }
+    };
+    
+    loadProfile();
+  }, [fetchProfile, isBrowser]);
 
   const hasPermission = useCallback((requiredPermission: Permission | Permission[]): boolean => {
-    // If we're still loading, we can't determine permissions yet
-    if (isLoading) {
-      console.log('hasPermission: Still loading permissions');
+    // On server, default to most restrictive permissions
+    if (!isBrowser || state.isLoading) {
       return false;
     }
-
+    
     // If no permissions are required, grant access
     if (!requiredPermission) {
-      console.log('hasPermission: No permission required, granting access');
       return true;
     }
 
     // If no permissions are set, deny access
-    if (!permissions || permissions.length === 0) {
-      console.log('hasPermission: No permissions available, denying access');
+    if (!state.permissions || state.permissions.length === 0) {
       return false;
     }
 
     // Handle array of required permissions (OR condition)
     if (Array.isArray(requiredPermission)) {
-      const hasAny = requiredPermission.some(p => {
-        const has = permissions.includes(p);
-        console.log(`Checking permission ${p}: ${has}`);
-        return has;
-      });
-      console.log(`hasPermission: Any of [${requiredPermission.join(', ')}] = ${hasAny}`);
-      return hasAny;
+      return requiredPermission.some(p => state.permissions.includes(p));
     }
     
     // Handle single permission
-    const has = permissions.includes(requiredPermission);
-    console.log(`hasPermission: ${requiredPermission} = ${has}`);
-    return has;
-  }, [permissions, isLoading]);
+    return state.permissions.includes(requiredPermission);
+  }, [state.permissions, state.isLoading]);
 
   const hasAnyPermission = useCallback((requiredPermissions: Permission[]): boolean => {
-    if (isLoading) return false;
-    return requiredPermissions.some(p => permissions.includes(p));
-  }, [permissions, isLoading]);
+    // On server, default to most restrictive permissions
+    if (!isBrowser || state.isLoading) {
+      return false;
+    }
+    return requiredPermissions.some(p => state.permissions.includes(p));
+  }, [state.permissions, state.isLoading]);
 
   const hasRole = useCallback((role: UserRoleType | UserRoleType[]): boolean => {
-    // If we're still loading or user is not available, we can't determine role
-    if (isLoading) {
-      console.log('hasRole: Still loading user data');
+    // On server, default to most restrictive permissions
+    if (!isBrowser || state.isLoading || !state.user) {
       return false;
     }
     
-    if (!user) {
-      console.log('hasRole: No user data available');
+    if (!state.user) {
       return false;
     }
     
     // Handle array of roles (OR condition)
     if (Array.isArray(role)) {
-      const hasAny = role.includes(user.role);
-      console.log(`hasRole: User role ${user.role} in [${role.join(', ')}] = ${hasAny}`);
-      return hasAny;
+      return role.includes(state.user.role);
     }
     
     // Handle single role
-    const hasRoleCheck = user.role === role;
-    console.log(`hasRole: User role ${user.role} === ${role} = ${hasRoleCheck}`);
-    return hasRoleCheck;
-  }, [user, isLoading]);
+    return state.user.role === role;
+  }, [state.user, state.isLoading]);
 
-  // Memoize common permission checks
-  const isAdmin = hasRole('ADMIN');
-  const isManager = hasRole('MANAGER');
-  const isStaff = hasRole('STAFF');
-  
-  // Permission checks for different resources
-  const canViewUsers = hasPermission('USER_READ');
-  const canManageUsers = hasPermission('USER_CREATE') || hasPermission('USER_UPDATE') || hasPermission('USER_DELETE');
-  const canViewManagers = hasPermission('MANAGER_READ');
-  const canManageManagers = hasPermission('MANAGER_CREATE') || hasPermission('MANAGER_UPDATE');
-  const canViewProducts = hasPermission('PRODUCT_READ');
-  const canManageProducts = hasPermission('PRODUCT_CREATE') || hasPermission('PRODUCT_UPDATE') || hasPermission('PRODUCT_DELETE');
-  const canViewOrders = hasPermission('ORDER_READ');
-  const canManageOrders = hasPermission('ORDER_CREATE') || hasPermission('ORDER_UPDATE') || hasPermission('ORDER_DELETE');
-  const canViewMenu = hasPermission('MENU_READ');
-  const canManageMenu = hasPermission('MENU_CREATE') || hasPermission('MENU_UPDATE') || hasPermission('MENU_DELETE');
+  // Memoized permission checks - ensure these are computed only when needed
+  const permissionChecks = useMemo(() => {
+    // If we're on the server or still loading, return all false
+    if (!isBrowser || state.isLoading) {
+      return {
+        canViewUsers: false,
+        canManageUsers: false,
+        canViewManagers: false,
+        canManageManagers: false,
+        canViewProducts: false,
+        canManageProducts: false,
+        canViewOrders: false,
+        canManageOrders: false,
+        canViewMenu: false,
+        canManageMenu: false,
+      };
+    }
+    
+    return {
+      canViewUsers: hasPermission(['USER_READ', 'USER_UPDATE', 'USER_DELETE']),
+      canManageUsers: hasPermission(['USER_CREATE', 'USER_UPDATE', 'USER_DELETE']),
+      canViewManagers: hasPermission('MANAGER_READ'),
+      canManageManagers: hasPermission(['MANAGER_CREATE', 'MANAGER_UPDATE']),
+      canViewProducts: hasPermission('PRODUCT_READ'),
+      canManageProducts: hasPermission(['PRODUCT_CREATE', 'PRODUCT_UPDATE', 'PRODUCT_DELETE']),
+      canViewOrders: hasPermission('ORDER_READ'),
+      canManageOrders: hasPermission(['ORDER_UPDATE', 'ORDER_DELETE']),
+      canViewMenu: hasPermission('MENU_READ'),
+      canManageMenu: hasPermission(['MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE']),
+    };
+  }, [state.isLoading, hasPermission]);
 
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!state.user;
   
+  // Only fetch profile on the client side
+  useEffect(() => {
+    if (isBrowser) {
+      fetchProfile();
+    }
+  }, [isBrowser]);
+
   return {
     // State
-    user,
-    permissions,
-    isLoading,
-    error,
-    isAuthenticated,
+    user: state.user,
+    permissions: state.permissions,
+    isLoading: state.isLoading,
+    error: state.error,
+    isAuthenticated: !!state.user,
     
     // Actions
     refresh: fetchProfile,
@@ -287,21 +326,12 @@ export const usePermissions = (): UsePermissionsReturn => {
     hasRole,
     
     // Role helpers
-    isAdmin,
-    isManager,
-    isStaff,
+    isAdmin: hasRole('ADMIN'),
+    isManager: hasRole('MANAGER'),
+    isStaff: hasRole('STAFF'),
     
-    // Common permission checks
-    canViewUsers,
-    canManageUsers,
-    canViewManagers,
-    canManageManagers,
-    canViewProducts,
-    canManageProducts,
-    canViewOrders,
-    canManageOrders,
-    canViewMenu,
-    canManageMenu,
+    // Permission checks
+    ...permissionChecks,
   };
 };
 

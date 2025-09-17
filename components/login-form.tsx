@@ -1,15 +1,17 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Eye, EyeOff, Lock, Mail } from "lucide-react"
-import authApi,{LoginResponse} from "@/lib/auth-api"
-export function LoginForm() {
+import { Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react"
+import authApi, { LoginResponse } from "@/lib/auth-api"
+
+// Inner component that uses useSearchParams
+function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -65,11 +67,9 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="bg-card border-border shadow-lg">
+    <Card className="w-full max-w-md mx-auto">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center text-card-foreground">
-          Sign In
-        </CardTitle>
+        <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -144,5 +144,17 @@ export function LoginForm() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+export function LoginForm() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <LoginFormContent />
+    </Suspense>
   )
 }

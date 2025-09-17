@@ -1,19 +1,11 @@
 'use client';
 
-import { ReactNode, useEffect, ComponentType } from 'react';
+import { ReactNode, useEffect, ComponentType, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermissions, type Permission, type UserRoleType } from '@/hooks/use-permissions';
 
-interface WithPermissionProps {
-  children: ReactNode;
-  requiredPermission?: Permission | Permission[];
-  requiredRole?: UserRoleType | UserRoleType[];
-  anyPermission?: Permission[];
-  redirectTo?: string;
-  loadingComponent?: ReactNode;
-}
-
-export function WithPermission({
+// Client-side only component to handle permission checks
+const ClientPermissionCheck = ({
   children,
   requiredPermission,
   requiredRole,
@@ -24,7 +16,7 @@ export function WithPermission({
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
     </div>
   ),
-}: WithPermissionProps) {
+}: WithPermissionProps) => {
   const { 
     hasPermission, 
     hasAnyPermission, 
@@ -33,10 +25,20 @@ export function WithPermission({
     isAuthenticated 
   } = usePermissions();
   const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // If no permissions are required, render children
-  if (!requiredPermission && !anyPermission) {
+  if (!requiredPermission && !anyPermission && !requiredRole) {
     return <>{children}</>;
+  }
+
+  // On initial render, don't show anything until we've determined permissions
+  if (!isMounted) {
+    return <>{loadingComponent}</>;
   }
 
   // Show loading state while checking permissions
@@ -47,22 +49,37 @@ export function WithPermission({
   // Check permissions and roles
   const hasRequiredPermission = !requiredPermission || hasPermission(requiredPermission);
   const hasRequiredRole = !requiredRole || hasRole(requiredRole);
-  const hasAccess = hasRequiredPermission && hasRequiredRole;
+  const hasAnyPerm = !anyPermission || hasAnyPermission(anyPermission);
+  
+  const hasAccess = hasRequiredPermission && hasRequiredRole && hasAnyPerm;
 
-  // Redirect if no access
-  useEffect(() => {
-    if (!isLoading && !hasAccess) {
-      router.replace(redirectTo);
-    }
-  }, [hasAccess, isLoading, redirectTo, router]);
-
-  // If we don't have access, show nothing (will redirect)
-  if (!hasAccess) {
+  // Redirect if user doesn't have access
+  if (!hasAccess && isMounted) {
+    router.push(redirectTo);
     return null;
   }
 
-  // If we have access, render children
   return <>{children}</>;
+};
+
+interface WithPermissionProps {
+  children: ReactNode;
+  requiredPermission?: Permission | Permission[];
+  requiredRole?: UserRoleType | UserRoleType[];
+  anyPermission?: Permission[];
+  redirectTo?: string;
+  loadingComponent?: ReactNode;
+}
+
+// Server component wrapper that renders the client component
+export function WithPermission(props: WithPermissionProps) {
+  // On the server, render a loading state or nothing
+  if (typeof window === 'undefined') {
+    return props.loadingComponent || null;
+  }
+  
+  // On the client, render the permission check
+  return <ClientPermissionCheck {...props} />;
 }
 
 // HOC version for class components
