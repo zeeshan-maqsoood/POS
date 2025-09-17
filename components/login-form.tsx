@@ -51,11 +51,18 @@ function LoginFormContent() {
       const api = (await import('@/utils/api')).default;
       api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
 
-      // Ensure redirect path starts with a slash
-      const redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
+      // Clean up the redirect path
+      let redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
       
-      // For all environments, use window.location.href for consistent behavior
-      // This ensures the page fully reloads and middleware runs again
+      // If the path is just /dashboard, remove any query parameters
+      if (redirectPath === '/dashboard' || redirectPath.startsWith('/dashboard?')) {
+        redirectPath = '/dashboard';
+      }
+      
+      // Use replaceState to clean up the URL in the browser history
+      window.history.replaceState({}, '', window.location.pathname);
+      
+      // Navigate to the clean URL
       window.location.href = redirectPath;
     } catch (err: any) {
       console.error("Login error:", err);
