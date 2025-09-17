@@ -10,22 +10,14 @@
   "outputDirectory": ".next",
   "cleanUrls": true,
   "trailingSlash": false,
-  "routes": [
+  "rewrites": [
     {
-      "src": "/((?:[^/]+/)*[^/\\.]+)$",
-      "dest": "/"
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
     },
     {
-      "src": "/((?:[^/]+/)*[^/]+\\.\\w+)$",
-      "dest": "/"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/"
+      "source": "/((?!_next/static|_next/image|favicon.ico|api/|_next/data/).*)",
+      "destination": "/"
     }
   ]
 }
