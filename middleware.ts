@@ -72,8 +72,14 @@ export function middleware(request: NextRequest) {
   
   // If no token and trying to access a protected route, redirect to login
   if (!token) {
-    if (pathname !== '/') {
+    if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
+      // For dashboard routes, just redirect to login without any query params
+      return NextResponse.redirect(new URL('/', request.url));
+    } else if (pathname !== '/') {
+      // For other protected routes, include the redirect parameter
+      loginUrl.search = '';
       loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
     }
     return NextResponse.redirect(loginUrl);
   }
