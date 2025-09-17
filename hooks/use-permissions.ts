@@ -74,6 +74,20 @@ interface UsePermissionsReturn {
   canManageOrders: boolean;
   canViewMenu: boolean;
   canManageMenu: boolean;
+  
+  // Menu and page access control
+  canAccessPage: (page: string) => boolean;
+  getFilteredMenuItems: () => Array<{
+    title: string;
+    path: string;
+    icon: string;
+    requiredPermission?: string | string[];
+    children?: Array<{
+      title: string;
+      path: string;
+      requiredPermission?: string | string[];
+    }>;
+  }>;
 }
 
 // Helper to check if we're in a browser environment
@@ -300,6 +314,170 @@ export const usePermissions = (): UsePermissionsReturn => {
     };
   }, [state.isLoading, hasPermission]);
 
+  const isAdmin = hasRole('ADMIN');
+  const isManager = hasRole('MANAGER');
+  const isStaff = hasRole('STAFF');
+
+  const canViewUsers = hasPermission('USER_READ');
+  const canManageUsers = hasAnyPermission(['USER_CREATE', 'USER_UPDATE', 'USER_DELETE']);
+  const canViewManagers = hasPermission('MANAGER_READ');
+  const canManageManagers = hasAnyPermission(['MANAGER_CREATE', 'MANAGER_UPDATE']);
+  const canViewProducts = hasPermission('PRODUCT_READ');
+  const canManageProducts = hasAnyPermission(['PRODUCT_CREATE', 'PRODUCT_UPDATE', 'PRODUCT_DELETE']);
+  const canViewOrders = hasPermission('ORDER_READ');
+  const canManageOrders = hasAnyPermission(['ORDER_CREATE', 'ORDER_UPDATE', 'ORDER_DELETE']);
+  const canViewMenu = hasPermission('MENU_READ');
+  const canManageMenu = hasAnyPermission(['MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE']);
+
+  const canAccessPage = (page: string): boolean => {
+    type PagePermissions = Record<string, Permission | Permission[]>;
+    const pagePermissions: PagePermissions = {
+      'dashboard': ['ORDER_READ', 'ORDER_CREATE'],
+      'orders': 'ORDER_READ',
+      'pos': 'ORDER_CREATE',
+      'orders/new': 'ORDER_CREATE',
+      'orders/[id]': 'ORDER_READ',
+      'orders/[id]/edit': 'ORDER_UPDATE',
+      'menu': 'MENU_READ',
+      'menu/items': 'MENU_READ',
+      'menu/items/new': 'MENU_CREATE',
+      'menu/items/[id]': 'MENU_READ',
+      'menu/items/[id]/edit': 'MENU_UPDATE',
+      'users': 'USER_READ',
+      'users/new': 'USER_CREATE',
+      'users/[id]': 'USER_READ',
+      'users/[id]/edit': 'USER_UPDATE',
+      'managers': 'MANAGER_READ',
+      'managers/new': 'MANAGER_CREATE',
+      'managers/[id]': 'MANAGER_READ',
+      'managers/[id]/edit': 'MANAGER_UPDATE',
+    };
+
+    const requiredPermission = pagePermissions[page];
+    if (!requiredPermission) return false; // Default deny if page not in the list
+    
+    return hasAnyPermission(Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission]);
+  };
+
+  const getFilteredMenuItems = () => {
+    type MenuItem = {
+      title: string;
+      path: string;
+      icon: string;
+      requiredPermission?: Permission | Permission[];
+      children?: Array<{
+        title: string;
+        path: string;
+        requiredPermission?: Permission | Permission[];
+      }>;
+    };
+
+    const allMenuItems: MenuItem[] = [
+      {
+        title: 'Dashboard',
+        path: '/dashboard',
+        icon: 'LayoutDashboard',
+        requiredPermission: 'ORDER_READ'
+      },
+      {
+        title: 'Orders',
+        path: '/orders',
+        icon: 'ShoppingCart',
+        requiredPermission: ['ORDER_READ', 'ORDER_CREATE'],
+        children: [
+          { 
+            title: 'All Orders', 
+            path: '/orders',
+            requiredPermission: 'ORDER_READ'
+          },
+          { 
+            title: 'New Order', 
+            path: '/orders/new',
+            requiredPermission: 'ORDER_CREATE'
+          }
+        ]
+      },
+      {
+        title: 'Menu',
+        path: '/menu/items',
+        icon: 'Utensils',
+        requiredPermission: 'MENU_READ',
+        children: [
+          { 
+            title: 'Menu Items', 
+            path: '/menu/items',
+            requiredPermission: 'MENU_READ'
+          },
+          { 
+            title: 'Add New Item', 
+            path: '/menu/items/new',
+            requiredPermission: 'MENU_CREATE'
+          },
+          { 
+            title: 'Categories', 
+            path: '/menu/categories',
+            requiredPermission: 'MENU_READ'
+          }
+        ]
+      },
+      {
+        title: 'Users',
+        path: '/users',
+        icon: 'Users',
+        requiredPermission: 'USER_READ',
+        children: [
+          { 
+            title: 'All Users', 
+            path: '/users',
+            requiredPermission: 'USER_READ'
+          },
+          { 
+            title: 'Add User', 
+            path: '/users/new',
+            requiredPermission: 'USER_CREATE'
+          }
+        ]
+      },
+      {
+        title: 'Managers',
+        path: '/managers',
+        icon: 'UserCog',
+        requiredPermission: 'MANAGER_READ',
+        children: [
+          { 
+            title: 'All Managers', 
+            path: '/managers',
+            requiredPermission: 'MANAGER_READ'
+          },
+          { 
+            title: 'Add Manager', 
+            path: '/managers/new',
+            requiredPermission: 'MANAGER_CREATE'
+          }
+        ]
+      }
+    ];
+
+    return allMenuItems.filter(item => {
+      // Check if user has permission for this menu item
+      const hasItemPermission = !item.requiredPermission || 
+        hasAnyPermission(Array.isArray(item.requiredPermission) ? item.requiredPermission : [item.requiredPermission]);
+      
+      // If menu item has children, filter them as well
+      if (item.children) {
+        item.children = item.children.filter(child => 
+          !child.requiredPermission || 
+          hasAnyPermission(Array.isArray(child.requiredPermission) ? child.requiredPermission : [child.requiredPermission])
+        );
+        
+        // Only show parent if it has any visible children or no children at all
+        return hasItemPermission && (item.children.length > 0 || !item.requiredPermission);
+      }
+      
+      return hasItemPermission;
+    });
+  };
+
   const isAuthenticated = !!state.user;
   
   // Only fetch profile on the client side
@@ -307,7 +485,7 @@ export const usePermissions = (): UsePermissionsReturn => {
     if (isBrowser) {
       fetchProfile();
     }
-  }, [isBrowser]);
+  }, [isBrowser, fetchProfile]);
 
   return {
     // State
@@ -315,7 +493,7 @@ export const usePermissions = (): UsePermissionsReturn => {
     permissions: state.permissions,
     isLoading: state.isLoading,
     error: state.error,
-    isAuthenticated: !!state.user,
+    isAuthenticated,
     
     // Actions
     refresh: fetchProfile,
@@ -326,9 +504,25 @@ export const usePermissions = (): UsePermissionsReturn => {
     hasRole,
     
     // Role helpers
-    isAdmin: hasRole('ADMIN'),
-    isManager: hasRole('MANAGER'),
-    isStaff: hasRole('STAFF'),
+    isAdmin,
+    isManager,
+    isStaff,
+    
+    // Common permission checks
+    canViewUsers,
+    canManageUsers,
+    canViewManagers,
+    canManageManagers,
+    canViewProducts,
+    canManageProducts,
+    canViewOrders,
+    canManageOrders,
+    canViewMenu,
+    canManageMenu,
+    
+    // Menu and page access control
+    canAccessPage,
+    getFilteredMenuItems,
     
     // Permission checks
     ...permissionChecks,

@@ -10,10 +10,19 @@
   "outputDirectory": ".next",
   "cleanUrls": true,
   "trailingSlash": false,
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/pos/(.*)", "dest": "/pos/$1" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "/api/:path*"
+    },
+    {
+      "source": "/pos/:path*",
+      "destination": "/pos/:path*"
     },
     {
       "source": "/(.*)",
