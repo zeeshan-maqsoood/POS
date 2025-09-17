@@ -16,7 +16,7 @@
       "destination": "/api/:path*"
     },
     {
-      "source": "/((?!_next/static|_next/image|favicon.ico|api/|_next/data/).*)",
+      "source": "/(.*)",
       "destination": "/"
     }
   ]
