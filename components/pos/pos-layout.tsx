@@ -490,15 +490,12 @@ export function POSLayout() {
         console.log('Processed Categories:', categoriesData);
         console.log('Processed Items:', itemsData);
 
-        if (categoriesData.length === 0 || itemsData.length === 0) {
-          throw new Error('No data received from the server');
-        }
-
-        setCategories(categoriesData);
+        // Set categories even if empty
+        setCategories(categoriesData || []);
         
         // Transform menu items to include category name
-        const itemsWithCategory = itemsData.map((item: any) => {
-          const category = categoriesData.find((cat: Category) => cat.id === item.categoryId);
+        const itemsWithCategory = (itemsData || []).map((item: any) => {
+          const category = (categoriesData || []).find((cat: Category) => cat.id === item.categoryId);
           return {
             ...item,
             category: category?.name || 'Uncategorized',
@@ -511,10 +508,17 @@ export function POSLayout() {
         });
         
         setMenuItems(itemsWithCategory);
+        
+        // Show warning if no items found, but don't block the UI
+        if (!itemsData || itemsData.length === 0) {
+          console.warn('No menu items found');
+          toast.warning('No menu items found. Please add items to the menu.');
+        }
       } catch (err) {
         console.error('Error fetching menu data:', err);
-        setError('Failed to load menu data. Please try again later.');
-        toast.error('Failed to load menu data');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load menu data';
+        setError(`Error: ${errorMessage}. The POS will continue with limited functionality.`);
+        toast.warning('Some menu data could not be loaded. The POS will continue with limited functionality.');
       } finally {
         setIsLoading(false);
       }
