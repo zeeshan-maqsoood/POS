@@ -58,6 +58,22 @@ interface ManagerFormProps {
   isEditing?: boolean;
 }
 
+// Define permission dependencies
+const PERMISSION_DEPENDENCIES: Record<string, string[]> = {
+  'ORDER_CREATE': ['ORDER_READ'],
+  'ORDER_UPDATE': ['ORDER_READ'],
+  'ORDER_DELETE': ['ORDER_READ'],
+  'MENU_CREATE': ['MENU_READ'],
+  'MENU_UPDATE': ['MENU_READ'],
+  'MENU_DELETE': ['MENU_READ'],
+  'USER_CREATE': ['USER_READ'],
+  'USER_UPDATE': ['USER_READ'],
+  'USER_DELETE': ['USER_READ'],
+  'MANAGER_CREATE': ['MANAGER_READ'],
+  'MANAGER_UPDATE': ['MANAGER_READ'],
+  'MANAGER_DELETE': ['MANAGER_READ'],
+};
+
 // Group permissions by category for better UI organization
 const groupPermissionsByCategory = () => {
   const permissions = getAllPermissions();
