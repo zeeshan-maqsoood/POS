@@ -34,9 +34,66 @@ export interface LoginResponse {
 // ==================
 // Auth API
 // ==================
-export const authApi = {
-  login: (data: LoginData) => {
-    return api.post<LoginResponse>("/auth/login", data);
+interface AuthApi {
+  login: (data: LoginData) => Promise<LoginResponse>;
+  me: () => Promise<any>;
+}
+
+export const authApi: AuthApi = {
+  login: async (data: LoginData): Promise<LoginResponse> => {
+    const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/auth/login`;
+    console.log('Login request to:', apiUrl);
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(data),
+        credentials: 'include',
+      });
+
+      console.log('Response status:', response.status, response.statusText);
+      
+      let responseData;
+      try {
+        responseData = await response.json();
+        console.log('Response data:', responseData);
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', parseError);
+        throw new Error('Invalid response from server');
+      }
+
+      if (!response.ok) {
+        const errorInfo = {
+          status: response.status,
+          statusText: response.statusText,
+          url: apiUrl,
+          response: responseData,
+        };
+        console.error('Login error:', errorInfo);
+        throw new Error(
+          responseData.message || 
+          `Login failed: ${response.status} ${response.statusText}`
+        );
+      }
+
+      if (!responseData.data?.token) {
+        console.error('Missing token in response:', responseData);
+        throw new Error('Authentication token not received');
+      }
+
+      return responseData;
+    } catch (error) {
+      console.error('Login request failed:', {
+        error,
+        url: apiUrl,
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
+    }
   },
 
   me: () => {

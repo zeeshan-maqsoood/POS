@@ -11,9 +11,15 @@ const api = axios.create({
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(
   (config) => {
+    // Skip if it's a login request to avoid circular dependency
+    if (config.url?.includes('/auth/login')) {
+      return config;
+    }
+    
     const user = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
     if (user) {
-      const { token } = JSON.parse(user);
+      const userData = JSON.parse(user);
+      const token = userData.token || (userData.data?.token);
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }

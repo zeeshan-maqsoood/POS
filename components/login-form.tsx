@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +16,8 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || '/dashboard'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,24 +32,32 @@ export function LoginForm() {
 
     try {
       const response = await authApi.login({ email, password })
-      const data: LoginResponse = response.data
-
-      if (!data.success) {
-        throw new Error(data.message || "Login failed")
+      
+      // The response is already parsed by authApi.login
+      if (!response.success) {
+        throw new Error(response.message || "Login failed")
       }
 
       // Store token + user in localStorage
-      localStorage.setItem("token", data.data.token)
-      localStorage.setItem("user", JSON.stringify(data.data.user))
+      localStorage.setItem("token", response.data.token)
+      localStorage.setItem("user", JSON.stringify({
+        ...response.data.user,
+        token: response.data.token // Include token in user object for axios interceptor
+      }))
 
-      // ✅ Optionally set cookie (if your api utils supports it)
-      // api.defaults.headers.common["Authorization"] = `Bearer ${data.data.token}`
+      // Set the default authorization header for future requests
+      const api = (await import('@/utils/api')).default;
+      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
 
-      // Redirect to dashboard
-      router.push("/dashboard")
+      // Redirect to the intended URL or dashboard
+      router.push(redirectTo)
     } catch (err: any) {
-      console.error("Login error:", err)
-      setError(err.message || "Invalid email or password. Please try again.")
+      console.error("Login error:", err);
+      // Extract error message from different possible error formats
+      const errorMessage = err.response?.data?.message || 
+                         err.message || 
+                         "An unexpected error occurred. Please try again.";
+      setError(errorMessage);
       setPassword("")
     } finally {
       setIsLoading(false)

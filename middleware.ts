@@ -34,9 +34,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
   
-  // If we have a token and it's the login page, redirect to dashboard
+  // If we have a token and it's the login page, redirect to dashboard or the intended URL
   if (pathname === '/') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    const redirectTo = request.nextUrl.searchParams.get('redirect') || '/dashboard';
+    return NextResponse.redirect(new URL(redirectTo, request.url));
   }
   
   // For protected routes with a valid token, continue
