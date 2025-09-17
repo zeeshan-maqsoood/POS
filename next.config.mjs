@@ -10,39 +10,31 @@ const nextConfig = {
     unoptimized: true,
     domains: ['localhost', 'your-vercel-app.vercel.app'],
   },
-  // Remove output: 'export' to enable server-side rendering
-  trailingSlash: true,
+  trailingSlash: false,
   
-  // Disable problematic features
   experimental: {
-    // Disable server components
     serverComponents: false,
-    // Disable server actions
     serverActions: false,
+    externalDir: true,
   },
   
-  // Webpack configuration
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        os: false,
-      };
-    }
-    
-    // Ignore the problematic route group
+  webpack: (config) => {
+    // Handle route groups
     config.module.rules.push({
-      test: /\\(pos)\/page\.js$/,
-      use: 'null-loader',
+      test: /\\([^/]+)\/page\.[jt]sx?$/,
+      use: [{
+        loader: 'next/dist/build/webpack/loaders/next-route-loader',
+        options: {
+          page: '/[routeGroup]/page',
+          absolutePagePath: './app/(pos)/page.js',
+        },
+      }],
     });
     
     return config;
   },
   
-  // Generate a simple build ID
-  generateBuildId: () => 'build-' + Date.now(),
+  generateBuildId: () => process.env.VERCEL_GIT_COMMIT_SHA || 'dev',
 }
 
 export default nextConfig
