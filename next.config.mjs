@@ -11,7 +11,7 @@ const nextConfig = {
   // Image optimization
   images: {
     unoptimized: true,
-    domains: ['localhost', 'your-vercel-app.vercel.app'],
+    domains: ['localhost'],
   },
   // Disable trailing slash for cleaner URLs
   trailingSlash: false,
@@ -49,7 +49,7 @@ const nextConfig = {
   },
   
   // Generate build ID
-  generateBuildId: () => process.env.VERCEL_GIT_COMMIT_SHA || 'dev',
+  generateBuildId: () => 'dev',
 }
 
 export default nextConfig

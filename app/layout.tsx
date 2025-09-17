@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
-import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner';
 import { PermissionsProvider } from '@/contexts/PermissionsContext';
 // Custom auth utilities will be used client-side
@@ -24,7 +23,6 @@ function Providers({ children }: { children: React.ReactNode }) {
   return (
     <PermissionsProvider permissions={initialPermissions}>
       {children}
-      <Analytics />
       <Toaster position="top-center" />
     </PermissionsProvider>
   );
