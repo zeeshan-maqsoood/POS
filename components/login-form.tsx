@@ -52,7 +52,12 @@ function LoginFormContent() {
       api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
 
       // Redirect to the intended URL or dashboard
-      router.push(redirectTo)
+      // Use window.location.href for production to ensure proper navigation
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        window.location.href = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
+      } else {
+        router.push(redirectTo);
+      }
     } catch (err: any) {
       console.error("Login error:", err);
       // Extract error message from different possible error formats

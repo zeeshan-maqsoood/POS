@@ -5,22 +5,10 @@ import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-interface Category {
-  id: string;
-  name: string;
-  description?: string;
-  isActive: boolean;
-  imageUrl?: string;
-  displayOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  menuItems?: any[];
-}
-
 interface MenuCategoriesProps {
-  categories: Category[];
+  categories: string[];
   selectedCategory: string;
-  onSelectCategory: (categoryId: string) => void;
+  onSelectCategory: (category: string) => void;
 }
 
 export function MenuCategories({ categories, selectedCategory, onSelectCategory }: MenuCategoriesProps) {
@@ -46,45 +34,26 @@ export function MenuCategories({ categories, selectedCategory, onSelectCategory 
         </Button>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 rounded-full"
-          onClick={() => scroll(-200)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div
-          ref={scrollContainer}
-          className="flex space-x-2 overflow-x-auto scrollbar-hide"
-        >
-          <Button
-            variant={selectedCategory === 'All' ? 'default' : 'outline'}
-            size="sm"
+      <div 
+        ref={scrollContainer}
+        className="flex space-x-2 overflow-x-auto pb-4 scrollbar-hide px-8"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {categories.map((category) => (
+          <button
+            key={category}
             className={cn(
-              'whitespace-nowrap',
-              selectedCategory === 'All' ? 'bg-primary text-primary-foreground' : ''
+              "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200",
+              selectedCategory === category
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              "min-w-[100px] flex-shrink-0 flex justify-center"
             )}
-            onClick={() => onSelectCategory('All')}
+            onClick={() => onSelectCategory(category)}
           >
-            All
-          </Button>
-          {categories.map((category) => (
-            <Button
-              key={category.id}
-              variant={selectedCategory === category.id ? 'default' : 'outline'}
-              size="sm"
-              className={cn(
-                'whitespace-nowrap',
-                selectedCategory === category.id ? 'bg-primary text-primary-foreground' : ''
-              )}
-              onClick={() => onSelectCategory(category.id)}
-            >
-              {category.name}
-            </Button>
-          ))}
-        </div>
+            {category}
+          </button>
+        ))}
       </div>
 
       <div className="absolute right-0 top-0 bottom-0 flex items-center z-10">

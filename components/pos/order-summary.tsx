@@ -14,19 +14,18 @@ interface CartItem {
 
 interface OrderSummaryProps {
   cart: CartItem[];
-  onRemoveItem: (itemId: string) => void;
+  onUpdateCart: (items: CartItem[]) => void;
   onClearCart: () => void;
-  onOrderPlaced: () => void;
-  // Optional props with default values
-  subtotal?: number;
-  tax?: number;
-  total?: number;
-  onBranchChange?: (branchId: string) => void;
-  onTableNumberChange?: (tableNumber: string) => void;
-  onCustomerNameChange?: (name: string) => void;
-  selectedBranch?: string;
-  tableNumber?: string;
-  customerName?: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  onBranchChange: (branchId: string) => void;
+  onTableNumberChange: (tableNumber: string) => void;
+  onCustomerNameChange: (name: string) => void;
+  selectedBranch: string;
+  tableNumber: string;
+  customerName: string;
+  onOrderPlaced?: () => void;
 }
 
 const branches = [
@@ -39,38 +38,35 @@ const tableNumbers = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
 
 export function OrderSummary({
   cart,
-  onRemoveItem,
+  onUpdateCart,
   onClearCart,
-  subtotal = 0,
-  tax = 0,
-  total = 0,
-  onBranchChange = () => {},
-  onTableNumberChange = () => {},
-  onCustomerNameChange = () => {},
-  selectedBranch = '',
-  tableNumber = '',
-  customerName = '',
-  onOrderPlaced = () => {},
+  subtotal,
+  tax,
+  total,
+  onBranchChange,
+  onTableNumberChange,
+  onCustomerNameChange,
+  selectedBranch,
+  tableNumber,
+  customerName,
+  onOrderPlaced,
 }: OrderSummaryProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity < 1) {
-      onRemoveItem(itemId);
+      onUpdateCart(cart.filter(item => item.item.id !== itemId));
     } else {
-      // Since we don't have direct quantity update in the parent,
-      // we'll remove and re-add the item with the new quantity
-      const item = cart.find(item => item.item.id === itemId);
-      if (item) {
-        onRemoveItem(itemId);
-        // Note: This assumes the parent component handles adding with quantity
-        // If needed, you might need to modify the parent to handle quantity updates
-      }
+      onUpdateCart(
+        cart.map(item =>
+          item.item.id === itemId ? { ...item, quantity: newQuantity } : item
+        )
+      );
     }
   };
 
   const removeItem = (itemId: string) => {
-    onRemoveItem(itemId);
+    onUpdateCart(cart.filter(item => item.item.id !== itemId));
   };
 
   const handlePlaceOrder = async () => {
