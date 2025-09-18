@@ -17,6 +17,8 @@ import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import managerApi from "@/lib/manager-api";
 import { Manager } from "@/lib/manager-api";
+import PermissionGate from "@/components/auth/permission-gate";
+import { WithPermission } from "@/components/auth/with-permission";
 
 export default function ManagersPage() {
   const router = useRouter();
@@ -42,6 +44,7 @@ export default function ManagersPage() {
       header: "Permissions",
       cell: ({ row }) => {
         const permissions = row.original.permissions || [];
+        console.log(permissions, "permissions");
         if (permissions.length === 0) {
           return <span className="text-muted-foreground">No permissions</span>;
         }
@@ -68,31 +71,35 @@ export default function ManagersPage() {
         const manager = row.original;
         return (
           <div className="flex space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                router.push(`/dashboard/managers/edit/${manager.id}`)
-              }
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(manager.id);
-              }}
-              className="text-red-600 hover:text-red-900"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
+            <PermissionGate required="MANAGER_UPDATE" disableInsteadOfHide>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  router.push(`/dashboard/managers/edit/${manager.id}`)
+                }
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
+            <PermissionGate required="MANAGER_UPDATE" disableInsteadOfHide>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(manager.id);
+                }}
+                className="text-red-600 hover:text-red-900"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            </PermissionGate>
           </div>
         );
       },
@@ -156,6 +163,7 @@ export default function ManagersPage() {
   if (error) return <div className="text-red-600">Error: {error}</div>;
 
   return (
+    <WithPermission requiredPermission="MANAGER_READ" redirectTo="/unauthorized">
     <div className="container mx-auto py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -164,11 +172,13 @@ export default function ManagersPage() {
             Manage your restaurant managers
           </p>
         </div>
+        <PermissionGate required="MANAGER_CREATE">
         <Button onClick={() => router.push("/dashboard/managers/new")}>
           <Plus className="mr-2 h-4 w-4" /> Add Manager
         </Button>
+        </PermissionGate>
       </div>
-
+    
       <Card>
         <CardHeader>
           <CardTitle>Manager List</CardTitle>
@@ -181,5 +191,6 @@ export default function ManagersPage() {
         </CardContent>
       </Card>
     </div>
+    </WithPermission>
   );
 }

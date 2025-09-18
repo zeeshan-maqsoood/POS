@@ -14,6 +14,14 @@ export interface DashboardData {
   }>
   revenueData: Array<{ date: string; revenue: number }>
   orderTrends: Array<{ date: string; count: number }>
+  ordersByStatus: Record<string, number>
+  revenueByStatus: Record<string, number>
+  paymentBreakdown: {
+    byMethod: Record<string, { count: number; revenue: number }>
+    byStatus: Record<string, number>
+  }
+  topCategories: Array<{ name: string; orders: number }>
+  hourlyOrders: Array<{ hour: string; count: number }>
 }
 
 export const dashboardApi = {

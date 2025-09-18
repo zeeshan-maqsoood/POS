@@ -32,7 +32,7 @@ const routePermissions: Record<string, string[]> = {
   '/dashboard/users': ['USER_READ'],
   '/dashboard/users/new': ['USER_CREATE'],
   '/dashboard/users/edit/[id]': ['USER_UPDATE'],
-  '/pos': ['ORDER_READ'],
+  '/pos': ['POS_READ'],
 };
 
 // Get required permissions for a route
@@ -51,6 +51,24 @@ function getRequiredPermissions(pathname: string): string[] {
     .sort((a, b) => b.length - a.length)[0]; // Get most specific match
 
   return matchingRoute ? routePermissions[matchingRoute] : [];
+}
+
+// Find the first dashboard page the user can access based on their permissions
+function getFirstAccessibleDashboardPath(userPermissions: string[]): string | null {
+  const dashboardCandidates = [
+    '/dashboard/orders',
+    '/dashboard/menu',
+    '/dashboard/managers',
+    '/dashboard/users',
+  ];
+
+  for (const path of dashboardCandidates) {
+    const required = getRequiredPermissions(path);
+    if (required.length === 0 || required.every(p => userPermissions.includes(p))) {
+      return path;
+    }
+  }
+  return null;
 }
 
 export function middleware(request: NextRequest) {
@@ -109,6 +127,18 @@ export function middleware(request: NextRequest) {
       console.log('Has ORDER_CREATE:', (decoded as any).permissions.includes('ORDER_CREATE'));
       console.log('Has ORDER_UPDATE:', (decoded as any).permissions.includes('ORDER_UPDATE'));
       console.log('Has ORDER_DELETE:', (decoded as any).permissions.includes('ORDER_DELETE'));
+      console.log('Has MENU_READ:', (decoded as any).permissions.includes('MENU_READ'));
+      console.log('Has MENU_CREATE:', (decoded as any).permissions.includes('MENU_CREATE'));
+      console.log('Has MENU_UPDATE:', (decoded as any).permissions.includes('MENU_UPDATE'));
+      console.log('Has MENU_DELETE:', (decoded as any).permissions.includes('MENU_DELETE'));
+      console.log('Has USER_READ:', (decoded as any).permissions.includes('USER_READ'));
+      console.log('Has USER_CREATE:', (decoded as any).permissions.includes('USER_CREATE'));
+      console.log('Has USER_UPDATE:', (decoded as any).permissions.includes('USER_UPDATE'));
+      console.log('Has USER_DELETE:', (decoded as any).permissions.includes('USER_DELETE'));
+      console.log('Has MANAGER_READ:', (decoded as any).permissions.includes('MANAGER_READ'));
+      console.log('Has MANAGER_CREATE:', (decoded as any).permissions.includes('MANAGER_CREATE'));
+      console.log('Has MANAGER_UPDATE:', (decoded as any).permissions.includes('MANAGER_UPDATE'));
+      console.log('Has MANAGER_DELETE:', (decoded as any).permissions.includes('MANAGER_DELETE'));
     }
     
     if (!userRole) {
@@ -126,7 +156,7 @@ export function middleware(request: NextRequest) {
     // If we're on the login page, redirect based on role
     if (pathname === '/') {
       const redirectTo = userRole === 'ADMIN' ? '/dashboard' : 
-                        userRole === 'MANAGER' ? '/dashboard/orders' : 
+                        userRole === 'MANAGER' ? '/pos' : 
                         request.nextUrl.searchParams.get('redirect') || '/dashboard';
       return NextResponse.redirect(new URL(redirectTo, request.url));
     }
@@ -143,9 +173,11 @@ export function middleware(request: NextRequest) {
       if (userRole.toString().toUpperCase() === 'ADMIN') {
         return NextResponse.next();
       }
-      // Redirect dashboard root to orders page
+      // Redirect dashboard root for non-admins to the first accessible dashboard page, else POS
       if (pathname === '/dashboard') {
-        return NextResponse.redirect(new URL('/dashboard/orders', request.url));
+        const userPermissions = Array.isArray((decoded as any)?.permissions) ? (decoded as any).permissions : [];
+        const firstAllowed = getFirstAccessibleDashboardPath(userPermissions);
+        return NextResponse.redirect(new URL(firstAllowed || '/pos', request.url));
       }
       
       // Get required permissions and user permissions

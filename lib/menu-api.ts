@@ -10,7 +10,7 @@ export interface Category {
   displayOrder: number;
   createdAt: string;
   updatedAt: string;
-}
+}``
 
 export interface ModifierOption {
   id: string;

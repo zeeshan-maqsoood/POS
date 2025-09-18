@@ -60,6 +60,7 @@ interface ManagerFormProps {
 // Group permissions by category for better UI organization
 const groupPermissionsByCategory = () => {
   const permissions = getAllPermissions();
+  console.log(permissions,"permissions222")
   const grouped: { [key: string]: string[] } = {};
 
   permissions.forEach((permission) => {
@@ -80,6 +81,7 @@ const getDefaultManagerPermissions = (): string[] => [
   "ORDER_READ",
   "ORDER_UPDATE",
   "USER_READ",
+  "POS_READ"
 ];
 
 export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {

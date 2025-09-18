@@ -5,7 +5,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Order, OrderStatus, orderApi, PaymentMethod } from '@/lib/order-api';
+import { Order, OrderStatus, orderApi, PaymentMethod, type PaymentStatus as TPaymentStatus } from '@/lib/order-api';
+import PermissionGate from '@/components/auth/permission-gate';
+import { WithPermission } from '@/components/auth/with-permission';
 
 // Define PaymentStatus enum to match the one in order-api.ts
 const PaymentStatus = {
@@ -46,8 +48,15 @@ export default function OrdersPage() {
         sortBy: 'createdAt',
         sortOrder: 'desc'
       });
-      console.log(response.data, "response");
-      setOrders(response.data.data.data || []);
+      const payload: any = response.data;
+      // Support both shapes: { data: Order[] } and { data: { data: Order[] } }
+      const list = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.data?.data)
+          ? payload.data.data
+          : [];
+      console.log('orders payload parsed', list);
+      setOrders(list);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -58,8 +67,11 @@ export default function OrdersPage() {
   const fetchStats = async () => {
     try {
       const response = await orderApi.getStats();
-      console.log(response.data, "statsResponse");
-      setStats(response.data.data.data);
+      const payload: any = response.data;
+      // Support both shapes: { data: Stats } and { data: { data: Stats } }
+      const statsData = payload?.data?.data ?? payload?.data ?? null;
+      console.log('stats payload parsed', statsData);
+      setStats(statsData);
     } catch (error) {
       console.error('Error fetching stats:', error);
       
@@ -73,7 +85,12 @@ export default function OrdersPage() {
         });
 
         // The response contains data and meta properties
-        const allOrders = response?.data?.data || [];
+        const opayload: any = response?.data;
+        const allOrders = Array.isArray(opayload?.data)
+          ? opayload.data
+          : Array.isArray(opayload?.data?.data)
+            ? opayload.data.data
+            : [];
         
         // Calculate stats - only include paid orders in revenue
         const totalOrders = allOrders.length;
@@ -108,12 +125,12 @@ export default function OrdersPage() {
         });
 
         setStats({
-          totalOrders: orders.length,
+          totalOrders: allOrders.length,
           totalRevenue,
           ordersByStatus,
           revenueByStatus,
           paymentStatus,
-          recentOrders: orders.slice(0, 5), // Get first 5 as recent
+          recentOrders: allOrders.slice(0, 5), // Get first 5 as recent
         });
       } catch (err) {
         console.error('Error calculating stats from orders:', err);
@@ -156,15 +173,18 @@ console.log(stats,"stats")
   }
 
   return (
+    <WithPermission requiredPermission="ORDER_READ" redirectTo="/unauthorized">
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Orders Management</h1>
-        <Button onClick={() => {
-          fetchOrders();
-          fetchStats();
-        }} variant="outline">
-          Refresh
-        </Button>
+        <PermissionGate required="ORDER_READ">
+          <Button onClick={() => {
+            fetchOrders();
+            fetchStats();
+          }} variant="outline">
+            Refresh
+          </Button>
+        </PermissionGate>
       </div>
       
       {/* Stats Cards */}
@@ -172,22 +192,22 @@ console.log(stats,"stats")
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <StatsCard 
             title="Total Orders" 
-            value={stats.totalOrders.toString()} 
+            value={String(stats.totalOrders ?? 0)} 
             description="All time orders"
           />
           <StatsCard 
             title="Total Revenue" 
-            value={`£${stats.totalRevenue.toFixed(2)}`}
+            value={`£${(stats.totalRevenue ?? 0).toFixed(2)}`}
             description="Total revenue from all orders"
           />
           <StatsCard 
             title="Pending Orders" 
-            value={stats.ordersByStatus.PENDING?.toString() || '0'} 
+            value={String(stats.ordersByStatus?.PENDING ?? 0)} 
             description="Orders awaiting processing"
           />
           <StatsCard 
             title="Completed Orders" 
-            value={stats.ordersByStatus.COMPLETED?.toString() || '0'} 
+            value={String(stats.ordersByStatus?.COMPLETED ?? 0)} 
             description="Successfully completed orders"
           />
         </div>
@@ -237,6 +257,7 @@ console.log(stats,"stats")
 </TabsContent>
       </Tabs>
     </div>
+    </WithPermission>
   );
 }
 
@@ -257,7 +278,7 @@ function StatsCard({ title, value, description }: { title: string; value: string
 interface OrderListProps {
   orders: Order[];
   onStatusUpdate: (orderId: string, status: OrderStatus) => void;
-  onPaymentStatusUpdate: (orderId: string, paymentStatus: PaymentStatus, paymentMethod: PaymentMethod) => Promise<void>;
+  onPaymentStatusUpdate: (orderId: string, paymentStatus: TPaymentStatus, paymentMethod: PaymentMethod) => Promise<void>;
 }
 
 function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListProps) {
@@ -345,55 +366,61 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListP
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <select
-                    value={order.paymentStatus}
-                    onChange={(e) => onPaymentStatusUpdate(order.id, e.target.value as PaymentStatus, order.paymentMethod)}
-                    className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' :
-                      order.paymentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    } border-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
-                  >
-                    {Object.values(PaymentStatus).map((status) => (
-                      <option key={status} value={status} className="bg-white text-gray-900">
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={order.paymentMethod}
-                    onChange={(e) => onPaymentStatusUpdate(order.id, order.paymentStatus, e.target.value as PaymentMethod)}
-                    className="ml-2 px-2 py-1 text-xs border rounded-md bg-white text-gray-900"
-                  >
-                    {Object.values(PaymentMethod).map((method) => (
-                      <option key={method} value={method}>
-                        {method.replace('_', ' ')}
-                      </option>
-                    ))}
-                  </select>
+                  <PermissionGate required="ORDER_UPDATE" disableInsteadOfHide>
+                    <select
+                      value={order.paymentStatus}
+                      onChange={(e) => onPaymentStatusUpdate(order.id, e.target.value as TPaymentStatus, order.paymentMethod)}
+                      className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' :
+                        order.paymentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      } border-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
+                    >
+                      {Object.values(PaymentStatus).map((status) => (
+                        <option key={status} value={status} className="bg-white text-gray-900">
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </PermissionGate>
+                  <PermissionGate required="ORDER_UPDATE" disableInsteadOfHide>
+                    <select
+                      value={order.paymentMethod}
+                      onChange={(e) => onPaymentStatusUpdate(order.id, order.paymentStatus, e.target.value as PaymentMethod)}
+                      className="ml-2 px-2 py-1 text-xs border rounded-md bg-white text-gray-900"
+                    >
+                      {Object.values(PaymentMethod).map((method) => (
+                        <option key={method} value={method}>
+                          {method.replace('_', ' ')}
+                        </option>
+                      ))}
+                    </select>
+                  </PermissionGate>
                 </div>
               </div>
               <div className="flex items-center justify-between pt-3 border-t mt-2">
                 <span className="text-sm font-medium">Update Status</span>
-                <select
-                  value={order.status}
-                  onChange={(e) => handleStatusUpdate(order.id, e.target.value as OrderStatus)}
-                  disabled={updatingOrderId === order.id}
-                  className="text-sm border rounded px-2 py-1 bg-background disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {updatingOrderId === order.id && (
-                    <option value="">Updating...</option>
-                  )}
-                  {statusOptions.filter(opt => opt.value !== order.status).map((option) => {
-                    // Don't allow changing to REFUNDED status directly
-                    if (option.value === OrderStatus.REFUNDED) return null;
-                    return (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    );
-                  })}
-                </select>
+                <PermissionGate required="ORDER_UPDATE" disableInsteadOfHide>
+                  <select
+                    value={order.status}
+                    onChange={(e) => handleStatusUpdate(order.id, e.target.value as OrderStatus)}
+                    disabled={updatingOrderId === order.id}
+                    className="text-sm border rounded px-2 py-1 bg-background disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {updatingOrderId === order.id && (
+                      <option value="">Updating...</option>
+                    )}
+                    {statusOptions.filter(opt => opt.value !== order.status).map((option) => {
+                      // Don't allow changing to REFUNDED status directly
+                      if (option.value === OrderStatus.REFUNDED) return null;
+                      return (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </PermissionGate>
               </div>
 
               <div className="pt-3 border-t mt-3">

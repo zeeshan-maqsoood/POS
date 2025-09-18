@@ -25,6 +25,17 @@ export const PermissionGroups = {
     UPDATE: 'MENU_UPDATE' as const,
     DELETE: 'MENU_DELETE' as const,
   },
+  POS: {
+    
+    READ: 'POS_READ' as const,
+    UPDATE: 'POS_UPDATE' as const,
+   
+  },
+  manager:{
+    READ: 'MANAGER_READ' as const,
+    CREATE: 'MANAGER_CREATE' as const,
+    UPDATE: 'MANAGER_UPDATE' as const,
+  }
 } as const;
 
 // Type for permission group
@@ -39,18 +50,25 @@ export const DefaultRolePermissions = {
     ...Object.values(PermissionGroups.USER),
     ...Object.values(PermissionGroups.ORDER),
     ...Object.values(PermissionGroups.MENU),
+    ...Object.values(PermissionGroups.POS),
   ],
   MANAGER: [
     PermissionGroups.USER.READ,
     PermissionGroups.ORDER.READ,
     PermissionGroups.ORDER.UPDATE,
     PermissionGroups.MENU.READ,
-    PermissionGroups.MENU.UPDATE,
+    PermissionGroups.POS.READ,
+    PermissionGroups.POS.UPDATE,
+    PermissionGroups.manager.READ,
+    PermissionGroups.manager.CREATE,
+    PermissionGroups.manager.UPDATE,
   ],
   USER: [
     PermissionGroups.ORDER.READ,
     PermissionGroups.MENU.READ,
+    PermissionGroups.POS.READ,
   ],
+  
 } as const;
 
 // Helper function to check if user has a specific permission

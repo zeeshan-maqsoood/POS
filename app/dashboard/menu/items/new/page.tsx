@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MenuItemForm } from "@/components/admin/menu/menu-item-form"
 import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
+import { WithPermission } from "@/components/auth/with-permission"
 
 export default function NewMenuItemPage() {
   const router = useRouter()
@@ -19,6 +20,7 @@ export default function NewMenuItemPage() {
   }
 
   return (
+    <WithPermission requiredPermission="MENU_CREATE" redirectTo="/unauthorized">
     <div className="container mx-auto py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -50,5 +52,6 @@ export default function NewMenuItemPage() {
         </CardContent>
       </Card>
     </div>
+    </WithPermission>
   )
 }

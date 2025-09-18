@@ -14,22 +14,22 @@ import {
 } from "lucide-react"
 import { formatEuro } from "@/lib/format-currency"
 import { dashboardApi } from "@/lib/dashbaord-api"
-
-interface DashboardData {
-  totalRevenue: number;
-  totalOrders: number;
-  averageOrderValue: number;
-  newCustomers: number;
-  popularItems: Array<{ name: string; orders: number }>;
-  recentOrders: Array<{
-    id: string;
-    total: number;
-    status: string;
-    createdAt: string;
-  }>;
-  revenueData: Array<{ date: string; revenue: number }>;
-  orderTrends: Array<{ date: string; count: number }>;
-}
+import type { DashboardData } from "@/lib/dashbaord-api"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart"
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+} from "recharts"
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -42,24 +42,78 @@ export default function DashboardPage() {
     recentOrders: [],
     revenueData: [],
     orderTrends: [],
+    ordersByStatus: {},
+    revenueByStatus: {},
+    paymentBreakdown: { byMethod: {}, byStatus: {} },
+    topCategories: [],
+    hourlyOrders: [],
   });
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
+  const [refreshing, setRefreshing] = useState(false);
+  const [cache, setCache] = useState<Record<'day' | 'week' | 'month', DashboardData | null>>({
+    day: null,
+    week: null,
+    month: null,
+  });
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        const response = await dashboardApi.getStats(period)
-        setStats(response.data.data)
-      } catch (error) {
-        console.error('Error loading dashboard data:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+    setMounted(true);
+  }, [])
 
-    loadData()
+  // Initial load for default period
+  useEffect(() => {
+    let active = true;
+    const init = async () => {
+      try {
+        setLoading(true);
+        const res = await dashboardApi.getStats(period);
+        if (!active) return;
+        setStats(res.data.data);
+        setCache(prev => ({ ...prev, [period]: res.data.data }));
+      } catch (e) {
+        console.error('Error loading dashboard data:', e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    init();
+    return () => { active = false };
+  }, [])
+
+  // When period changes, use cached data immediately, then refresh in background
+  useEffect(() => {
+    let active = true;
+    const maybeCached = cache[period];
+    if (maybeCached) {
+      setStats(maybeCached);
+    }
+    const refresh = async () => {
+      try {
+        if (!maybeCached) {
+          // If no cache, show lightweight loader on first time for this period
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+        const res = await dashboardApi.getStats(period);
+        if (!active) return;
+        setStats(res.data.data);
+        setCache(prev => ({ ...prev, [period]: res.data.data }));
+      } catch (e) {
+        console.error('Error refreshing dashboard data:', e);
+      } finally {
+        if (!active) return;
+        setLoading(false);
+        setRefreshing(false);
+      }
+    };
+    refresh();
+    return () => { active = false };
   }, [period])
+  if (!mounted) {
+    return null;
+  }
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -69,51 +123,45 @@ export default function DashboardPage() {
   }
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto space-y-8">
         {/* Page header */}
-        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
               <p className="text-gray-600 text-sm mt-1">
                 Welcome back! Here's what's happening with your business.
               </p>
             </div>
-            <div className="mt-4 sm:mt-0">
-              <div className="inline-flex rounded-md shadow-sm" role="group">
-                <button
-                  type="button"
-                  onClick={() => setPeriod('day')}
-                  className={`px-4 py-2 text-sm font-medium rounded-l-lg ${
-                    period === 'day' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPeriod('week')}
-                  className={`px-4 py-2 text-sm font-medium ${
-                    period === 'week' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  This Week
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPeriod('month')}
-                  className={`px-4 py-2 text-sm font-medium rounded-r-lg ${
-                    period === 'month' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  This Month
-                </button>
+            <div className="mt-1 sm:mt-0">
+              <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-100 p-1">
+                {([
+                  { key: 'day', label: 'Today' },
+                  { key: 'week', label: 'This Week' },
+                  { key: 'month', label: 'This Month' },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPeriod(key)}
+                    className={`px-3.5 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      period === key
+                        ? 'bg-white shadow-sm text-blue-600'
+                        : 'text-gray-700 hover:text-gray-900'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {refreshing && (
+                  <span className="ml-2 inline-flex items-center text-xs text-gray-500">
+                    <svg className="h-4 w-4 animate-spin mr-1" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    Refreshing…
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -123,28 +171,28 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Total Revenue"
-            value={formatEuro(stats.totalRevenue)}
+            value={formatEuro(stats.totalRevenue ?? 0)}
             change="+8.2% from last month"
             changeType="increase"
             icon={DollarSign}
           />
           <StatsCard
             title="Total Orders"
-            value={stats.totalOrders.toString()}
+            value={String(stats.totalOrders ?? 0)}
             change="+12.5% from last month"
             changeType="increase"
             icon={ShoppingBag}
           />
           <StatsCard
             title="Avg. Order Value"
-            value={formatEuro(stats.averageOrderValue)}
+            value={formatEuro(stats.averageOrderValue ?? 0)}
             change="+3.2% from last month"
             changeType="increase"
             icon={BarChart3}
           />
           <StatsCard
             title="New Customers"
-            value={stats.newCustomers.toString()}
+            value={String(stats.newCustomers ?? 0)}
             change="+18% from last month"
             changeType="increase"
             icon={Users}
@@ -247,28 +295,58 @@ export default function DashboardPage() {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader className="border-b border-gray-200">
               <CardTitle className="text-lg font-semibold">Revenue Overview</CardTitle>
             </CardHeader>
-            <CardContent className="p-6">
-              <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                <p className="text-gray-500">
-                  Revenue chart will be displayed here
-                </p>
-              </div>
+            <CardContent className="p-6 overflow-hidden">
+              <ChartContainer
+                id="revenue-chart"
+                className="h-64 w-full"
+                config={{
+                  revenue: {
+                    label: "Revenue",
+                    theme: { light: "#2563eb", dark: "#60a5fa" },
+                  },
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={stats.revenueData || []} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line type="monotone" dataKey="revenue" stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader className="border-b border-gray-200">
               <CardTitle className="text-lg font-semibold">Order Trends</CardTitle>
             </CardHeader>
-            <CardContent className="p-6">
-              <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                <p className="text-gray-500">
-                  Order trends chart will be displayed here
-                </p>
-              </div>
+            <CardContent className="p-6 overflow-hidden">
+              <ChartContainer
+                id="orders-chart"
+                className="h-64 w-full"
+                config={{
+                  orders: {
+                    label: "Orders",
+                    theme: { light: "#10b981", dark: "#34d399" },
+                  },
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.orderTrends || []} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="count" fill="var(--color-orders)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
         </div>

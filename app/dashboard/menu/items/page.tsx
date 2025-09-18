@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Plus } from "lucide-react"
 import Link from "next/link"
 import { MenuItemsTable } from "@/components/admin/menu/menu-items-table"
+import PermissionGate from "@/components/auth/permission-gate"
 import { MenuItem } from "@/lib/menu-api"
 import { menuItemApi } from "@/lib/menu-api"
 import { toast } from "@/components/ui/use-toast"
@@ -89,12 +90,14 @@ console.log(menuItems,"menuItems")
             Manage your menu items, categories, and modifiers
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/menu/items/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Menu Item
-          </Link>
-        </Button>
+        <PermissionGate required="MENU_CREATE">
+          <Button asChild>
+            <Link href="/dashboard/menu/items/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Menu Item
+            </Link>
+          </Button>
+        </PermissionGate>
       </div>
 
       <Card>

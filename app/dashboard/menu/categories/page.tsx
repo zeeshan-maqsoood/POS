@@ -9,7 +9,7 @@ import Link from "next/link"
 import { CategoriesTable } from "@/components/admin/menu/categories-table"
 import { Category, categoryApi } from "@/lib/menu-api"
 import { toast } from "@/components/ui/use-toast"
-
+import PermissionGate from "@/components/auth/permission-gate"
 export default function CategoriesPage() {
   const router = useRouter()
   const [categories, setCategories] = useState<Category[]>([])
@@ -87,12 +87,14 @@ export default function CategoriesPage() {
             Organize your menu items into categories
           </p>
         </div>
+        <PermissionGate required="MENU_CREATE">
         <Button asChild>
           <Link href="/dashboard/menu/categories/new">
             <Plus className="mr-2 h-4 w-4" />
             Add Category
           </Link>
         </Button>
+        </PermissionGate>
       </div>
 
       <Card>

@@ -281,7 +281,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
               </span>
               Basic Information
             </h3>
-            <div className="space-y-4 pl-9">
+            <div className="space-y-4 md:pl-9">
               <FormField
                 control={form.control}
                 name="imageUrl"
@@ -370,7 +370,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
               </span>
               Pricing & Details
             </h3>
-            <div className="space-y-4 pl-9 grid grid-cols-2 gap-4">
+            <div className="space-y-4 md:pl-9 grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="price"

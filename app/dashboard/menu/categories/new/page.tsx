@@ -28,7 +28,7 @@ export default function NewCategoryPage() {
               Back to Categories
             </Link>
           </Button>
-          <h1 className="text-3xl font-bold mt-2">Add New Category</h1>
+          <Button className="text-3xl font-bold mt-2">Add New Category</Button>
           <p className="text-muted-foreground">
             Create a new category for your menu items
           </p>

@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import PermissionGate from "@/components/auth/permission-gate"
 
 interface CategoriesTableProps {
   data: Category[]
@@ -119,38 +120,42 @@ export function CategoriesTable({
                 tabIndex={-1}
               >
                 <div className="py-1" role="none">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(category);
-                      setOpenDropdownId(null);
-                    }}
-                    className="text-gray-700 block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-                    role="menuitem"
-                    tabIndex={-1}
-                    disabled={isLoading}
-                  >
-                    <Pencil className="mr-2 h-4 w-4 inline" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        await onDelete(category.id);
+                  <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(category);
                         setOpenDropdownId(null);
-                      } catch (error) {
-                        console.error("Delete failed", error);
-                      }
-                    }}
-                    className="text-red-600 block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-                    role="menuitem"
-                    tabIndex={-1}
-                    disabled={isLoading}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4 inline" />
-                    Delete
-                  </button>
+                      }}
+                      className="text-gray-700 block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                      role="menuitem"
+                      tabIndex={-1}
+                      disabled={isLoading}
+                    >
+                      <Pencil className="mr-2 h-4 w-4 inline" />
+                      Edit
+                    </button>
+                  </PermissionGate>
+                  <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await onDelete(category.id);
+                          setOpenDropdownId(null);
+                        } catch (error) {
+                          console.error("Delete failed", error);
+                        }
+                      }}
+                      className="text-red-600 block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                      role="menuitem"
+                      tabIndex={-1}
+                      disabled={isLoading}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4 inline" />
+                      Delete
+                    </button>
+                  </PermissionGate>
                 </div>
               </div>
             )}

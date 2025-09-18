@@ -18,9 +18,7 @@ export default function EditMenuItemPage({ params }: { params: { id: string } })
   useEffect(() => {
     const fetchMenuItem = async () => {
       try {
-        const response = await menuItemApi.getItem(params.id, {
-          include: 'category,modifiers'
-        })
+        const response = await menuItemApi.getItem(params.id)
         setMenuItem(response.data.data)
       } catch (error) {
         console.error("Failed to fetch menu item:", error)

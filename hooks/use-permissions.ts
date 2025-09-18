@@ -101,12 +101,31 @@ export const usePermissions = (): UsePermissionsReturn => {
     permissions: Permission[];
     isLoading: boolean;
     error: Error | null;
-  }>(() => ({
-    user: null,
-    permissions: DEFAULT_PERMISSIONS,
-    isLoading: true,
-    error: null,
-  }));
+  }>(() => {
+    // Synchronously hydrate from localStorage to avoid initial render delay/flicker
+    if (isBrowser) {
+      try {
+        const stored = localStorage.getItem('user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return {
+            user: parsed,
+            permissions: Array.isArray(parsed?.permissions) ? parsed.permissions : DEFAULT_PERMISSIONS,
+            isLoading: false,
+            error: null,
+          };
+        }
+      } catch (e) {
+        console.warn('Failed to parse stored user for permissions hydration:', e);
+      }
+    }
+    return {
+      user: null,
+      permissions: DEFAULT_PERMISSIONS,
+      isLoading: true,
+      error: null,
+    };
+  });
 
   // Helper to update state safely
   const updateState = (updates: Partial<typeof state>) => {
@@ -204,20 +223,7 @@ export const usePermissions = (): UsePermissionsReturn => {
       updateState({ isLoading: false });
       return;
     }
-    
-    // Try to get user from localStorage first for instant load
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        updateState({ user: parsedUser, permissions: parsedUser.permissions || [], isLoading: false });
-      } catch (e) {
-        console.error('Failed to parse stored user data', e);
-        localStorage.removeItem('user');
-      }
-    }
-    
-    // Then fetch fresh data from the server
+    // Fetch fresh data from the server to refresh permissions
     const loadProfile = async () => {
       try {
         await fetchProfile();

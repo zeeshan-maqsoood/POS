@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from "react"
 import type { MenuItem } from "@/lib/menu-api"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/ui/data-table"
+import PermissionGate from "@/components/auth/permission-gate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, Pencil, Trash2, MoreHorizontal, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
-
 interface MenuItemsTableProps {
   data: Array<MenuItem & { cost?: number }>
   onEdit?: (id: string) => void
@@ -118,17 +118,19 @@ export function MenuItemsTable({
               }}
             >
               <div className="py-1" role="none">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleStatus(menuItem.id, !menuItem.isActive);
-                    document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                  }}
-                  className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
-                  role="menuitem"
-                >
-                  <span>{menuItem.isActive ? 'Mark as Inactive' : 'Mark as Active'}</span>
-                </button>
+                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleStatus(menuItem.id, !menuItem.isActive);
+                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
+                    }}
+                    className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
+                    role="menuitem"
+                  >
+                    <span>{menuItem.isActive ? 'Mark as Inactive' : 'Mark as Active'}</span>
+                  </button>
+                </PermissionGate>
                 <Link
                   href={`/dashboard/menu/items/edit/${menuItem.id}`}
                   className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
@@ -140,17 +142,32 @@ export function MenuItemsTable({
                 >
                   Edit
                 </Link>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(menuItem.id);
-                    document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                  }}
-                  className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
-                  role="menuitem"
-                >
-                  Delete
-                </button>
+                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                  <Link
+                    href={`/dashboard/menu/items/edit/${menuItem.id}`}
+                    className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
+                    }}
+                  >
+                    Edit
+                  </Link>
+                </PermissionGate>
+                <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(menuItem.id);
+                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
+                    }}
+                    className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
+                    role="menuitem"
+                  >
+                    Delete
+                  </button>
+                </PermissionGate>
                 
                 {onEdit && (
                   <button

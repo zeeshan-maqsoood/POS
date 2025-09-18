@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { Modifier } from "@/lib/menu-api"
 import { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/ui/data-table"
+import PermissionGate from "@/components/auth/permission-gate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, Pencil, Trash2, MoreHorizontal, Loader2 } from "lucide-react"
@@ -136,56 +137,62 @@ export function ModifiersTable({
             >
               <div className="py-1" role="none">
                 {onToggleStatus && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStatus(modifier.id, !modifier.isActive);
-                      document.getElementById(`menu-${modifier.id}`)?.classList.add('hidden');
-                    }}
+                  <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleStatus(modifier.id, !modifier.isActive);
+                        document.getElementById(`menu-${modifier.id}`)?.classList.add('hidden');
+                      }}
+                      className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
+                      role="menuitem"
+                    >
+                      <span>{modifier.isActive ? 'Mark as Inactive' : 'Mark as Active'}</span>
+                    </button>
+                  </PermissionGate>
+                )}
+                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                  <Link
+                    href={`/dashboard/menu/modifiers/${modifier.id}`}
                     className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
                     role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      document.getElementById(`menu-${modifier.id}`)?.classList.add('hidden');
+                    }}
                   >
-                    <span>{modifier.isActive ? 'Mark as Inactive' : 'Mark as Active'}</span>
-                  </button>
-                )}
-                <Link
-                  href={`/dashboard/menu/modifiers/${modifier.id}`}
-                  className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
-                  role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    document.getElementById(`menu-${modifier.id}`)?.classList.add('hidden');
-                  }}
-                >
-                  Edit
-                </Link>
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const menu = document.getElementById(`menu-${modifier.id}`);
-                    if (menu) menu.classList.add('hidden');
-                    
-                    if (confirm('Are you sure you want to delete this modifier? This action cannot be undone.')) {
-                      try {
-                        await onDelete(modifier.id);
-                      } catch (error) {
-                        console.error('Error deleting modifier:', error);
+                    Edit
+                  </Link>
+                </PermissionGate>
+                <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const menu = document.getElementById(`menu-${modifier.id}`);
+                      if (menu) menu.classList.add('hidden');
+                      
+                      if (confirm('Are you sure you want to delete this modifier? This action cannot be undone.')) {
+                        try {
+                          await onDelete(modifier.id);
+                        } catch (error) {
+                          console.error('Error deleting modifier:', error);
+                        }
                       }
-                    }
-                  }}
-                  className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                  role="menuitem"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete'
-                  )}
-                </button>
+                    }}
+                    className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    role="menuitem"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete'
+                    )}
+                  </button>
+                </PermissionGate>
               </div>
             </div>
           </div>

@@ -595,22 +595,22 @@ export function POSLayout() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center p-6 max-w-md mx-auto bg-white rounded-lg shadow">
-          <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Menu</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Button 
-            onClick={() => window.location.reload()}
-            className="mt-2"
-          >
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // if (error) {
+  //   return (
+  //     <div className="flex items-center justify-center h-screen">
+  //       <div className="text-center p-6 max-w-md mx-auto bg-white rounded-lg shadow">
+  //         <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Menu</h2>
+  //         <p className="text-gray-600 mb-4">{error}</p>
+  //         <Button 
+  //           onClick={() => window.location.reload()}
+  //           className="mt-2"
+  //         >
+  //           Retry
+  //         </Button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">

@@ -8,7 +8,7 @@ import Link from "next/link"
 import { ModifiersTable } from "@/components/admin/menu/modifiers-table"
 import { Modifier, modifierApi } from "@/lib/menu-api"
 import { toast } from "@/components/ui/use-toast"
-
+import PermissionGate from "@/components/auth/permission-gate"
 // This component is a client component that will be rendered inside the dashboard layout
 export default function ModifiersPage() {
   const [modifiers, setModifiers] = useState<Modifier[]>([])
@@ -119,12 +119,14 @@ export default function ModifiersPage() {
             Manage modifiers that can be added to menu items
           </p>
         </div>
+        <PermissionGate required="MENU_CREATE">
         <Button asChild>
           <Link href="/dashboard/menu/modifiers/new">
             <Plus className="mr-2 h-4 w-4" />
             Add Modifier
           </Link>
         </Button>
+        </PermissionGate>
       </div>
 
       <Card>
