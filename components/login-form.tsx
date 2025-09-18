@@ -23,54 +23,47 @@ function LoginFormContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
+  
     if (!email || !password) {
       setError("Please enter both email and password")
       return
     }
-
+  
     setIsLoading(true)
     setError(null)
-
+  
     try {
       const response = await authApi.login({ email, password })
-      
-      // The response is already parsed by authApi.login
+  
       if (!response.success) {
         throw new Error(response.message || "Login failed")
       }
-
-      // Store token + user in localStorage
+  
+      // Save token + user in localStorage
       localStorage.setItem("token", response.data.token)
       localStorage.setItem("user", JSON.stringify({
         ...response.data.user,
-        token: response.data.token // Include token in user object for axios interceptor
+        token: response.data.token
       }))
-
-      // Set the default authorization header for future requests
-      const api = (await import('@/utils/api')).default;
-      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-
-      // Clean up the redirect path
-      let redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
-      
-      // If the path is just /dashboard, remove any query parameters
+  
+      // Set auth header for future requests
+      const api = (await import('@/utils/api')).default
+      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
+  
+      // Clean up redirect path
+      let redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`
       if (redirectPath === '/dashboard' || redirectPath.startsWith('/dashboard?')) {
-        redirectPath = '/dashboard';
+        redirectPath = '/dashboard'
       }
-      
-      // Use replaceState to clean up the URL in the browser history
-      window.history.replaceState({}, '', window.location.pathname);
-      
-      // Navigate to the clean URL
-      window.location.href = redirectPath;
+  
+      // ✅ Use Next.js navigation
+      router.replace(redirectPath)
     } catch (err: any) {
-      console.error("Login error:", err);
-      // Extract error message from different possible error formats
-      const errorMessage = err.response?.data?.message || 
-                         err.message || 
-                         "An unexpected error occurred. Please try again.";
-      setError(errorMessage);
+      console.error("Login error:", err)
+      const errorMessage = err.response?.data?.message ||
+                           err.message ||
+                           "An unexpected error occurred. Please try again."
+      setError(errorMessage)
       setPassword("")
     } finally {
       setIsLoading(false)
