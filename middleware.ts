@@ -153,12 +153,9 @@ export function middleware(request: NextRequest) {
       path: pathname
     });
     
-    // If we're on the login page, redirect based on role
+    // If we're on the login page, always go to dashboard for both local and production
     if (pathname === '/') {
-      const redirectTo = userRole === 'ADMIN' ? '/dashboard' : 
-                        userRole === 'MANAGER' ? '/pos' : 
-                        request.nextUrl.searchParams.get('redirect') || '/dashboard';
-      return NextResponse.redirect(new URL(redirectTo, request.url));
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
     // Admins have full access to all routes
