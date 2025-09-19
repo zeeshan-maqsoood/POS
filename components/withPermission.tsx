@@ -1,4 +1,4 @@
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { usePermissions, type UserRoleType, type Permission } from '@/hooks/use-permissions';
 import { Loader2 } from 'lucide-react';
