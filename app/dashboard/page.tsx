@@ -360,7 +360,7 @@ export default function DashboardPage() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Revenue Chart */}
-          <Card className="lg:col-span-2 border-0 shadow-sm">
+          <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -372,13 +372,14 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={stats.revenueData}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                  >
+            <CardContent className="flex-1 min-h-[300px] max-h-[400px] p-4">
+              <div className="w-full h-full relative">
+                <div className="absolute inset-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={stats.revenueData}
+                      margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                    >
                     <defs>
                       <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.8}/>
@@ -429,17 +430,20 @@ export default function DashboardPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
+            </div>
+          </CardContent>
           </Card>
           
           {/* Sales by Category */}
-          <Card className="border-0 shadow-sm h-full">
+          <Card className="border-0 shadow-sm h-full flex flex-col">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold w-full">Sales by Category</CardTitle>
-              <p className="text-sm text-muted-foreground w-full">Top categories by revenue</p>
+              <CardTitle className="text-base font-semibold">Sales by Category</CardTitle>
+              <p className="text-sm text-muted-foreground">Top categories by revenue</p>
             </CardHeader>
-            <CardContent className="h-80">
-              <SalesCategoryPieChart initialData={stats.salesByCategory} />
+            <CardContent className="flex-1 min-h-[300px] max-h-[400px] p-4">
+              <div className="w-full h-full">
+                <SalesCategoryPieChart initialData={stats.salesByCategory} />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -447,11 +451,11 @@ export default function DashboardPage() {
         {/* Second Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Order Trends */}
-          <Card className="lg:col-span-2 border-0 shadow-sm">
+          <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base font-semibold ">Order Trends</CardTitle>
+                  <CardTitle className="text-base font-semibold">Order Trends</CardTitle>
                   <p className="text-sm text-muted-foreground">Number of orders over time</p>
                 </div>
                 <Button variant="ghost" size="sm" className="h-8">
@@ -459,13 +463,14 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats.orderTrends}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                  >
+            <CardContent className="flex-1 min-h-[300px] max-h-[400px] p-4">
+              <div className="w-full h-full relative">
+                <div className="absolute inset-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={stats.orderTrends}
+                      margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                    >
                     <CartesianGrid vertical={false} stroke="#e5e7eb" />
                     <XAxis 
                       dataKey="date" 
@@ -511,7 +516,8 @@ export default function DashboardPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
+            </div>
+          </CardContent>
           </Card>
           <Card>
             <CardHeader className="border-b border-gray-200">

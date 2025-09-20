@@ -9,7 +9,17 @@ import { dashboardApi } from "@/lib/dashbaord-api";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#FF6B6B', '#4ECDC4', '#45B7D1'];
+const COLORS = [
+  '#4F46E5', // indigo-600
+  '#10B981', // emerald-500
+  '#F59E0B', // amber-500
+  '#EF4444', // red-500
+  '#8B5CF6', // violet-500
+  '#EC4899', // pink-500
+  '#14B8A6', // teal-500
+  '#F97316', // orange-500
+  '#6366F1'  // indigo-500
+];
 
 type TimePeriod = 'day' | 'week' | 'month';
 
@@ -113,7 +123,7 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
     : topCategories;
 
   return (
-    <Card className="h-full overflow-hidden">
+    <Card className="h-full flex flex-col">
       <CardHeader className="pb-2 px-4 pt-3">
         <div className="flex flex-col space-y-2 w-full">
           <CardTitle className="text-sm sm:text-base font-medium">Sales by Category</CardTitle>
@@ -147,44 +157,69 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
           </div>
         </div>
       </CardHeader>
-      <CardContent className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <RechartsPieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              outerRadius={80}
-              fill="#8884d8"
-              dataKey="sales"
-              nameKey="categoryName"
-              label={({ name, percent }: { name: string, percent?: number }) => 
-                `${name} (${percent ? (percent * 100).toFixed(0) : 0}%)`
-              }
-            >
-              {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={COLORS[index % COLORS.length]} 
+      <CardContent className="flex-1 flex flex-col min-h-[300px] max-h-[400px] p-4">
+        <div className="w-full flex-1 relative">
+          <div className="absolute inset-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <RechartsPieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  dataKey="sales"
+                  nameKey="categoryName"
+                  label={({ percent, name }: { percent: number; name: string }) => {
+                    if (percent < 0.05) return ''; // Don't show labels for very small slices
+                    return `${(percent * 100).toFixed(0)}%`;
+                  }}
+                  labelLine={false}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                      stroke="#fff"
+                      strokeWidth={1}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value: number, name: string, props: any) => [
+                    formatEuro(Number(value)),
+                    `${name} (${((props.payload.percent || 0) * 100).toFixed(1)}%)`
+                  ]}
+                  contentStyle={{
+                    backgroundColor: 'white',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '0.375rem',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                  }}
                 />
-              ))}
-            </Pie>
-            <Tooltip 
-              formatter={(value: number) => formatEuro(Number(value))}
-            />
-            <Legend 
-              layout="horizontal" 
-              verticalAlign="bottom"
-              align="center"
-              wrapperStyle={{ paddingTop: '0px' }}
-              formatter={(value) => {
-                const category = chartData.find(cat => cat.categoryName === value);
-                return category ? `${value} (${formatEuro(category.sales)})` : value;
-              }}
-            />
-          </RechartsPieChart>
-        </ResponsiveContainer>
+                <Legend 
+                  layout="horizontal"
+                  verticalAlign="bottom"
+                  align="center"
+                  wrapperStyle={{
+                    paddingTop: '10px',
+                    fontSize: '12px',
+                    position: 'absolute',
+                    bottom: -30,
+                    width: '100%'
+                  }}
+                  formatter={(value) => {
+                    const category = chartData.find(cat => cat.categoryName === value);
+                    return category ? value : '';
+                  }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+              </RechartsPieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

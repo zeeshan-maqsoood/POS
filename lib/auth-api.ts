@@ -41,10 +41,20 @@ export interface LoginResponse {
 // ==================
 interface AuthApi {
   login: (data: LoginData) => Promise<LoginResponse>;
+  logout: () => Promise<{ success: boolean; message: string }>;
   me: () => Promise<any>;
 }
 
 export const authApi: AuthApi = {
+  logout: async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await api.post(`/auth/logout`);
+      return response.data;
+    } catch (error: any) {
+      // Even if the API call fails, we still want to clear local state
+      return { success: false, message: error.response?.data?.message || 'Logout failed' };
+    }
+  },
   login: async (data: LoginData): Promise<LoginResponse> => {
     const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/auth/login`;
     console.log('Login request to:', apiUrl);
