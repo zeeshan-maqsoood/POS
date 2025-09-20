@@ -113,21 +113,38 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
     : topCategories;
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle>Sales Distribution</CardTitle>
-          <Tabs 
-            value={period} 
-            onValueChange={(value) => setPeriod(value as TimePeriod)}
-            className="w-auto"
-          >
-            <TabsList className="h-8">
-              <TabsTrigger value="day" className="text-xs px-2">Today</TabsTrigger>
-              <TabsTrigger value="week" className="text-xs px-2">Week</TabsTrigger>
-              <TabsTrigger value="month" className="text-xs px-2">Month</TabsTrigger>
-            </TabsList>
-          </Tabs>
+    <Card className="h-full overflow-hidden">
+      <CardHeader className="pb-2 px-4 pt-3">
+        <div className="flex flex-col space-y-2 w-full">
+          <CardTitle className="text-sm sm:text-base font-medium">Sales by Category</CardTitle>
+          <div className="w-full">
+            <Tabs 
+              value={period} 
+              onValueChange={(value) => setPeriod(value as TimePeriod)}
+              className="w-full"
+            >
+              <TabsList className="h-8 w-full bg-muted p-0.5">
+                <TabsTrigger 
+                  value="day" 
+                  className="text-xs px-2 py-1 h-7 flex-1 text-center"
+                >
+                  Today
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="week" 
+                  className="text-xs px-2 py-1 h-7 flex-1 text-center"
+                >
+                  Week
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="month" 
+                  className="text-xs px-2 py-1 h-7 flex-1 text-center"
+                >
+                  Month
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="h-80">
@@ -160,7 +177,7 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
               layout="horizontal" 
               verticalAlign="bottom"
               align="center"
-              wrapperStyle={{ paddingTop: '20px' }}
+              wrapperStyle={{ paddingTop: '0px' }}
               formatter={(value) => {
                 const category = chartData.find(cat => cat.categoryName === value);
                 return category ? `${value} (${formatEuro(category.sales)})` : value;

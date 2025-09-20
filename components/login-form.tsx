@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react"
-import authApi, { LoginResponse } from "@/lib/auth-api"
+import authApi, { LoginResponse, type UserRole } from "@/lib/auth-api"
 
 // Inner component that uses useSearchParams
 function LoginFormContent() {
@@ -50,13 +50,34 @@ function LoginFormContent() {
       const api = (await import('@/utils/api')).default
       api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
   
-      // Clean up redirect path
-      let redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`
-      if (redirectPath === '/dashboard' || redirectPath.startsWith('/dashboard?')) {
-        redirectPath = '/dashboard'
+      // Determine redirect path based on user role
+      let redirectPath = '/dashboard';
+      
+      // Force kitchen staff to orders page
+      if (response.data.user.role === 'KITCHEN_STAFF') {
+        console.log('Kitchen staff detected, redirecting to orders page');
+        redirectPath = '/dashboard/orders';
+      } 
+      // For other roles, use the original redirect logic
+      else {
+        redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
+        // If trying to access dashboard root, find first accessible page
+        if (redirectPath === '/dashboard' || redirectPath.startsWith('/dashboard?')) {
+          // Check if user has any permissions that would allow access to the orders page
+          const userPermissions = response.data.user.permissions || [];
+          if (userPermissions.includes('ORDER_READ')) {
+            redirectPath = '/dashboard/orders';
+          } 
+          // Otherwise, let the middleware handle the redirection
+          else {
+            redirectPath = '/dashboard';
+          }
+        }
       }
-  
-      // ✅ Use Next.js navigation
+      
+      console.log('Redirecting to:', redirectPath);
+
+      // Use Next.js navigation
       router.replace(redirectPath)
     } catch (err: any) {
       console.error("Login error:", err)

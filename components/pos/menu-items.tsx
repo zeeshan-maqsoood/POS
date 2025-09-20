@@ -62,7 +62,7 @@ export function MenuItems({ menuItems: items, onAddToCart }: MenuItemsProps) {
                 </p>
               </div>
               <span className="font-semibold whitespace-nowrap">
-                ${item.price.toFixed(2)}
+              £{item.price.toFixed(2)}
               </span>
             </div>
             <Button 

@@ -392,13 +392,13 @@ export function OrderSummary({
                 <div>
                   <p className="font-medium">{item.name}</p>
                   <p className="text-sm text-gray-500">
-                    ${item.price.toFixed(2)} × {quantity}
+                  £{item.price.toFixed(2)} × {quantity}
                   </p>
                 </div>
               </div>
               <div className="flex flex-col items-end">
                 <p className="font-semibold">
-                  ${(item.price * quantity).toFixed(2)}
+                  £{(item.price * quantity).toFixed(2)}
                 </p>
                 <div className="flex items-center gap-1 mt-1">
                   <Button
@@ -476,15 +476,15 @@ export function OrderSummary({
 
         <div className="flex justify-between text-sm">
           <span>Subtotal</span>
-          <span>${subtotal.toFixed(2)}</span>
+          <span>£{subtotal.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span>Tax</span>
-          <span>${tax.toFixed(2)}</span>
+          <span>£{tax.toFixed(2)}</span>
         </div>
         <div className="flex justify-between font-semibold text-lg">
           <span>Total</span>
-          <span>${total.toFixed(2)}</span>
+          <span>£{total.toFixed(2)}</span>
         </div>
 
         <PermissionGate required="ORDER_CREATE" disableInsteadOfHide>
@@ -499,7 +499,7 @@ export function OrderSummary({
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
               </>
             ) : (
-              `Place Order ($${total.toFixed(2)})`
+              `Place Order ( £${total.toFixed(2)})`
             )}
           </Button>
         </PermissionGate>

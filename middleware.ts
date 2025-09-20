@@ -52,22 +52,35 @@ function getRequiredPermissions(pathname: string): string[] {
 
   return matchingRoute ? routePermissions[matchingRoute] : [];
 }
-
-// Find the first dashboard page the user can access based on their permissions
-function getFirstAccessibleDashboardPath(userPermissions: string[]): string | null {
+ 
+// Find the first dashboard page the user can access based on their permissions and role
+function getFirstAccessibleDashboardPath(userPermissions: string[], userRole?: string): string | null {
+  // Define dashboard candidates with their required permissions
   const dashboardCandidates = [
-    '/dashboard/orders',
-    '/dashboard/menu',
-    '/dashboard/managers',
-    '/dashboard/users',
+    { path: '/dashboard/orders', required: ['ORDER_READ'] },
+    { path: '/dashboard/menu', required: ['MENU_READ'] },
+    { path: '/dashboard/managers', required: ['MANAGER_READ'] },
+    { path: '/dashboard/users', required: ['USER_READ'] },
   ];
 
-  for (const path of dashboardCandidates) {
-    const required = getRequiredPermissions(path);
-    if (required.length === 0 || required.every(p => userPermissions.includes(p))) {
-      return path;
+  // If user is kitchen staff, prioritize the orders page
+  if (userRole === 'KITCHEN_STAFF') {
+    const ordersPage = dashboardCandidates.find(c => c.path === '/dashboard/orders');
+    if (ordersPage) {
+      // If kitchen staff doesn't have ORDER_READ, we'll still return orders page
+      // and handle the permission check in the page component
+      return '/dashboard/orders';
     }
   }
+
+  // For other roles, find the first page they have access to
+  for (const candidate of dashboardCandidates) {
+    if (candidate.required.length === 0 || 
+        candidate.required.every(p => userPermissions.includes(p))) {
+      return candidate.path;
+    }
+  }
+  
   return null;
 }
 
@@ -153,15 +166,31 @@ export function middleware(request: NextRequest) {
       path: pathname
     });
     
-    // If we're on the login page, always go to dashboard for both local and production
-    if (pathname === '/') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    // Handle kitchen staff redirections first
+    if (userRole.toString().toUpperCase() === 'KITCHEN_STAFF') {
+      // If it's the root path, redirect to orders page
+      if (pathname === '/') {
+        console.log('Redirecting kitchen staff to orders page from login');
+        return NextResponse.redirect(new URL('/dashboard/orders', request.url));
+      }
+      // If trying to access any other dashboard page, redirect to orders
+      else if (pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/orders')) {
+        console.log('Redirecting kitchen staff to orders page from dashboard');
+        return NextResponse.redirect(new URL('/dashboard/orders', request.url));
+      }
+      // If already on orders page, allow access
+      else if (pathname.startsWith('/dashboard/orders')) {
+        return NextResponse.next();
+      }
     }
-
-    // Admins have full access to all routes
-    if (userRole.toString().toUpperCase() === 'ADMIN') {
+    // Handle admin access
+    else if (userRole.toString().toUpperCase() === 'ADMIN') {
       console.log('Admin access granted to:', pathname);
       return NextResponse.next();
+    }
+    // Handle login page for non-kitchen staff
+    else if (pathname === '/') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
     // For non-admin users, check permissions
@@ -173,7 +202,8 @@ export function middleware(request: NextRequest) {
       // Redirect dashboard root for non-admins to the first accessible dashboard page, else POS
       if (pathname === '/dashboard') {
         const userPermissions = Array.isArray((decoded as any)?.permissions) ? (decoded as any).permissions : [];
-        const firstAllowed = getFirstAccessibleDashboardPath(userPermissions);
+        const userRole = (decoded as any)?.role;
+        const firstAllowed = getFirstAccessibleDashboardPath(userPermissions, userRole);
         return NextResponse.redirect(new URL(firstAllowed || '/pos', request.url));
       }
       
@@ -200,6 +230,22 @@ export function middleware(request: NextRequest) {
       if (requiredPermissions.length === 0) {
         console.log('No specific permissions required for route, access granted');
         return NextResponse.next();
+      }
+      
+      // Special case for kitchen staff on orders page
+      if (userRole === 'KITCHEN_STAFF') {
+        if (pathname === '/dashboard/orders' || pathname.startsWith('/dashboard/orders/')) {
+          console.log('Kitchen staff access to orders page - checking for basic permissions');
+          // Kitchen staff only needs basic access to view orders
+          if (userPermissions.includes('ORDER_READ') || userPermissions.length === 0) {
+            return NextResponse.next();
+          }
+        }
+        // Redirect kitchen staff to orders page if they try to access other dashboard pages
+        else if (pathname.startsWith('/dashboard/')) {
+          console.log('Redirecting kitchen staff to orders page');
+          return NextResponse.redirect(new URL('/dashboard/orders', request.url));
+        }
       }
       
       // Check if user has ALL required permissions for the route

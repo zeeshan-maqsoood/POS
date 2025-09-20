@@ -25,7 +25,7 @@ export default function ManagersPage() {
   const [managers, setManagers] = useState<Manager[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+console.log(managers,"managers")
   const columns: ColumnDef<Manager>[] = [
     {
       accessorKey: "name",
@@ -110,6 +110,7 @@ export default function ManagersPage() {
     const fetchManagers = async () => {
       try {
         const res = await managerApi.getManagers();
+        console.log(res.data.data,"res.data.data");
         setManagers(res.data.data); // ✅ API response shape: { success, message, data: [...] }
       } catch (err: any) {
         setError(err.message || "Failed to load managers");

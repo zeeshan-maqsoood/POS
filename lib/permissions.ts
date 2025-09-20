@@ -68,6 +68,10 @@ export const DefaultRolePermissions = {
     PermissionGroups.MENU.READ,
     PermissionGroups.POS.READ,
   ],
+  KITCHEN_STAFF: [
+    PermissionGroups.ORDER.READ,
+    PermissionGroups.ORDER.UPDATE,
+  ],
   
 } as const;
 

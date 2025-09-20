@@ -35,7 +35,7 @@ export interface UserProfile extends Omit<Profile, 'role'> {
 export const UserRole = {
   ADMIN: 'ADMIN',
   MANAGER: 'MANAGER',
-  STAFF: 'STAFF',
+  KITCHEN_STAFF: 'KITCHEN_STAFF',
   CUSTOMER: 'CUSTOMER'
 } as const;
 
@@ -61,7 +61,7 @@ interface UsePermissionsReturn {
   // Role helpers
   isAdmin: boolean;
   isManager: boolean;
-  isStaff: boolean;
+  isKitchenStaff: boolean;
   
   // Common permission checks
   canViewUsers: boolean;
@@ -147,7 +147,7 @@ export const usePermissions = (): UsePermissionsReturn => {
     try {
       const response = await profileApi.getProfile();
       const profileData = response.data?.data; // Extract the actual profile data
-      
+      console.log(profileData,"profileData")
       if (!profileData) {
         throw new Error('No profile data received');
       }
@@ -180,7 +180,7 @@ export const usePermissions = (): UsePermissionsReturn => {
               'PRODUCT_READ', 'MENU_READ'
             ];
             break;
-          case 'STAFF':
+          case 'KITCHEN_STAFF':
             permissions = [
               'ORDER_READ', 'ORDER_CREATE',
               'PRODUCT_READ', 'MENU_READ'
@@ -272,20 +272,29 @@ export const usePermissions = (): UsePermissionsReturn => {
   const hasRole = useCallback((role: UserRoleType | UserRoleType[]): boolean => {
     // On server, default to most restrictive permissions
     if (!isBrowser || state.isLoading || !state.user) {
+      console.log('hasRole: Not in browser, loading, or no user');
       return false;
     }
     
-    if (!state.user) {
-      return false;
-    }
+    console.log('hasRole called with role:', role);
+    console.log('User role from state:', state.user.role);
+    console.log('User object from state:', state.user);
+    
+    // Normalize the user's role to uppercase for comparison
+    const userRole = state.user.role?.toUpperCase();
     
     // Handle array of roles (OR condition)
     if (Array.isArray(role)) {
-      return role.includes(state.user.role);
+      const normalizedRoles = role.map(r => r.toUpperCase());
+      const hasRole = normalizedRoles.includes(userRole);
+      console.log(`Checking if user has any of roles [${normalizedRoles.join(', ')}]:`, hasRole);
+      return hasRole;
     }
     
     // Handle single role
-    return state.user.role === role;
+    const hasSingleRole = userRole === role.toUpperCase();
+    console.log(`Checking if user has role ${role}:`, hasSingleRole);
+    return hasSingleRole;
   }, [state.user, state.isLoading]);
 
   // Memoized permission checks - ensure these are computed only when needed
@@ -322,7 +331,7 @@ export const usePermissions = (): UsePermissionsReturn => {
 
   const isAdmin = hasRole('ADMIN');
   const isManager = hasRole('MANAGER');
-  const isStaff = hasRole('STAFF');
+  const isStaff = hasRole('KITCHEN_STAFF');
 
   const canViewUsers = hasPermission('USER_READ');
   const canManageUsers = hasAnyPermission(['USER_CREATE', 'USER_UPDATE', 'USER_DELETE']);

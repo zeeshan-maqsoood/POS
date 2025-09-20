@@ -35,14 +35,41 @@ export function ProtectedRouteWrapper({
     );
   }
 
-  // Check if user has required role or permission
+  // Check route-specific access
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const isPOSRoute = currentPath.includes('/pos');
+  const isOrdersRoute = currentPath.includes('/orders');
+  
+  // Check if user has required permission
   const hasRequiredPermission = requiredPermission 
     ? hasPermission(requiredPermission)
     : true;
   
-  const hasRequiredRole = requiredRole 
-    ? hasRole(requiredRole)
-    : true;
+  // Explicitly deny KITCHEN_STAFF access to POS
+  if (isPOSRoute && hasRole('KITCHEN_STAFF')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4 text-center">
+        <h1 className="text-2xl font-bold">Access Denied</h1>
+        <p className="text-muted-foreground">
+          This section is only accessible to managers.
+        </p>
+      </div>
+    );
+  }
+  
+  // Define the allowed roles that can access this route
+  let hasRequiredRole = true; // Default to true if no role is required
+  
+  if (requiredRole) {
+    // For orders route, allow both requiredRole and KITCHEN_STAFF
+    if (isOrdersRoute) {
+      hasRequiredRole = hasRole(requiredRole) || hasRole('KITCHEN_STAFF');
+    } 
+    // For all other routes, only check the required role
+    else {
+      hasRequiredRole = hasRole(requiredRole);
+    }
+  }
 
   // Show access denied if user doesn't have required permissions/role
   if (!hasRequiredPermission || !hasRequiredRole) {

@@ -276,6 +276,7 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                     <SelectContent>
                       <SelectItem value="MANAGER">Manager</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
+                      <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -314,45 +315,64 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
           {/* Permissions */}
           <div className="space-y-6 pt-6 border-t">
             <h3 className="text-lg font-medium">Permissions</h3>
-            <div className="space-y-6">
-              {Object.entries(permissionGroups).map(([category, permissions]) => (
-                <div key={category} className="space-y-3">
-                  <h4 className="text-sm font-medium capitalize">
-                    {category.toLowerCase()}
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {permissions.map((permission) => (
-                      <FormField
-                        key={permission}
-                        control={form.control}
-                        name="permissions"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(permission)}
-                                onCheckedChange={(checked) => {
-                                  const currentPermissions = field.value || [];
-                                  const newPermissions = checked
-                                    ? [...currentPermissions, permission]
-                                    : currentPermissions.filter((p) => p !== permission);
-                                  field.onChange(newPermissions);
-                                }}
-                              />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="font-normal">
-                                {getPermissionLabel(permission)}
-                              </FormLabel>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-                    ))}
-                  </div>
+            
+            {form.watch('role') === 'KITCHEN_STAFF' ? (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-md">
+                <p className="text-sm text-gray-600">
+                  Kitchen staff can only have ORDER_READ and ORDER_UPDATE permissions.
+                </p>
+                <div className="space-y-2">
+                  {['ORDER_READ', 'ORDER_UPDATE'].map((permission) => (
+                    <div key={permission} className="flex items-center space-x-2 p-2 bg-white rounded border">
+                      <Checkbox checked={true} disabled />
+                      <span className="text-sm font-medium">
+                        {getPermissionLabel(permission)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(permissionGroups).map(([category, permissions]) => (
+                  <div key={category} className="space-y-3">
+                    <h4 className="text-sm font-medium capitalize">
+                      {category.toLowerCase()}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {permissions.map((permission) => (
+                        <FormField
+                          key={permission}
+                          control={form.control}
+                          name="permissions"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(permission)}
+                                  onCheckedChange={(checked) => {
+                                    const currentPermissions = field.value || [];
+                                    const newPermissions = checked
+                                      ? [...currentPermissions, permission]
+                                      : currentPermissions.filter((p) => p !== permission);
+                                    field.onChange(newPermissions);
+                                  }}
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="font-normal">
+                                  {getPermissionLabel(permission)}
+                                </FormLabel>
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Buttons */}

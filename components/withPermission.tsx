@@ -58,8 +58,11 @@ export const withPermission = ({
     : true;
 
   const hasRequiredRole = requiredRole 
-    ? hasRole(requiredRole as any)
+    ? Array.isArray(requiredRole)
+      ? requiredRole.some(role => hasRole(role as any))
+      : hasRole(requiredRole as any)
     : true;
+    console.log(hasRequiredRole,"hasRequiredRole")
 
   if (!hasRequiredPermission || !hasRequiredRole) {
     return null; // or show unauthorized message

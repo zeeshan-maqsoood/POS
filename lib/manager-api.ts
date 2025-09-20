@@ -18,7 +18,7 @@ export interface CreateManagerData {
   name: string;
   email: string;
   password: string;
-  role: 'ADMIN' | 'MANAGER';
+  role: 'ADMIN' | 'MANAGER' | 'KITCHEN_STAFF' | 'USER';
   status?: 'ACTIVE' | 'INACTIVE';
   permissions?: string[];
 }
@@ -26,8 +26,9 @@ export interface CreateManagerData {
 export interface UpdateManagerData {
   name?: string;
   email?: string;
-  role?: 'ADMIN' | 'MANAGER';
+  role?: 'ADMIN' | 'MANAGER' | 'KITCHEN_STAFF' | 'USER';
   status?: 'ACTIVE' | 'INACTIVE';
+  password?: string;
   permissions?: string[];
 }
 

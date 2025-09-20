@@ -11,11 +11,16 @@ export interface LoginData {
   password: string;
 }
 
+export type UserRole = "ADMIN" | "MANAGER" | "KITCHEN_STAFF" | "CUSTOMER";
+
+export type Permission = string; // Import this from your permissions file if you have one
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "MANAGER";
+  role: UserRole;
+  permissions?: Permission[];
   createdAt: string;
   updatedAt: string;
   createdById: string | null;
