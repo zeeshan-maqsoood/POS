@@ -7,7 +7,8 @@ export interface Profile {
   id: string
   name: string
   email: string
-  role: 'ADMIN' | 'MANAGER' | 'STAFF'
+  role: 'ADMIN' | 'MANAGER' | 'KITCHEN_STAFF' | 'CUSTOMER'
+  branch?: string | null
   status: 'ACTIVE' | 'INACTIVE'
   avatarUrl?: string
   lastLogin?: string

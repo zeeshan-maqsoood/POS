@@ -43,6 +43,8 @@ import { ImageUpload } from "@/components/ui/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { useBranches } from "@/hooks/use-branches";
+import { useUser } from "@/hooks/use-user";
 
 // --- Zod Schema ---
 const menuItemFormSchema = z.object({
@@ -51,7 +53,8 @@ const menuItemFormSchema = z.object({
   imageUrl: z.string().url().optional().or(z.literal("")),
   price: z.coerce.number().min(0.01, { message: "Price must be greater than 0." }),
   cost: z.coerce.number().min(0, { message: "Cost cannot be negative." }),
-  categoryId: z.string().min(1, { message: "Category is required." }),
+  categoryId: z.string().optional(), // Made optional to handle managers without categories
+  branchName: z.string().min(1, { message: "Branch is required." }),
   isActive: z.boolean().default(true),
   taxRate: z.coerce.number().min(0).max(100).default(0),
   taxExempt: z.boolean().default(false),
@@ -85,9 +88,27 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   const [allModifiers, setAllModifiers] = React.useState<{ id: string; name: string; price: number }[]>([]);
   const [isModifierDropdownOpen, setIsModifierDropdownOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [showCategoryHelp, setShowCategoryHelp] = React.useState(false);
+
   const router = useRouter();
+  const { branches, loading: branchesLoading, error: branchesError } = useBranches();
+  const { user, isAdmin } = useUser();
 
   const isEditMode = !!initialData;
+
+  // Helper function to normalize branch names
+  const normalizeBranchName = (branch: string): string => {
+    if (!branch) return "";
+    if (branch.startsWith('branch')) {
+      return branch
+        .replace('branch1', 'Main Branch')
+        .replace('branch2', 'Downtown Branch')
+        .replace('branch3', 'Uptown Branch')
+        .replace('branch4', 'Westside Branch')
+        .replace('branch5', 'Eastside Branch');
+    }
+    return branch; // Already in new format
+  };
 
   const defaultValues = React.useMemo(() => {
     if (!initialData) {
@@ -97,7 +118,8 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
         imageUrl: "",
         price: 0,
         cost: 0,
-        categoryId: "",
+        categoryId: categories.length > 0 ? categories[0].id : "", // Set first category as default for managers
+        branchName: normalizeBranchName(user?.branch || ""), // Use normalized branch name
         isActive: true,
         taxRate: 0,
         taxExempt: false,
@@ -110,8 +132,9 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
       description: initialData.description || "",
       imageUrl: initialData.imageUrl || "",
       price: initialData.price || 0,
-      cost: initialData.cost || 0,
+      cost: (initialData as any).cost || 0, // Cast to any to handle missing cost property
       categoryId: initialData.categoryId || "",
+      branchName: normalizeBranchName(user?.branch || ""), // Use normalized branch name
       isActive: initialData.isActive ?? true,
       taxRate: initialData.taxRate || 0,
       taxExempt: initialData.taxExempt ?? false,
@@ -123,7 +146,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
         isActive: m.isActive ?? true,
       })) || [],
     };
-  }, [initialData]);
+  }, [initialData, user?.branch, categories]);
 
   const form = useForm<MenuItemFormValues>({
     resolver: zodResolver(menuItemFormSchema),
@@ -133,6 +156,14 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   React.useEffect(() => {
     form.reset(defaultValues);
   }, [defaultValues, form]);
+
+  React.useEffect(() => {
+    if (!isAdmin && categories.length === 0 && !isLoading) {
+      setShowCategoryHelp(true);
+    } else {
+      setShowCategoryHelp(false);
+    }
+  }, [categories, isLoading, isAdmin]);
 
   const filteredModifiers = React.useMemo(
     () =>
@@ -151,11 +182,29 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        // For managers, we need to get categories from their branch with normalized branch name
+        // For admins, get all categories
+        const categoriesParams = isAdmin ? {} : { branchName: normalizeBranchName(user?.branch || "") };
+        console.log('Fetching categories with params:', categoriesParams);
+        console.log('User branch (raw):', user?.branch);
+        console.log('User branch (normalized):', normalizeBranchName(user?.branch || ""));
+
         const [categoriesRes, modifiersRes] = await Promise.all([
-          categoryApi.getCategories(),
+          categoryApi.getCategories(categoriesParams),
           modifierApi.getModifiers(),
         ]);
-        setCategories(Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : []);
+
+        console.log("Categories API response:", categoriesRes);
+        console.log("Categories data:", categoriesRes?.data?.data);
+        const categoriesData = Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : [];
+        setCategories(categoriesData);
+        console.log("Categories set:", categoriesData);
+
+        // If manager gets no categories, show a helpful message
+        if (!isAdmin && categoriesData.length === 0) {
+          console.log('Manager has no categories in their branch, they need to create one first');
+        }
+
         setAllModifiers(
           Array.isArray(modifiersRes?.data?.data)
             ? modifiersRes.data.data.map((m: any) => ({
@@ -177,11 +226,31 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
       }
     };
     fetchData();
-  }, []);
+  }, [user, isAdmin]);
 
   const onSubmit = async (data: MenuItemFormValues) => {
     setIsSubmitting(true);
     try {
+      console.log('Form submission started with data:', data);
+      console.log('User info:', { isAdmin, userBranch: user?.branch });
+
+      // Validate required fields
+      if (!data.categoryId || data.categoryId === "no-categories") {
+        // For managers: if they have categories available, category is required
+        // For managers: if they have no categories, allow empty categoryId (they need to create categories first)
+        if (!isAdmin && categories.length > 0) {
+          toast({
+            title: "Error",
+            description: "Please select a category.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        // For managers with no categories, we'll create the item without a category
+        // This allows them to create items and then create categories later
+      }
+
       const apiData = {
         name: data.name,
         description: data.description,
@@ -189,23 +258,21 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
         price: Number(data.price),
         cost: Number(data.cost),
         categoryId: data.categoryId,
+        branchName: isAdmin ? data.branchName : normalizeBranchName(user?.branch || ""),
         isActive: data.isActive,
         taxRate: Number(data.taxRate),
         taxExempt: data.taxExempt,
         tags: data.tags || [],
-        // modifiers: data.modifiers.map((m) => ({
-        //   id: m.id,
-        //   name: m.name,
-        //   price: m.price,
-        //   isActive: m.isActive,
-        // })),
       };
 
+      console.log('Sending API data:', apiData);
+      console.log('Normalized branch name:', normalizeBranchName(user?.branch || ""));
+
       if (isEditMode && initialData?.id) {
-        await menuItemApi.updateItem(initialData.id, apiData);
+        await menuItemApi.updateItem(initialData.id, apiData as any);
         toast({ title: "Success", description: "Menu item updated successfully." });
       } else {
-        await menuItemApi.createItem(apiData);
+        await menuItemApi.createItem(apiData as any);
         toast({ title: "Success", description: "Menu item created successfully." });
       }
       router.refresh();
@@ -348,17 +415,68 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
+                        {(() => {
+                          console.log("Rendering categories dropdown with:", categories);
+                          return categories.length === 0 ? (
+                            <SelectItem disabled value="no-categories">
+                              {isAdmin
+                                ? "No categories available"
+                                : `No categories found for ${user?.branch} branch. Create a category first.`
+                              }
+                            </SelectItem>
+                          ) : (
+                            categories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))
+                          );
+                        })()}
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                    {showCategoryHelp && (
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <p className="text-sm text-blue-800">
+                          💡 <strong>Need to create a category first?</strong>
+                        </p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Go to <strong>Menu → Categories → Add Category</strong> to create a category for your branch first.
+                        </p>
+                      </div>
+                    )}
                   </FormItem>
                 )}
               />
+              {isAdmin && (
+                <FormField
+                  control={form.control}
+                  name="branchName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Branch *</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a branch" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {branches.map((branch) => (
+                            <SelectItem key={branch.value} value={branch.value}>
+                              {branch.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
           </div>
 

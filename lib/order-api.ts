@@ -48,6 +48,7 @@ export enum OrderStatus {
   PROCESSING = "PROCESSING",
   COMPLETED = "COMPLETED",
   CANCELLED = "CANCELLED",
+  REFUNDED = "REFUNDED",
 }
 
 export interface Order {
@@ -90,6 +91,7 @@ interface GetOrdersParams {
   status?: OrderStatus;
   paymentStatus?: PaymentStatus;
   orderType?: OrderType;
+  branchName?: string | null;
   startDate?: string;
   endDate?: string;
   search?: string;

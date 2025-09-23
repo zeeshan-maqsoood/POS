@@ -256,6 +256,13 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import PermissionGate from '@/components/auth/permission-gate';
 import orderApi, { PaymentMethod, OrderStatus } from '@/lib/order-api';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface CartItem {
   item: MenuItem;
@@ -272,17 +279,21 @@ interface OrderSummaryProps {
   onBranchChange: (branchId: string) => void;
   onTableNumberChange: (tableNumber: string) => void;
   onCustomerNameChange: (name: string) => void;
-  selectedBranch: string;
+  selectedBranch: string | null;
   tableNumber: string;
   customerName: string;
   onOrderPlaced?: () => void;
 }
 
 const branches = [
-  { id: '1', name: 'Main Branch' },
-  { id: '2', name: 'Downtown' },
-  { id: '3', name: 'Uptown' },
+  { id: 'Main Branch', name: 'Main Branch' },
+  { id: 'Downtown Branch', name: 'Downtown Branch' },
+  { id: 'Uptown Branch', name: 'Uptown Branch' },
+  { id: 'Westside Branch', name: 'Westside Branch' },
+  { id: 'Eastside Branch', name: 'Eastside Branch' }
 ];
+
+
 
 const tableNumbers = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
 
@@ -434,32 +445,42 @@ export function OrderSummary({
       {/* Form + Totals */}
       <div className="p-4 border-t space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
-            <select
-              value={selectedBranch}
-              onChange={(e) => onBranchChange(e.target.value)}
-              className="w-full border rounded-md p-2 text-sm"
-            >
-              <option value="">Select Branch</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">Branch</label>
+              <Select
+                value={selectedBranch || ''}
+                onValueChange={onBranchChange}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Table</label>
-            <select
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">Table</label>
+            <Select
               value={tableNumber}
-              onChange={(e) => onTableNumberChange(e.target.value)}
-              className="w-full border rounded-md p-2 text-sm"
+              onValueChange={onTableNumberChange}
             >
-              <option value="">Select Table</option>
-              {tableNumbers.map(num => (
-                <option key={num} value={num}>{num}</option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a table" />
+              </SelectTrigger>
+              <SelectContent>
+                {tableNumbers.map(num => (
+                  <SelectItem key={num} value={num}>
+                    Table {num}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -487,7 +508,7 @@ export function OrderSummary({
           <span>£{total.toFixed(2)}</span>
         </div>
 
-        <PermissionGate required="ORDER_CREATE" disableInsteadOfHide>
+        <PermissionGate required={["ORDER_CREATE","POS_UPDATE"]} disableInsteadOfHide>
           <Button
             className="w-full mt-3"
             size="lg"

@@ -4,6 +4,7 @@ export interface User {
   firstName: string;
   lastName: string;
   role: string;
+  branch?: string; // Add branch property
   permissions: string[];
   createdAt: string;
   updatedAt: string;

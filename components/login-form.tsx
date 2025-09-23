@@ -52,12 +52,17 @@ function LoginFormContent() {
   
       // Determine redirect path based on user role
       let redirectPath = '/dashboard';
-      
+
       // Force kitchen staff to orders page
       if (response.data.user.role === 'KITCHEN_STAFF') {
         console.log('Kitchen staff detected, redirecting to orders page');
         redirectPath = '/dashboard/orders';
-      } 
+      }
+      // Redirect managers with POS_READ permission to POS page
+      else if (response.data.user.role === 'MANAGER' && response.data.user.permissions?.includes('POS_READ')) {
+        console.log('Manager with POS_READ permission detected, redirecting to POS page');
+        redirectPath = '/pos';
+      }
       // For other roles, use the original redirect logic
       else {
         redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
@@ -67,7 +72,7 @@ function LoginFormContent() {
           const userPermissions = response.data.user.permissions || [];
           if (userPermissions.includes('ORDER_READ')) {
             redirectPath = '/dashboard/orders';
-          } 
+          }
           // Otherwise, let the middleware handle the redirection
           else {
             redirectPath = '/dashboard';

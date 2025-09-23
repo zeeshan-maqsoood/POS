@@ -28,6 +28,7 @@ export type Permission = BasePermission;
 // Extend the Profile interface to include permissions
 export interface UserProfile extends Omit<Profile, 'role'> {
   role: UserRoleType;
+  branch?: string;
   permissions: Permission[];
 }
 
@@ -177,7 +178,10 @@ export const usePermissions = (): UsePermissionsReturn => {
           case 'MANAGER':
             permissions = [
               'ORDER_READ', 'ORDER_UPDATE',
-              'PRODUCT_READ', 'MENU_READ'
+              'MENU_READ', 'MENU_CREATE', 'MENU_UPDATE',
+              'POS_READ', 'POS_UPDATE',
+              'MANAGER_READ', 'MANAGER_CREATE', 'MANAGER_UPDATE',
+              'USER_READ'
             ];
             break;
           case 'KITCHEN_STAFF':
@@ -331,7 +335,7 @@ export const usePermissions = (): UsePermissionsReturn => {
 
   const isAdmin = hasRole('ADMIN');
   const isManager = hasRole('MANAGER');
-  const isStaff = hasRole('KITCHEN_STAFF');
+  const isKitchenStaff = hasRole('KITCHEN_STAFF');
 
   const canViewUsers = hasPermission('USER_READ');
   const canManageUsers = hasAnyPermission(['USER_CREATE', 'USER_UPDATE', 'USER_DELETE']);
@@ -521,7 +525,7 @@ export const usePermissions = (): UsePermissionsReturn => {
     // Role helpers
     isAdmin,
     isManager,
-    isStaff,
+    isKitchenStaff,
     
     // Common permission checks
     canViewUsers,

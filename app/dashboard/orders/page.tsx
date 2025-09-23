@@ -34,8 +34,10 @@ export default function OrdersPage() {
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL'>('ALL');
-  const { hasRole } = usePermissions();
+  const { hasRole, user } = usePermissions();
   const isKitchenStaff = hasRole('KITCHEN_STAFF');
+  const isManager = hasRole('MANAGER');
+  const userBranch = user?.branch; // Get the user's branch from the auth context
 
   useEffect(() => {
     fetchOrders();
@@ -44,8 +46,12 @@ export default function OrdersPage() {
 
   const fetchOrders = async () => {
     try {
+      // Only pass branch if user is not admin
+      const branch = (isManager || isKitchenStaff) ? userBranch : undefined;
+      
       const response = await orderApi.getOrders({
         status: activeTab === 'ALL' ? undefined : activeTab,
+        branchName: branch,
         page: 1,
         pageSize: 100, // Adjust based on your needs
         sortBy: 'createdAt',

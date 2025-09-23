@@ -20,7 +20,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  permissions?: Permission[];
+  permissions: Permission[];
   createdAt: string;
   updatedAt: string;
   createdById: string | null;

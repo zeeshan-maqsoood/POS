@@ -237,14 +237,8 @@
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[280px] p-0">
                   <div className="flex h-full flex-col">
-                    <div className="flex h-16 items-center justify-between px-6">
+                    <div className="flex h-16 items-center px-6">
                       <span className="text-lg font-semibold">Admin Panel</span>
-                      <SheetClose asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <X className="h-4 w-4" />
-                          <span className="sr-only">Close menu</span>
-                        </Button>
-                      </SheetClose>
                     </div>
                     <div className="flex-1 overflow-y-auto py-4">
                       {renderNavItems()}

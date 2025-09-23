@@ -41,6 +41,9 @@ export const managerFormSchema = z.object({
   }),
   role: z.enum(["MANAGER", "ADMIN"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
+  branch: z.string().min(1, {
+    message: "Please select a branch.",
+  }),
   permissions: z.array(z.string()).default([]),
 });
 
@@ -80,6 +83,14 @@ const getDefaultManagerPermissions = (): string[] => [
   "ORDER_UPDATE",
   "ORDER_DELETE",
   "ORDER_CREATE",
+];
+
+const branches = [
+  { id: 'branch1', name: 'Main Branch' },
+  { id: 'branch2', name: 'Downtown Branch' },
+  { id: 'branch3', name: 'Uptown Branch' },
+  { id: 'branch4', name: 'Westside Branch' },
+  { id: 'branch5', name: 'Eastside Branch' }
 ];
 
 // This is the main edit page component that wraps the ManagerForm
@@ -152,12 +163,13 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
   }>({});
 
   // Default values
-  const defaultValues = {
-    name: "",
-    email: "",
-    role: "MANAGER" as const,
-    status: "ACTIVE" as const,
-    permissions: getDefaultManagerPermissions(),
+  const defaultValues: Partial<ManagerFormValues> = {
+    name: initialData?.name || "",
+    email: initialData?.email || "",
+    role: initialData?.role || "MANAGER",
+    status: initialData?.status || "ACTIVE",
+    branch: initialData?.branch || "",
+    permissions: initialData?.permissions || [],
   };
 
   const form = useForm<ManagerFormValues>({
@@ -277,6 +289,36 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                       <SelectItem value="MANAGER">Manager</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Branch */}
+            <FormField
+              control={form.control}
+              name="branch"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Branch</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a branch" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {branches.map((branch) => (
+                        <SelectItem key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

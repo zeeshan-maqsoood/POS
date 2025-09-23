@@ -75,20 +75,12 @@ export function CategoriesTable({
       ),
     },
     {
-      accessorKey: "isActive",
-      header: "Status",
+      accessorKey: "branchName",
+      header: "Branch",
       cell: ({ row }) => (
-        <Badge variant={row.original.isActive ? "default" : "secondary"}>
-          {row.original.isActive ? (
-            <span className="flex items-center">
-              <CheckCircle2 className="h-3 w-3 mr-1" /> Active
-            </span>
-          ) : (
-            <span className="flex items-center">
-              <XCircle className="h-3 w-3 mr-1" /> Inactive
-            </span>
-          )}
-        </Badge>
+        <div className="text-sm">
+          {row.original.branchName || 'All Branches'}
+        </div>
       ),
     },
     {

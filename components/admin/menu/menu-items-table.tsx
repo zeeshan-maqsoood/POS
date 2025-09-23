@@ -45,9 +45,13 @@ export function MenuItemsTable({
       cell: ({ row }) => formatCurrency(row.original.price),
     },
     {
-      accessorKey: "cost",
-      header: "Cost",
-      cell: ({ row }) => row.original.cost ? formatCurrency(row.original.cost) : '-',
+      accessorKey: "branchName",
+      header: "Branch",
+      cell: ({ row }) => (
+        <div className="text-sm">
+          {row.original.branchName || 'All Branches'}
+        </div>
+      ),
     },
     {
       accessorKey: "isActive",

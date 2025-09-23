@@ -57,6 +57,8 @@ export const DefaultRolePermissions = {
     PermissionGroups.ORDER.READ,
     PermissionGroups.ORDER.UPDATE,
     PermissionGroups.MENU.READ,
+    PermissionGroups.MENU.CREATE,
+    PermissionGroups.MENU.UPDATE,
     PermissionGroups.POS.READ,
     PermissionGroups.POS.UPDATE,
     PermissionGroups.manager.READ,

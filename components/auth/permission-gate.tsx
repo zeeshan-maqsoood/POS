@@ -68,14 +68,23 @@ export function PermissionGate({
   if (allowed && required) {
     if (Array.isArray(required)) {
       // treat as ANY by default for UI actions; if you want strict ALL, pass via `anyOf` as needed
-      allowed = hasAnyPermission(required);
+      const hasAny = hasAnyPermission(required);
+      console.log(`[PermissionGate] Checking required permissions (ANY of):`, required);
+      console.log(`[PermissionGate] Has any permission:`, hasAny);
+      allowed = hasAny;
     } else {
-      allowed = hasPermission(required);
+      const hasPerm = hasPermission(required);
+      console.log(`[PermissionGate] Checking required permission:`, required);
+      console.log(`[PermissionGate] Has permission:`, hasPerm);
+      allowed = hasPerm;
     }
   }
 
   if (allowed && anyOf && anyOf.length) {
-    allowed = hasAnyPermission(anyOf);
+    const hasAny = hasAnyPermission(anyOf);
+    console.log(`[PermissionGate] Checking anyOf permissions:`, anyOf);
+    console.log(`[PermissionGate] Has any of permissions:`, hasAny);
+    allowed = hasAny;
   }
 
   try {
@@ -84,10 +93,21 @@ export function PermissionGate({
   } catch {}
 
   if (!allowed) {
+    console.log('[PermissionGate] Access denied. Disabling or hiding element.');
+    console.log('[PermissionGate] disableInsteadOfHide:', disableInsteadOfHide);
+    console.log('[PermissionGate] isValidElement:', React.isValidElement(children));
+    
     if (disableInsteadOfHide && React.isValidElement(children)) {
       // Try cloning with disabled prop if supported
-      return React.cloneElement(children as any, { disabled: true, "aria-disabled": true });
+      const cloned = React.cloneElement(children as any, { 
+        disabled: true, 
+        "aria-disabled": true,
+        title: 'You do not have permission to perform this action.'
+      });
+      console.log('[PermissionGate] Cloned element with disabled state');
+      return cloned;
     }
+    console.log('[PermissionGate] Rendering fallback');
     return <>{fallback}</>;
   }
 
