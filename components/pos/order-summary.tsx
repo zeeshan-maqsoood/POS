@@ -283,6 +283,7 @@ interface OrderSummaryProps {
   tableNumber: string;
   customerName: string;
   onOrderPlaced?: () => void;
+  userBranch?: string; // Add user branch to filter available branches
 }
 
 const branches = [
@@ -311,7 +312,17 @@ export function OrderSummary({
   tableNumber,
   customerName,
   onOrderPlaced,
+  userBranch, // Add userBranch parameter
 }: OrderSummaryProps) {
+  // Filter branches based on user's assigned branch
+  const availableBranches = userBranch
+    ? branches.filter(branch => branch.id === userBranch)
+    : branches;
+
+  // If user has a branch but it's not in the available branches, add it
+  const finalBranches = userBranch && availableBranches.length === 0
+    ? [{ id: userBranch, name: userBranch }]
+    : availableBranches;
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
@@ -447,6 +458,11 @@ export function OrderSummary({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Branch</label>
+            {finalBranches.length === 0 ? (
+              <div className="w-full p-2 border rounded-md bg-gray-50 text-gray-500 text-sm">
+                No branch assigned
+              </div>
+            ) : (
               <Select
                 value={selectedBranch || ''}
                 onValueChange={onBranchChange}
@@ -455,13 +471,14 @@ export function OrderSummary({
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {branches.map((branch) => (
+                  {finalBranches.map((branch) => (
                     <SelectItem key={branch.id} value={branch.id}>
                       {branch.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            )}
           </div>
 
           <div className="space-y-1">

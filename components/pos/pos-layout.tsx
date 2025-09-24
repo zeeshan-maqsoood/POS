@@ -60,6 +60,13 @@ export function POSLayout() {
   // Get user information for branch filtering
   const { user, isAdmin } = useUser();
 
+  // Set default selected branch to user's branch if not admin
+  useEffect(() => {
+    if (!isAdmin && user?.branch && !selectedBranch) {
+      setSelectedBranch(user.branch);
+    }
+  }, [user, isAdmin, selectedBranch]);
+
   // Fetch data on component mount
   useEffect(() => {
     const fetchData = async () => {
@@ -396,6 +403,7 @@ export function POSLayout() {
               tableNumber={tableNumber}
               customerName={customerName}
               onOrderPlaced={handleOrderPlaced}
+              userBranch={user?.branch} // Pass user's branch to filter available branches
             />
           </div>
         </div>

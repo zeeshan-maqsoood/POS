@@ -36,14 +36,14 @@
 //   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
 //   email: z.string().email({ message: "Please enter a valid email address." }),
 //   password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional(),
-//   role: z.enum(["MANAGER", "ADMIN", "KITCHEN_STAFF"]),
+//   role: z.enum(["ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN_STAFF", "USER"]),
 //   status: z.enum(["ACTIVE", "INACTIVE"]),
 //   branch: z.string().min(1, { message: "Please select a branch." }),
 //   permissions: z.array(z.string()).default([]),
 // });
 
 // // Define types
-// type Role = "MANAGER" | "ADMIN" | "KITCHEN_STAFF";
+// type Role = "ADMIN" | "MANAGER" | "CASHIER" | "WAITER" | "KITCHEN_STAFF" | "USER";
 // type Status = "ACTIVE" | "INACTIVE";
 
 // type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -248,9 +248,12 @@
 //                       </SelectTrigger>
 //                     </FormControl>
 //                     <SelectContent>
-//                       <SelectItem value="MANAGER">Manager</SelectItem>
 //                       <SelectItem value="ADMIN">Admin</SelectItem>
+//                       <SelectItem value="MANAGER">Manager</SelectItem>
+//                       <SelectItem value="CASHIER">Cashier</SelectItem>
+//                       <SelectItem value="WAITER">Waiter</SelectItem>
 //                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
+//                       <SelectItem value="USER">User</SelectItem>
 //                     </SelectContent>
 //                   </Select>
 //                   <FormMessage />
@@ -431,7 +434,7 @@ import { Loader2 } from "lucide-react";
 // Import API
 import managerApi from "@/lib/manager-api";
 // Import the permission utilities
-import { getAllPermissions, getPermissionLabel } from "@/lib/permissions";
+import { getAllPermissions, getPermissionLabel, Permission } from "@/lib/permissions";
 
 // Define the form schema
 export const managerFormSchema = z.object({
@@ -441,14 +444,14 @@ export const managerFormSchema = z.object({
     .string()
     .min(6, { message: "Password must be at least 6 characters." })
     .optional(),
-  role: z.enum(["MANAGER", "ADMIN", "KITCHEN_STAFF"]),
+  role: z.enum(["MANAGER", "KITCHEN_STAFF"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   branch: z.string().min(1, { message: "Please select a branch." }),
   permissions: z.array(z.string()).default([]),
 });
 
 // Define types
-type Role = "MANAGER" | "ADMIN" | "KITCHEN_STAFF";
+type Role = "MANAGER" | "KITCHEN_STAFF";
 type Status = "ACTIVE" | "INACTIVE";
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -501,11 +504,11 @@ const branches = [
 
 // Legacy branch mapping for backward compatibility
 const LEGACY_BRANCH_MAPPING: Record<string, string> = {
-  "branch1": "Main Branch",
-  "branch2": "Downtown Branch", 
-  "branch3": "Uptown Branch",
-  "branch4": "Westside Branch",
-  "branch5": "Eastside Branch",
+  "Main Branch": "Main Branch",
+  "Downtown Branch": "Downtown Branch", 
+  "Uptown Branch": "Uptown Branch",
+  "Westside Branch": "Westside Branch",
+  "Eastside Branch": "Eastside Branch",
 };
 
 export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
@@ -692,7 +695,6 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
                     </SelectContent>
                   </Select>
@@ -812,7 +814,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                               </FormControl>
                               <div className="space-y-1 leading-none">
                                 <FormLabel className="font-normal">
-                                  {getPermissionLabel(permission)}
+                                  {getPermissionLabel(permission as Permission)}
                                 </FormLabel>
                                 <p className="text-xs text-muted-foreground">
                                   {`Can ${permission

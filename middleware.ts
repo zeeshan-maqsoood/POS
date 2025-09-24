@@ -55,6 +55,11 @@ function getRequiredPermissions(pathname: string): string[] {
  
 // Find the first dashboard page the user can access based on their permissions and role
 function getFirstAccessibleDashboardPath(userPermissions: string[], userRole?: string): string | null {
+  // If user is admin, return dashboard root (admins have access to everything)
+  if (userRole && userRole.toString().toUpperCase() === 'ADMIN') {
+    return '/dashboard';
+  }
+
   // Define dashboard candidates with their required permissions
   const dashboardCandidates = [
     { path: '/dashboard/orders', required: ['ORDER_READ'] },
@@ -132,6 +137,9 @@ export function middleware(request: NextRequest) {
     // Check both 'role' and 'role' in the root and in the 'data' object
     const userRole = (decoded as any)?.role || (decoded as any)?.data?.role;
     console.log('Resolved user role:', userRole);
+    console.log('Role type:', typeof userRole);
+    console.log('Role toString():', userRole?.toString());
+    console.log('Role toUpperCase():', userRole?.toString()?.toUpperCase());
     
     // Log permissions in a more readable way
     if ((decoded as any)?.permissions) {
@@ -183,27 +191,26 @@ export function middleware(request: NextRequest) {
         return NextResponse.next();
       }
     }
-    // Handle admin access
-    else if (userRole.toString().toUpperCase() === 'ADMIN') {
+    // Handle admin access - admins have access to everything
+    console.log('Checking admin access for role:', userRole);
+    if (userRole && userRole.toString().toUpperCase() === 'ADMIN') {
       console.log('Admin access granted to:', pathname);
       return NextResponse.next();
     }
-    // Handle login page for non-kitchen staff
-    else if (pathname === '/') {
+    console.log('Admin check failed, continuing with other checks');
+
+    // Handle login page for non-admin users
+    if (pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
     // For non-admin users, check permissions
     if (pathname.startsWith('/dashboard')) {
-      // If we somehow got here with an admin, allow access
-      if (userRole.toString().toUpperCase() === 'ADMIN') {
-        return NextResponse.next();
-      }
       // Redirect dashboard root for non-admins to the first accessible dashboard page, else POS
       if (pathname === '/dashboard') {
         const userPermissions = Array.isArray((decoded as any)?.permissions) ? (decoded as any).permissions : [];
-        const userRole = (decoded as any)?.role;
         const firstAllowed = getFirstAccessibleDashboardPath(userPermissions, userRole);
+        console.log('Non-admin user, redirecting from /dashboard to:', firstAllowed);
         return NextResponse.redirect(new URL(firstAllowed || '/pos', request.url));
       }
       

@@ -37,13 +37,13 @@ export const managerFormSchema = z.object({
   email: z.string().email({
     message: "Please enter a valid email address.",
   }),
-  role: z.enum(["MANAGER", "ADMIN"]),
+  role: z.enum(["MANAGER", "KITCHEN_STAFF"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   permissions: z.array(z.string()).default([]).transform((val) => val || []),
 });
 
 // Define types
-type Role = 'MANAGER' | 'ADMIN';
+type Role = 'MANAGER' | 'KITCHEN_STAFF';
 type Status = 'ACTIVE' | 'INACTIVE';
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -94,6 +94,18 @@ const getDefaultManagerPermissions = (): string[] => {
   return [...DefaultRolePermissions.MANAGER];
 };
 
+// Get default permissions based on role
+const getDefaultPermissionsForRole = (role: Role): string[] => {
+  switch (role) {
+    case 'MANAGER':
+      return [...DefaultRolePermissions.MANAGER];
+    case 'KITCHEN_STAFF':
+      return [...DefaultRolePermissions.KITCHEN_STAFF];
+    default:
+      return [...DefaultRolePermissions.MANAGER];
+  }
+};
+
 export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -106,7 +118,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
     email: "",
     role: "MANAGER" as const,
     status: "ACTIVE" as const,
-    permissions: getDefaultManagerPermissions(),
+    permissions: getDefaultPermissionsForRole("MANAGER"),
   };
 
   const form = useForm<ManagerFormValues>({
@@ -120,11 +132,10 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
   // Ensure permissions are always initialized
   useEffect(() => {
     const currentPermissions = form.getValues('permissions');
-    console.log('Current permissions in useEffect:', currentPermissions);
+    const currentRole = form.getValues('role');
+
     if (!currentPermissions || currentPermissions.length === 0) {
-      console.log('Initializing permissions with defaults');
-      const defaultPerms = getDefaultManagerPermissions();
-      console.log('Setting default permissions:', defaultPerms);
+      const defaultPerms = getDefaultPermissionsForRole(currentRole);
       form.setValue('permissions', defaultPerms);
     }
   }, [form]);
@@ -139,24 +150,24 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
 
     // For new managers, ensure default permissions are set after permission groups are loaded
     if (!initialData) {
-      console.log('Setting default permissions for new manager:', getDefaultManagerPermissions());
-      const defaultPermissions = getDefaultManagerPermissions();
+      console.log('Setting default permissions for new manager:', getDefaultPermissionsForRole("MANAGER"));
+      const defaultPermissions = getDefaultPermissionsForRole("MANAGER");
       form.setValue('permissions', defaultPermissions);
     }
   }, [initialData, form]);
 
-  // Reset form when initialData changes
+  // Handle role changes - update permissions when role changes
   useEffect(() => {
-    if (initialData) {
-      console.log('Resetting form for existing manager:', initialData);
-      form.reset({
-        ...defaultValues,
-        ...initialData,
-        // Ensure permissions is always an array
-        permissions: initialData.permissions || getDefaultManagerPermissions(),
-      });
+    const currentRole = form.getValues('role');
+    const currentPermissions = form.getValues('permissions');
+
+    // Only update permissions if this is not an edit operation or if permissions are empty
+    if (!initialData || !currentPermissions || currentPermissions.length === 0) {
+      const defaultPermissions = getDefaultPermissionsForRole(currentRole);
+      console.log(`Setting default permissions for role ${currentRole}:`, defaultPermissions);
+      form.setValue('permissions', defaultPermissions);
     }
-  }, [initialData, form]);
+  }, [form.getValues('role'), form, initialData]);
 
   console.log('Current form permissions:', watchedPermissions);
 
@@ -266,8 +277,11 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="MANAGER">Manager</SelectItem>
                         <SelectItem value="ADMIN">Admin</SelectItem>
+                        <SelectItem value="MANAGER">Manager</SelectItem>
+                        <SelectItem value="CASHIER">Cashier</SelectItem>
+                        <SelectItem value="WAITER">Waiter</SelectItem>
+                        <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

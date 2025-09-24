@@ -30,6 +30,7 @@ import { Loader2 } from "lucide-react";
 import { getAllPermissions, getPermissionLabel } from "@/lib/permissions";
 // Import manager API
 import managerApi from "@/lib/manager-api";
+import type { Manager } from "@/lib/manager-api";
 // Define the form schema
 import { CreateManagerData, UpdateManagerData } from "@/lib/manager-api";
 export const managerFormSchema = z.object({
@@ -39,7 +40,7 @@ export const managerFormSchema = z.object({
   email: z.string().email({
     message: "Please enter a valid email address.",
   }),
-  role: z.enum(["MANAGER", "ADMIN"]),
+  role: z.enum(["MANAGER", "KITCHEN_STAFF"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   branch: z.string().min(1, {
     message: "Please select a branch.",
@@ -48,7 +49,7 @@ export const managerFormSchema = z.object({
 });
 
 // Define types
-type Role = "MANAGER" | "ADMIN";
+type Role = "MANAGER" | "KITCHEN_STAFF";
 type Status = "ACTIVE" | "INACTIVE";
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -59,6 +60,10 @@ interface ManagerFormProps {
     role: Role;
     status: Status;
     permissions?: string[];
+    branch?: string;
+    lastLogin?: string;
+    createdAt?: string;
+    updatedAt?: string;
   };
   isEditing?: boolean;
 }
@@ -95,7 +100,15 @@ const branches = [
 
 // This is the main edit page component that wraps the ManagerForm
 export default function EditManagerPage({ params }: { params: { id: string } }) {
-  const [manager, setManager] = useState<ManagerFormValues | null>(null);
+  const [manager, setManager] = useState<ManagerFormValues & {
+    id: string;
+    role: Role;
+    status: Status;
+    branch?: string;
+    lastLogin?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,9 +117,18 @@ export default function EditManagerPage({ params }: { params: { id: string } }) 
       try {
         const response = await managerApi.getManager(params.id);
         console.log("Manager data:", response.data.data);
+        const managerData = response.data.data as Manager;
         setManager({
-          ...response.data.data,
-          permissions: response.data.data.permissions?.map((p: any) => p.permission) || []
+          name: managerData.name,
+          email: managerData.email,
+          role: managerData.role,
+          status: managerData.status,
+          branch: managerData.branch || "",
+          permissions: managerData.permissions?.map((p: any) => p.permission) || [],
+          id: managerData.id,
+          lastLogin: managerData.lastLogin,
+          createdAt: managerData.createdAt,
+          updatedAt: managerData.updatedAt,
         });
       } catch (err: any) {
         setError(err.message || 'Failed to load manager');
@@ -287,7 +309,6 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
                     </SelectContent>
                   </Select>

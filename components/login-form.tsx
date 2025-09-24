@@ -63,6 +63,11 @@ function LoginFormContent() {
         console.log('Manager with POS_READ permission detected, redirecting to POS page');
         redirectPath = '/pos';
       }
+      // Redirect admins to dashboard (admins have access to everything)
+      else if (response.data.user.role === 'ADMIN') {
+        console.log('Admin detected, redirecting to dashboard');
+        redirectPath = '/dashboard';
+      }
       // For other roles, use the original redirect logic
       else {
         redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;

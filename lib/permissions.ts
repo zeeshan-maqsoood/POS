@@ -1,6 +1,11 @@
-import { Permission } from '@prisma/client';
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-ignore
+// Define Permission type locally since we can't import from Prisma in frontend
+export type Permission =
+  | 'USER_CREATE' | 'USER_READ' | 'USER_UPDATE' | 'USER_DELETE'
+  | 'ORDER_CREATE' | 'ORDER_READ' | 'ORDER_UPDATE' | 'ORDER_DELETE'
+  | 'MENU_CREATE' | 'MENU_READ' | 'MENU_UPDATE' | 'MENU_DELETE'
+  | 'POS_CREATE' | 'POS_READ' | 'POS_UPDATE' | 'POS_DELETE'
+  | 'MANAGER_CREATE' | 'MANAGER_READ' | 'MANAGER_UPDATE'
+  | 'PRODUCT_CREATE' | 'PRODUCT_READ' | 'PRODUCT_UPDATE' | 'PRODUCT_DELETE';
 
 // Permission groups for easier management
 export const PermissionGroups = {
@@ -65,16 +70,25 @@ export const DefaultRolePermissions = {
     PermissionGroups.manager.CREATE,
     PermissionGroups.manager.UPDATE,
   ],
-  USER: [
+  CASHIER: [
     PermissionGroups.ORDER.READ,
-    PermissionGroups.MENU.READ,
+    PermissionGroups.ORDER.UPDATE,
     PermissionGroups.POS.READ,
+  ],
+  WAITER: [
+    PermissionGroups.ORDER.READ,
+    PermissionGroups.ORDER.UPDATE,
+    PermissionGroups.MENU.READ,
   ],
   KITCHEN_STAFF: [
     PermissionGroups.ORDER.READ,
     PermissionGroups.ORDER.UPDATE,
   ],
-  
+  USER: [
+    PermissionGroups.ORDER.READ,
+    PermissionGroups.MENU.READ,
+    PermissionGroups.POS.READ,
+  ],
 } as const;
 
 // Helper function to check if user has a specific permission
