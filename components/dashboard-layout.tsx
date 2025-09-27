@@ -80,9 +80,9 @@
         { name: "POS", href: "/pos", icon: ShoppingCart },
         { name: "Managers", href: "/dashboard/managers", icon: Users },
         { name: "Orders", href: "/dashboard/orders", icon: Package },
-        { name: "Customers", href: "/dashboard/customers", icon: User },
+        // { name: "Customers", href: "/dashboard/customers", icon: User },
         { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
-        { name: "Settings", href: "/dashboard/settings", icon: Settings },
+        // { name: "Settings", href: "/dashboard/settings", icon: Settings },
       ],
       []
     )
