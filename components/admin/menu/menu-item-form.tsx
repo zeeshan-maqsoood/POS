@@ -66,6 +66,10 @@ const menuItemFormSchema = z.object({
         name: z.string(),
         price: z.number(),
         isActive: z.boolean(),
+        options: z.array(z.string()).default([]),
+        minSelection: z.number().default(0),
+        maxSelection: z.number().default(0),
+        type: z.string().default("SINGLE"),
       })
     )
     .default([]),
@@ -85,11 +89,11 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   const [isLoading, setIsLoading] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [categories, setCategories] = React.useState<{ id: string; name: string }[]>([]);
-  const [allModifiers, setAllModifiers] = React.useState<{ id: string; name: string; price: number }[]>([]);
+  const [allModifiers, setAllModifiers] = React.useState<{ id: string; name: string; price: number; isActive?: boolean }[]>([]);
   const [isModifierDropdownOpen, setIsModifierDropdownOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [showCategoryHelp, setShowCategoryHelp] = React.useState(false);
-
+console.log(allModifiers,"allModifiers")
   const router = useRouter();
   const { branches, loading: branchesLoading, error: branchesError } = useBranches();
   const { user, isAdmin } = useUser();
@@ -111,42 +115,84 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   };
 
   const defaultValues = React.useMemo(() => {
-    if (!initialData) {
-      return {
-        name: "",
-        description: "",
-        imageUrl: "",
-        price: 0,
-        cost: 0,
-        categoryId: categories.length > 0 ? categories[0].id : "", // Set first category as default for managers
-        branchName: normalizeBranchName(user?.branch || ""), // Use normalized branch name
-        isActive: true,
-        taxRate: 0,
-        taxExempt: false,
-        tags: [],
-        modifiers: [],
-      };
-    }
-    return {
-      name: initialData.name || "",
-      description: initialData.description || "",
-      imageUrl: initialData.imageUrl || "",
-      price: initialData.price || 0,
-      cost: (initialData as any).cost || 0, // Cast to any to handle missing cost property
-      categoryId: initialData.categoryId || "",
-      branchName: normalizeBranchName(user?.branch || ""), // Use normalized branch name
-      isActive: initialData.isActive ?? true,
-      taxRate: initialData.taxRate || 0,
-      taxExempt: initialData.taxExempt ?? false,
-      tags: initialData.tags || [],
-      modifiers: initialData.modifiers?.map((m) => ({
-        id: m.id,
-        name: m.name,
-        price: m.price,
-        isActive: m.isActive ?? true,
-      })) || [],
+    // Initialize default values for a new item
+    const baseValues = {
+      name: "",
+      description: "",
+      imageUrl: "",
+      price: 0,
+      cost: 0,
+      branchName: normalizeBranchName(user?.branch || ""),
+      isActive: true,
+      taxRate: 0,
+      taxExempt: false,
+      tags: [],
+      modifiers: [],
+      categoryId: ""
     };
-  }, [initialData, user?.branch, categories]);
+
+    // If no initial data, return the base values
+    if (!initialData) {
+      return baseValues;
+    }
+
+    console.log('Initial data:', initialData);
+    console.log('All modifiers:', allModifiers);
+
+    // Process modifiers from initialData
+    let modifiers: Array<{ id: string; name: string; price: number; isActive: boolean }> = [];
+    
+    // Check if we have modifiers data in the initialData
+    if (initialData.modifiers) {
+      console.log('Initial data modifiers:', initialData.modifiers);
+      
+      // Handle case where modifiers is an array of modifier objects
+      if (Array.isArray(initialData.modifiers)) {
+        console.log('Modifiers is an array');
+        modifiers = initialData.modifiers
+          .filter(modifier => modifier && typeof modifier === 'object' && 'id' in modifier)
+          .map(modifier => {
+            const fullModifier = allModifiers.find(m => m.id === modifier.id) || modifier;
+            return {
+              id: modifier.id,
+              name: fullModifier?.name || modifier.name || '',
+              price: typeof fullModifier?.price === 'number' ? fullModifier.price : 
+                     typeof modifier.price === 'number' ? modifier.price : 0,
+              isActive: fullModifier?.isActive ?? modifier.isActive ?? true,
+            };
+          });
+      } 
+      // Handle case where modifiers is in Prisma connect format
+      else if (initialData.modifiers.connect && Array.isArray(initialData.modifiers.connect)) {
+        console.log('Modifiers is in connect format');
+        modifiers = initialData.modifiers.connect
+          .filter((item: any) => item && item.id)
+          .map(({ id }: { id: string }) => {
+            const fullModifier = allModifiers.find(m => m.id === id);
+            if (!fullModifier) {
+              console.warn(`Modifier with ID ${id} not found in allModifiers`);
+              return null;
+            }
+            return {
+              id,
+              name: fullModifier.name || '',
+              price: fullModifier.price || 0,
+              isActive: fullModifier.isActive ?? true,
+            };
+          })
+          .filter((m): m is NonNullable<typeof m> => m !== null);
+      }
+      
+      console.log('Processed modifiers:', modifiers);
+    }
+
+    // Return the complete values with initial data
+    return {
+      ...baseValues, // Start with base values
+      ...initialData, // Spread initial data to override base values
+      modifiers, // Use processed modifiers
+    };
+  }, [initialData, user?.branch, categories, allModifiers]);
 
   const form = useForm<MenuItemFormValues>({
     resolver: zodResolver(menuItemFormSchema),
@@ -154,8 +200,37 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   });
 
   React.useEffect(() => {
+    console.log('Resetting form with values:', defaultValues);
+    console.log('Form values before reset:', form.getValues());
+    
+    // Reset the form with the new default values
     form.reset(defaultValues);
-  }, [defaultValues, form]);
+    
+    // If we have initial data with modifiers, ensure they're properly set in the form
+    if (defaultValues.modifiers && defaultValues.modifiers.length > 0) {
+      console.log('Setting modifiers in form:', defaultValues.modifiers);
+      // Ensure we have the full modifier data
+      const modifiersWithData = defaultValues.modifiers.map(mod => {
+        const fullModifier = allModifiers.find(m => m.id === mod.id) || mod;
+        return {
+          id: mod.id,
+          name: fullModifier.name || mod.name || `Modifier ${mod.id}`,
+          price: fullModifier.price || mod.price || 0,
+          isActive: fullModifier.isActive ?? mod.isActive ?? true
+        };
+      });
+      
+      form.setValue('modifiers', modifiersWithData, { 
+        shouldDirty: false, 
+        shouldValidate: true 
+      });
+    }
+    
+    // Log the form state after reset
+    setTimeout(() => {
+      console.log('Form values after reset:', form.getValues());
+    }, 100);
+  }, [defaultValues, form, allModifiers]);
 
   React.useEffect(() => {
     if (!isAdmin && categories.length === 0 && !isLoading) {
@@ -174,8 +249,47 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   );
 
   const selectedModifiers = React.useMemo(() => {
-    const selectedIds = form.getValues("modifiers")?.map((m) => m.id) || [];
-    return allModifiers.filter((m) => selectedIds.includes(m.id));
+    try {
+      const formModifiers = form.getValues("modifiers");
+      console.log('Form modifiers from getValues:', formModifiers);
+      
+      if (!formModifiers || !Array.isArray(formModifiers)) {
+        console.log('No valid form modifiers found');
+        return [];
+      }
+      
+      // Get all modifier IDs from the form
+      const selectedIds = formModifiers.map(m => m?.id).filter(Boolean);
+      console.log('Selected modifier IDs:', selectedIds);
+      
+      if (selectedIds.length === 0) {
+        console.log('No selected modifier IDs found');
+        return [];
+      }
+      
+      console.log('All available modifiers:', allModifiers);
+      
+      // Map through the selected IDs and find the corresponding modifier data
+      const filteredModifiers = selectedIds.map(id => {
+        const modifier = allModifiers.find(m => m && m.id === id);
+        if (!modifier) {
+          console.warn(`Modifier with ID ${id} not found in allModifiers`);
+          return null;
+        }
+        return {
+          id: modifier.id,
+          name: modifier.name || `Modifier ${modifier.id}`,
+          price: modifier.price || 0,
+          isActive: modifier.isActive !== false
+        };
+      }).filter((m): m is NonNullable<typeof m> => m !== null);
+      
+      console.log('Filtered selected modifiers:', filteredModifiers);
+      return filteredModifiers;
+    } catch (error) {
+      console.error('Error getting selected modifiers:', error);
+      return [];
+    }
   }, [allModifiers, form.watch("modifiers")]);
 
   React.useEffect(() => {
@@ -193,7 +307,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
           categoryApi.getCategories(categoriesParams),
           modifierApi.getModifiers(),
         ]);
-
+console.log(modifiersRes,"modifiersRes")
         console.log("Categories API response:", categoriesRes);
         console.log("Categories data:", categoriesRes?.data?.data);
         const categoriesData = Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : [];
@@ -211,6 +325,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
                 id: m.id,
                 name: m.name,
                 price: m.price || 0,
+                isActive: m.isActive ?? true,
               }))
             : []
         );
@@ -251,18 +366,35 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
         // This allows them to create items and then create categories later
       }
 
+      // Ensure modifiers is always an array
+      const modifiers = Array.isArray(data.modifiers) ? data.modifiers : [];
+      console.log('Raw modifiers from form:', modifiers);
+      
+      // Format the modifiers to match the expected Prisma connect format
+      // The backend expects: { connect: [{ id: '1' }, { id: '2' }] }
+      const formattedModifiers = modifiers.length > 0 ? {
+        connect: modifiers
+          .filter(m => m && typeof m === 'object' && 'id' in m)
+          .map(({ id }) => ({
+            id: String(id) // Just need the id for the connect operation
+          }))
+      } : undefined;
+      
+      console.log('Formatted modifiers for API:', formattedModifiers);
+      
       const apiData = {
         name: data.name,
         description: data.description,
-        imageUrl: data.imageUrl,
+        imageUrl: data.imageUrl || null,
         price: Number(data.price),
-        cost: Number(data.cost),
+        cost: Number(data.cost) || 0,
         categoryId: data.categoryId,
         branchName: isAdmin ? data.branchName : normalizeBranchName(user?.branch || ""),
-        isActive: data.isActive,
-        taxRate: Number(data.taxRate),
-        taxExempt: data.taxExempt,
+        isActive: data.isActive !== undefined ? data.isActive : true,
+        taxRate: Number(data.taxRate) || 0,
+        taxExempt: data.taxExempt || false,
         tags: data.tags || [],
+        ...(formattedModifiers && { modifiers: formattedModifiers }),
       };
 
       console.log('Sending API data:', apiData);
@@ -525,25 +657,27 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="taxRate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tax Rate (%)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="0"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {!form.watch('taxExempt') && (
+                <FormField
+                  control={form.control}
+                  name="taxRate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tax Rate (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="taxExempt"

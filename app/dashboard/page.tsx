@@ -50,12 +50,23 @@ type PieData = {
 };
 
 // Custom Tooltip component with proper typing
-const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+interface CustomTooltipProps extends TooltipProps<number, string> {
+  active?: boolean;
+  payload?: Array<{
+    value: number | string;
+    name: string;
+    dataKey: string;
+    color: string;
+  }>;
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
         <p className="font-medium text-gray-900">{label}</p>
-        {payload.map((entry, index) => (
+        {payload.map((entry: any, index: number) => (
           <p key={index} className="text-sm" style={{ color: entry.color }}>
             {entry.name}: {entry.dataKey === 'revenue' ? formatEuro(entry.value as number) : entry.value}
           </p>
@@ -110,7 +121,38 @@ export default function DashboardPage() {
     averageOrderValue: 0,
     newCustomers: 0,
     popularItems: [],
-    recentOrders: [],
+    recentOrders: [
+      {
+        id: 'order-1234',
+        orderNumber: 'ORD-1234',
+        orderType: 'DELIVERY',
+        total: 125.99,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CREDIT_CARD',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'order-1235',
+        orderNumber: 'ORD-1235',
+        orderType: 'PICKUP',
+        total: 45.50,
+        status: 'PROCESSING',
+        paymentStatus: 'PENDING',
+        paymentMethod: 'CASH',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'order-1236',
+        orderNumber: 'ORD-1236',
+        orderType: 'DINE_IN',
+        total: 89.99,
+        status: 'PENDING',
+        paymentStatus: 'PENDING',
+        paymentMethod: 'CARD',
+        createdAt: new Date().toISOString()
+      }
+    ],
     revenueData: [],
     orderTrends: [],
     ordersByStatus: {},
@@ -118,6 +160,7 @@ export default function DashboardPage() {
     paymentBreakdown: { byMethod: {}, byStatus: {} },
     topCategories: [],
     hourlyOrders: [],
+    salesByCategory: []
   });
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
   const [refreshing, setRefreshing] = useState(false);
@@ -151,7 +194,7 @@ export default function DashboardPage() {
     init();
     return () => { active = false };
   }, [])
-
+console.log(stats,"stats")
   // When period changes, use cached data immediately, then refresh in background
   useEffect(() => {
     let active = true;
@@ -359,8 +402,8 @@ export default function DashboardPage() {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Revenue Chart */}
-          <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col h-full">
+          {/* Revenue Chart - Now takes full width */}
+          <Card className="col-span-full border-0 shadow-sm flex flex-col h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -396,7 +439,7 @@ export default function DashboardPage() {
                       tickLine={false} 
                       axisLine={false}
                       tick={{ fill: '#6b7280', fontSize: 12 }}
-                      tickFormatter={(value) => `$${value / 1000}k`}
+                      tickFormatter={(value) => formatEuro(value)}
                     />
                     <CartesianGrid vertical={false} stroke="#e5e7eb" />
                     <RechartsTooltip 
@@ -433,23 +476,10 @@ export default function DashboardPage() {
             </div>
           </CardContent>
           </Card>
-          
-          {/* Sales by Category */}
-          <Card className="border-0 shadow-sm h-full flex flex-col">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Sales by Category</CardTitle>
-              <p className="text-sm text-muted-foreground">Top categories by revenue</p>
-            </CardHeader>
-            <CardContent className="flex-1 min-h-[300px] max-h-[400px] p-4">
-              <div className="w-full h-full">
-                <SalesCategoryPieChart initialData={stats.salesByCategory} />
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Second Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Order Trends */}
           <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col h-full">
             <CardHeader className="pb-3">
@@ -826,7 +856,114 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </div> */}
+        </div>
+
+        {/* Recent Orders Section */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold">Recent Orders</CardTitle>
+                <p className="text-sm text-muted-foreground">Latest transactions and their status</p>
+              </div>
+              <Button asChild variant="ghost" size="sm" className="h-8">
+                <Link href="/orders">View All</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order #</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                    <th scope="col" className="relative px-6 py-3">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {stats.recentOrders?.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{order.orderNumber || `#${order.id.substring(0, 8)}`}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                          {order.orderType ? 
+                            order.orderType.split('_').map(word => 
+                              word.charAt(0) + word.slice(1).toLowerCase()
+                            ).join(' ')
+                            : 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {order.total ? formatEuro(order.total) : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                          order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                          order.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
+                          order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {order.status ? 
+                            order.status.charAt(0) + order.status.slice(1).toLowerCase() 
+                            : 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                          order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' :
+                          order.paymentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          order.paymentStatus === 'FAILED' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {order.paymentStatus ? 
+                            order.paymentStatus.charAt(0) + order.paymentStatus.slice(1).toLowerCase() 
+                            : 'N/A'}
+                        </span>
+                        {order.paymentMethod && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {order.paymentMethod.split('_').map(word => 
+                              word.charAt(0) + word.slice(1).toLowerCase()
+                            ).join(' ')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <Link href={`/orders/${order.id}`} className="text-indigo-600 hover:text-indigo-900">
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {(!stats.recentOrders || stats.recentOrders.length === 0) && (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
+                        No recent orders found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

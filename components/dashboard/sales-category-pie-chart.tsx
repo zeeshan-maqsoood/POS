@@ -123,10 +123,10 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
     : topCategories;
 
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader className="pb-2 px-4 pt-3">
-        <div className="flex flex-col space-y-2 w-full">
-          <CardTitle className="text-sm sm:text-base font-medium">Sales by Category</CardTitle>
+    <Card className="h-full flex flex-col shadow-sm" style={{ minHeight: '450px' }}>
+      <CardHeader className="pb-0 px-5 pt-4">
+        <div className="flex flex-col space-y-1 w-full">
+          <CardTitle className="text-base font-semibold">Sales by Category</CardTitle>
           <div className="w-full">
             <Tabs 
               value={period} 
@@ -157,30 +157,28 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col min-h-[300px] max-h-[400px] p-4">
-        <div className="w-full flex-1 relative">
-          <div className="absolute inset-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <RechartsPieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+      <CardContent className="flex-1 flex flex-col p-4 pt-2">
+        <div className="w-full h-full flex-1 flex flex-col">
+          <div className="flex-1 min-h-[280px] flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%" className="text-sm">
+              <RechartsPieChart>
                 <Pie
                   data={chartData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
-                  outerRadius={90}
+                  outerRadius={80}
                   paddingAngle={2}
                   dataKey="sales"
                   nameKey="categoryName"
-                  label={({ percent, name }: { percent: number; name: string }) => {
-                    if (percent < 0.05) return ''; // Don't show labels for very small slices
-                    return `${(percent * 100).toFixed(0)}%`;
-                  }}
                   labelLine={false}
+                  label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  className="text-xs font-medium"
                 >
                   {chartData.map((entry, index) => (
                     <Cell 
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
+                      key={`cell-${index}`} 
+                      fill={COLORS[index % COLORS.length]} 
                       stroke="#fff"
                       strokeWidth={1}
                     />
@@ -192,32 +190,36 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
                     `${name} (${((props.payload.percent || 0) * 100).toFixed(1)}%)`
                   ]}
                   contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '0.375rem',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                    borderRadius: '0.5rem',
+                    border: '1px solid #e5e7eb',
+                    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+                    fontSize: '0.75rem',
+                    padding: '0.5rem 0.75rem',
+                    backgroundColor: 'white'
                   }}
-                />
-                <Legend 
-                  layout="horizontal"
-                  verticalAlign="bottom"
-                  align="center"
-                  wrapperStyle={{
-                    paddingTop: '10px',
-                    fontSize: '12px',
-                    position: 'absolute',
-                    bottom: -30,
-                    width: '100%'
+                  itemStyle={{
+                    padding: '0.15rem 0',
+                    fontSize: '0.75rem'
                   }}
-                  formatter={(value) => {
-                    const category = chartData.find(cat => cat.categoryName === value);
-                    return category ? value : '';
-                  }}
-                  iconType="circle"
-                  iconSize={8}
                 />
               </RechartsPieChart>
             </ResponsiveContainer>
+          </div>
+          <div className="mt-2 pt-2 border-t">
+            <div className="grid grid-cols-2 gap-2">
+              {chartData.map((entry, index) => (
+                <div key={`legend-${index}`} className="flex items-center text-xs">
+                  <span 
+                    className="inline-block w-3 h-3 rounded-sm mr-2 flex-shrink-0"
+                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  />
+                  <span className="truncate">{entry.categoryName}</span>
+                  <span className="ml-auto font-medium">
+                    {formatEuro(entry.sales)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </CardContent>

@@ -4,11 +4,12 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermissions } from '@/hooks/use-permissions';
 import { POSLayout } from '@/components/pos/pos-layout';
+import { useOrderNotifications } from '@/hooks/userOrderNotification';
 
 export default function POSPage() {
   const router = useRouter();
   const { hasRole, isLoading } = usePermissions();
-
+  useOrderNotifications();
   // Check if user is authorized (ADMIN or MANAGER role required)
   const isAuthorized = hasRole('ADMIN') || hasRole('MANAGER');
   

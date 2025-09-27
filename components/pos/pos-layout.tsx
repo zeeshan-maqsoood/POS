@@ -39,15 +39,24 @@ interface Category {
 const initialMenuItems: MenuItem[] = [];
 const initialCategories: Category[] = [];
 
+interface CartItemModifier {
+  id: string;
+  name: string;
+  price: number;
+}
+
 interface CartItem {
   item: MenuItem;
   quantity: number;
+  modifiers?: CartItemModifier[];
+  totalPrice: number;
+  basePrice: number;
 }
 
 export function POSLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [cart, setCart] = useState<{item: MenuItem; quantity: number}[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [isLoading, setIsLoading] = useState(true);
@@ -207,23 +216,87 @@ export function POSLayout() {
     return result;
   }, [menuItems, searchQuery, selectedCategory, isLoading, error]);
 
-  const addToCart = (item: MenuItem) => {
+  const addToCart = (item: MenuItem, selectedModifiers: CartItemModifier[] = []) => {
     setCart(prevCart => {
-      const existingItem = prevCart.find(cartItem => cartItem.item.id === item.id);
-      if (existingItem) {
-        return prevCart.map(cartItem =>
-          cartItem.item.id === item.id
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem
-        );
+      // Create a unique key for this item + modifiers combination
+      const itemKey = `${item.id}-${selectedModifiers.map(m => m.id).sort().join('-')}`;
+      
+      // Check for existing item with same ID and modifiers
+      const existingItemIndex = prevCart.findIndex(cartItem => 
+        `${cartItem.item.id}-${(cartItem.modifiers || []).map(m => m.id).sort().join('-')}` === itemKey
+      );
+  
+      // Transform the modifiers to the correct format if they're in the item.modifiers format
+      const modifiers = selectedModifiers.length > 0 
+        ? selectedModifiers 
+        : (item.modifiers || []).map(mod => ({
+            id: mod.modifierId,  // Use modifierId from the item's modifiers
+            name: mod.name || `Modifier ${mod.modifierId}`, // Add a default name if not available
+            price: mod.price || 0 // Add a default price if not available
+          }));
+  
+      if (existingItemIndex >= 0) {
+        // Item with same modifiers exists, just update quantity
+        const updatedCart = [...prevCart];
+        const modifiersTotal = (updatedCart[existingItemIndex].modifiers || []).reduce((sum, mod) => sum + (mod.price || 0), 0);
+        const pricePerItem = updatedCart[existingItemIndex].basePrice + modifiersTotal;
+        
+        updatedCart[existingItemIndex] = {
+          ...updatedCart[existingItemIndex],
+          quantity: updatedCart[existingItemIndex].quantity + 1,
+          totalPrice: pricePerItem * (updatedCart[existingItemIndex].quantity + 1)
+        };
+        return updatedCart;
       }
-      return [...prevCart, { item, quantity: 1 }];
+  
+      // Calculate base price and modifiers total
+      const modifiersTotal = modifiers.reduce((sum, mod) => sum + (mod.price || 0), 0);
+      const itemTotal = item.price + modifiersTotal;
+  
+      // Add new item to cart
+      return [
+        ...prevCart,
+        {
+          item,
+          quantity: 1,
+          modifiers: [...modifiers], // Include the transformed modifiers
+          totalPrice: itemTotal,
+          basePrice: item.price
+        }
+      ];
     });
   };
-
-  const removeFromCart = (itemId: string) => {
-    setCart(prevCart => prevCart.filter(cartItem => cartItem.item.id !== itemId));
+  
+  const updateCartItemQuantity = (index: number, newQuantity: number) => {
+    if (newQuantity < 1) {
+      removeFromCart(index);
+      return;
+    }
+    
+    setCart(prevCart => {
+      const newCart = [...prevCart];
+      const item = newCart[index];
+      
+      if (item) {
+        const pricePerItem = item.basePrice + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
+        newCart[index] = {
+          ...item,
+          quantity: newQuantity,
+          totalPrice: pricePerItem * newQuantity
+        };
+      }
+      
+      return newCart;
+    });
   };
+  
+  const removeFromCart = (index: number) => {
+    setCart(prevCart => prevCart.filter((_, i) => i !== index));
+  };
+
+  // const removeFromCart = (itemId: string) => {
+  //   setCart(prevCart => prevCart.filter(cartItem => cartItem.item.id !== itemId));
+  // };
 
   const clearCart = () => {
     setCart([]);

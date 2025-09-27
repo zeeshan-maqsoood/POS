@@ -37,10 +37,20 @@ export interface MenuItem {
   updatedAt?: Date;
 }
 
+export interface CartItemModifier {
+  id: string;
+  name: string;
+  price: number;
+  selected?: boolean;
+}
+
 export interface CartItem {
   item: MenuItem;
   quantity: number;
   notes?: string;
+  modifiers?: CartItemModifier[];
+  totalPrice: number; // Item price + selected modifiers price
+  basePrice: number;  // Original item price without modifiers
 }
 
 export interface OrderItem {

@@ -16,8 +16,12 @@ export interface DashboardData {
   popularItems: Array<{ name: string; orders: number }>;
   recentOrders: Array<{
     id: string;
+    orderNumber: string;
+    orderType: string;
     total: number;
-    status: string;
+    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
+    paymentStatus: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+    paymentMethod: string;
     createdAt: string;
   }>;
   revenueData: Array<{ date: string; revenue: number }>;

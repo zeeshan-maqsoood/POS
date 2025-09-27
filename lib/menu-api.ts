@@ -21,22 +21,12 @@ export interface Category {
   menuItems?: MenuItem[];
 }
 
-export interface ModifierOption {
-  id: string;
-  name: string;
-  price: number;
-  isActive: boolean;
-}
-
 export interface Modifier {
   id: string;
   name: string;
   description?: string;
-  type: 'SINGLE' | 'MULTIPLE' | 'QUANTITY';
+  price: number;
   isRequired: boolean;
-  minSelection: number;
-  maxSelection: number;
-  options: ModifierOption[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -57,7 +47,12 @@ export interface MenuItem {
     createdAt: string
     updatedAt: string
     category?: { id: string; name: string }
-    modifiers?: { id: string; name: string; price: number; isActive: boolean }[]
+    modifiers?: {
+    id: string;
+    name: string;
+    price: number;
+    isActive: boolean;
+  }[]
   }
   
 
@@ -109,11 +104,11 @@ export const modifierApi = {
   getModifier: (id: string) => api.get<ApiResponse<Modifier>>(`/menu/modifiers/${id}`),
   
   // Create a new modifier
-  createModifier: (data: Omit<Modifier, 'id' | 'createdAt' | 'updatedAt' | 'options'> & { options: Omit<ModifierOption, 'id'>[] }) => 
+  createModifier: (data: Omit<Modifier, 'id' | 'createdAt' | 'updatedAt'>) => 
     api.post<ApiResponse<Modifier>>('/menu/modifiers', data),
   
   // Update a modifier
-  updateModifier: (id: string, data: Partial<Omit<Modifier, 'id' | 'createdAt' | 'updatedAt' | 'options'>> & { options?: Omit<ModifierOption, 'id'>[] }) => 
+  updateModifier: (id: string, data: Partial<Omit<Modifier, 'id' | 'createdAt' | 'updatedAt'>>) => 
     api.put<ApiResponse<Modifier>>(`/menu/modifiers/${id}`, data),
   
   // Delete a modifier

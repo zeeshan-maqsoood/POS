@@ -36,12 +36,9 @@ const modifierFormSchema = z.object({
     message: "Name must be at least 2 characters.",
   }),
   description: z.string().optional(),
-  type: z.enum(['SINGLE', 'MULTIPLE', 'QUANTITY']).default('SINGLE'),
+  price: z.coerce.number().min(0, "Price cannot be negative").default(0),
   isRequired: z.boolean().default(false),
   isActive: z.boolean().default(true),
-  minSelection: z.coerce.number().int().min(0).default(0),
-  maxSelection: z.coerce.number().int().min(1).default(1),
-  options: z.array(modifierOptionSchema).min(1, "At least one option is required"),
 })
 
 type ModifierFormValues = z.infer<typeof modifierFormSchema>
@@ -61,39 +58,17 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
     defaultValues: {
       name: initialData?.name || "",
       description: initialData?.description || "",
-      type: initialData?.type || 'SINGLE',
+      price: initialData?.price || 0,
       isRequired: initialData?.isRequired || false,
       isActive: initialData?.isActive ?? true,
-      minSelection: initialData?.minSelection || 0,
-      maxSelection: initialData?.maxSelection || 1,
-      options: initialData?.options?.length ? initialData.options : [
-        { id: uuidv4(), name: "", price: 0, isDefault: false, isActive: true }
-      ],
     },
   })
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "options",
-  })
 
-  const modifierType = form.watch("type")
-  const minSelections = form.watch("minSelection")
-  const maxSelection = form.watch("maxSelection")
 
-  // Update maxSelection when type changes to ensure it's valid
-  React.useEffect(() => {
-    if (modifierType === 'SINGLE') {
-      form.setValue('minSelection', Math.min(minSelections, 1))
-      form.setValue('maxSelection', 1)
-    }
-    if (modifierType === 'MULTIPLE') {
-      form.setValue('minSelection', Math.min(minSelections, maxSelection))
-    }
-    if (modifierType === 'QUANTITY') {
-      form.setValue('minSelection', Math.min(minSelections, maxSelection))
-    }
-  }, [modifierType, form, minSelections])
+
+
+
 
   const onSubmit = async (data: ModifierFormValues) => {
     try {
@@ -107,6 +82,7 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
           description: "Modifier updated successfully.",
         })
       } else {
+        console.log(data,"data")
         // Create new modifier
         await modifierApi.createModifier(data)
         toast({
@@ -130,27 +106,6 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
     }
   }
 
-  const addOption = () => {
-    append({
-      id: uuidv4(),
-      name: "",
-      price: 0,
-      isDefault: false,
-      isActive: true,
-    })
-  }
-
-  const removeOption = (index: number) => {
-    if (fields.length > 1) {
-      remove(index)
-    } else {
-      toast({
-        title: "Cannot remove",
-        description: "A modifier must have at least one option.",
-        variant: "destructive",
-      })
-    }
-  }
 
   return (
     <Form {...form}>
@@ -176,6 +131,26 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
 
             <FormField
               control={form.control}
+              name="price"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price *</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
@@ -192,97 +167,7 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Selection Type</FormLabel>
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="type-single"
-                        value="SINGLE"
-                        checked={field.value === 'SINGLE'}
-                        onChange={() => field.onChange('SINGLE')}
-                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300"
-                      />
-                      <label htmlFor="type-single" className="text-sm font-medium">
-                        Single Selection
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="type-multiple"
-                        value="MULTIPLE"
-                        checked={field.value === 'MULTIPLE'}
-                        onChange={() => field.onChange('MULTIPLE')}
-                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300"
-                      />
-                      <label htmlFor="type-multiple" className="text-sm font-medium">
-                        Multiple Selection
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="type-quantity"
-                        value="QUANTITY"
-                        checked={field.value === 'QUANTITY'}
-                        onChange={() => field.onChange('QUANTITY')}
-                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300"
-                      />
-                      <label htmlFor="type-quantity" className="text-sm font-medium">
-                        Quantity Based
-                      </label>
-                    </div>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {modifierType === 'MULTIPLE' && (
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="minSelection"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Min Selections</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          min={0} 
-                          max={maxSelection} 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="maxSelection"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Max Selections</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          min={Math.max(1, minSelections)} 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
+       
 
             <FormField
               control={form.control}
@@ -307,7 +192,7 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
           </div>
 
           {/* Modifier Options */}
-          <div className="space-y-4">
+          {/* <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-medium">Options</h3>
               <Button 
@@ -411,7 +296,7 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
                 </p>
               )}
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="flex justify-end space-x-4">
