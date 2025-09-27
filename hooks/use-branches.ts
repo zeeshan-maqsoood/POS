@@ -7,11 +7,10 @@ export interface Branch {
 
 // Static branch data - no API calls needed
 const STATIC_BRANCHES: Branch[] = [
-  { name: 'Main Branch', value: 'Main Branch' },
-  { name: 'Downtown Branch', value: 'Downtown Branch' },
-  { name: 'Uptown Branch', value: 'Uptown Branch' },
-  { name: 'Westside Branch', value: 'Westside Branch' },
-  { name: 'Eastside Branch', value: 'Eastside Branch' },
+  { name: 'Bradford', value: 'Bradford' },
+  { name: 'Leeds', value: 'Leeds' },
+  { name: 'Helifax', value: 'Helifax' },
+  { name: 'Darley St Market', value: 'Darley St Market' },
 ];
 
 export function useBranches() {

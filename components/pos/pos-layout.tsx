@@ -88,11 +88,10 @@ export function POSLayout() {
         if (!isAdmin && user?.branch) {
           // Normalize branch name for API call
           const normalizedBranch = user.branch.startsWith('branch')
-            ? user.branch.replace('branch1', 'Main Branch')
-              .replace('branch2', 'Downtown Branch')
-              .replace('branch3', 'Uptown Branch')
-              .replace('branch4', 'Westside Branch')
-              .replace('branch5', 'Eastside Branch')
+            ? user.branch.replace('branch1', 'Bradford')
+              .replace('branch2', 'Leeds')
+              .replace('branch3', 'Helifax')
+              .replace('branch4', 'Darley St Market')
             : user.branch;
           apiParams.branchName = normalizedBranch;
           console.log('POS filtering by branch:', user.branch, '->', normalizedBranch);

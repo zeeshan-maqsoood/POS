@@ -40,13 +40,11 @@ interface OrderSummaryProps {
   orderType: 'DINE_IN' | 'TAKE_AWAY';               // ✅ Added
   onOrderTypeChange: (type: 'DINE_IN' | 'TAKE_AWAY') => void; // ✅ Added
 }
-
 const branches = [
-  { id: 'Main Branch', name: 'Main Branch' },
-  { id: 'Downtown Branch', name: 'Downtown Branch' },
-  { id: 'Uptown Branch', name: 'Uptown Branch' },
-  { id: 'Westside Branch', name: 'Westside Branch' },
-  { id: 'Eastside Branch', name: 'Eastside Branch' }
+  { id: 'Bradford', name: 'Bradford' },
+  { id: 'Leeds', name: 'Leeds' },
+  { id: 'Helifax', name: 'Helifax' },
+  { id: 'Darley St Market', name: 'Darley St Market' },
 ];
 
 const tableNumbers = Array.from({ length: 20 }, (_, i) => (i + 1).toString());

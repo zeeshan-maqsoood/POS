@@ -495,20 +495,18 @@ const KITCHEN_STAFF_PERMISSIONS = ["ORDER_READ", "ORDER_UPDATE"];
 
 // Static list of branches - matching the menu system
 const branches = [
-  { id: "Main Branch", name: "Main Branch" },
-  { id: "Downtown Branch", name: "Downtown Branch" },
-  { id: "Uptown Branch", name: "Uptown Branch" },
-  { id: "Westside Branch", name: "Westside Branch" },
-  { id: "Eastside Branch", name: "Eastside Branch" },
+  { id: "Bradford", name: "Bradford" },
+  { id: "Leeds", name: "Leeds" },
+  { id: "Helifax", name: "Helifax" },
+  { id: "Darley St Market", name: "Darley St Market" },
 ];
 
 // Legacy branch mapping for backward compatibility
 const LEGACY_BRANCH_MAPPING: Record<string, string> = {
-  "Main Branch": "Main Branch",
-  "Downtown Branch": "Downtown Branch", 
-  "Uptown Branch": "Uptown Branch",
-  "Westside Branch": "Westside Branch",
-  "Eastside Branch": "Eastside Branch",
+  "Bradford": "Main Branch",
+  "Leeds": "Downtown Branch", 
+  "Helifax": "Uptown Branch",
+  "Darley St Market": "Westside Branch",
 };
 
 export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {

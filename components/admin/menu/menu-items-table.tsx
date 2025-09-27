@@ -122,86 +122,38 @@ export function MenuItemsTable({
               }}
             >
               <div className="py-1" role="none">
-                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStatus(menuItem.id, !menuItem.isActive);
-                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                    }}
-                    className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
-                    role="menuitem"
-                  >
-                    <span>{menuItem.isActive ? 'Mark as Inactive' : 'Mark as Active'}</span>
-                  </button>
-                </PermissionGate>
+
+                {/* Single Edit Button */}
                 <Link
                   href={`/dashboard/menu/items/edit/${menuItem.id}`}
-                  className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
+                  className="text-blue-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-blue-50"
                   role="menuitem"
                   onClick={(e) => {
                     e.stopPropagation();
                     document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
                   }}
                 >
-                  Edit
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit Item
                 </Link>
-                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
-                  <Link
-                    href={`/dashboard/menu/items/edit/${menuItem.id}`}
-                    className="text-gray-700 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                    }}
-                  >
-                    Edit
-                  </Link>
-                </PermissionGate>
+
+                {/* Single Delete Button */}
                 <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete(menuItem.id);
+                      if (confirm('Are you sure you want to delete this item?')) {
+                        onDelete(menuItem.id);
+                      }
                       document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
                     }}
-                    className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100"
+                    className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-red-50"
                     role="menuitem"
                   >
-                    Delete
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Item
                   </button>
                 </PermissionGate>
-                
-                {onEdit && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(menuItem.id);
-                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 flex items-center"
-                  >
-                    <Pencil className="mr-2 h-4 w-4 text-blue-500" />
-                    Edit
-                  </button>
-                )}
-                
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm('Are you sure you want to delete this item?')) {
-                      onDelete(menuItem.id);
-                    }
-                    document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                  }}
-                  className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-red-50"
-                  role="menuitem"
-                  tabIndex={-1}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </button>
               </div>
             </div>
           </div>

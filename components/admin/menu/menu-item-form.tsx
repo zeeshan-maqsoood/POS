@@ -105,11 +105,10 @@ console.log(allModifiers,"allModifiers")
     if (!branch) return "";
     if (branch.startsWith('branch')) {
       return branch
-        .replace('branch1', 'Main Branch')
-        .replace('branch2', 'Downtown Branch')
-        .replace('branch3', 'Uptown Branch')
-        .replace('branch4', 'Westside Branch')
-        .replace('branch5', 'Eastside Branch');
+        .replace('branch1', 'Bradford')
+        .replace('branch2', 'Leeds')
+        .replace('branch3', 'Helifax')
+        .replace('branch4', 'Darley St Market')
     }
     return branch; // Already in new format
   };

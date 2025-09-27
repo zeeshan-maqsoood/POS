@@ -77,11 +77,10 @@ export function CategoryForm({
     if (!branch) return "";
     if (branch.startsWith('branch')) {
       return branch
-        .replace('branch1', 'Main Branch')
-        .replace('branch2', 'Downtown Branch')
-        .replace('branch3', 'Uptown Branch')
-        .replace('branch4', 'Westside Branch')
-        .replace('branch5', 'Eastside Branch');
+        .replace('branch1', 'Bradford')
+        .replace('branch2', 'Leeds')
+        .replace('branch3', 'Helifax')
+        .replace('branch4', 'Darley St Market')
     }
     return branch; // Already in new format
   };
@@ -408,35 +407,8 @@ export function CategoryForm({
         </div>
 
     <div className="flex justify-end space-x-4">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          console.log('Current form state:', {
-            isValid: isFormValid,
-            errors: formErrors,
-            values: watchedValues,
-            isDirty: form.formState.isDirty,
-            isSubmitting: isSubmitting,
-            submitCount: form.formState.submitCount
-          });
-          alert(`Form is ${isFormValid ? 'valid' : 'invalid'}. Check console for details.`);
-        }}
-      >
-        Debug Form
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          form.reset();
-          setIsLoading(false);
-          setFormKey(Date.now()); // Force re-render
-          console.log('Form reset completed');
-        }}
-      >
-        Reset Form
-      </Button>
+   
+    
       <Button
         type="submit"
         disabled={isLoading || isSubmitting || !isFormValid}

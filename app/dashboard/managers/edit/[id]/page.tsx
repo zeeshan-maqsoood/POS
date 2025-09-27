@@ -90,12 +90,13 @@ const getDefaultManagerPermissions = (): string[] => [
   "ORDER_CREATE",
 ];
 
+  
+
 const branches = [
-  { id: 'branch1', name: 'Main Branch' },
-  { id: 'branch2', name: 'Downtown Branch' },
-  { id: 'branch3', name: 'Uptown Branch' },
-  { id: 'branch4', name: 'Westside Branch' },
-  { id: 'branch5', name: 'Eastside Branch' }
+  { id: 'Bradford', name: 'Bradford' },
+  { id: 'Leeds', name: 'Leeds' },
+  { id: 'Helifax', name: 'Helifax' },
+  { id: 'Darley St Market', name: 'Darley St Market' },
 ];
 
 // This is the main edit page component that wraps the ManagerForm
