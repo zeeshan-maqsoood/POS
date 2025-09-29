@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { menuItemApi, categoryApi } from '@/lib/menu-api';
 import { toast } from 'sonner';
 import { useUser } from '@/hooks/use-user';
+import { usePermissions } from '@/hooks/use-permissions';
 
 // Define API response interfaces
 interface ApiResponse<T> {
@@ -68,6 +69,8 @@ export function POSLayout() {
 
   // Get user information for branch filtering
   const { user, isAdmin } = useUser();
+  const { hasPermission } = usePermissions();
+  const canCreateMenuItems = hasPermission('MENU_CREATE');
 
   // Set default selected branch to user's branch if not admin
   useEffect(() => {
@@ -148,11 +151,15 @@ export function POSLayout() {
         console.log('Processed Categories:', categoriesData);
         console.log('Processed Items:', itemsData);
 
-        if (categoriesData.length === 0 || itemsData.length === 0) {
-          throw new Error('No data received from the server');
-        }
-
+        // Set categories and items even if one of them is empty
         setCategories(categoriesData);
+        
+        // If no items found, set empty array and continue
+        if (itemsData.length === 0) {
+          setMenuItems([]);
+          setIsLoading(false);
+          return;
+        }
 
         // Transform menu items to include category name
         const itemsWithCategory = itemsData.map((item: any) => {
@@ -329,20 +336,24 @@ export function POSLayout() {
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center p-6 max-w-md mx-auto bg-white rounded-lg shadow">
-          <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Menu</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Button
-            onClick={() => window.location.reload()}
-            className="mt-2"
-          >
-            Retry
-          </Button>
+    // Only show error if it's not a "no data" scenario
+    if (error !== 'No menu items or categories found') {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center p-6 max-w-md mx-auto bg-white rounded-lg shadow">
+            <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Menu</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button
+              onClick={() => window.location.reload()}
+              className="mt-2"
+            >
+              Retry
+            </Button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    // For "no data" scenario, we'll continue to render the empty state below
   }
 
   return (
@@ -424,11 +435,30 @@ export function POSLayout() {
             />
           </div>
 
-          {filteredItems.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              <p>No items found. Try a different search or category.</p>
+          {menuItems.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Menu Items Found</h3>
+                <p className="text-gray-600 mb-4">
+                  {canCreateMenuItems 
+                    ? "There are currently no menu items available. You can add new items below."
+                    : "There are currently no menu items available. Please contact an administrator to add items."
+                  }
+                </p>
+                {canCreateMenuItems && (
+                  <Button asChild>
+                    <Link href="/dashboard/menu/items/new">
+                      Add Menu Item
+                    </Link>
+                  </Button>
+                )}
+              </div>
             </div>
-          )}
+          ) : filteredItems.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p>No items found matching your search. Try a different search term or category.</p>
+            </div>
+          ) : null}
         </div>
 
         {/* Order Summary - Fixed at bottom on mobile, side panel on desktop */}
