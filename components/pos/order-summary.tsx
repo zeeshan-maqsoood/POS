@@ -37,8 +37,8 @@ interface OrderSummaryProps {
   customerName: string;
   onOrderPlaced?: (orderId?: string) => void;
   userBranch?: string;
-  orderType: 'DINE_IN' | 'TAKE_AWAY';               // ✅ Added
-  onOrderTypeChange: (type: 'DINE_IN' | 'TAKE_AWAY') => void; // ✅ Added
+  orderType: 'DINE_IN' | 'TAKEAWAY';               // ✅ Added
+  onOrderTypeChange: (type: 'DINE_IN' | 'TAKEAWAY') => void; // ✅ Added
 }
 const branches = [
   { id: 'Bradford', name: 'Bradford' },
@@ -68,7 +68,7 @@ export function OrderSummary({
   onOrderTypeChange,   // ✅ Added
 }: OrderSummaryProps) {
   const { socket } = useSocket();
-
+console.log(orderType,"orderType")
   const availableBranches = userBranch
     ? branches.filter(branch => branch.id === userBranch)
     : branches;
@@ -141,7 +141,7 @@ export function OrderSummary({
         orderType, // ✅ Added
         notes: '',
       } as const;
-
+console.log(payload,"payload")
       const res = await orderApi.createOrder(payload as any);
       if (res?.data?.data) {
         if (socket) {
@@ -311,13 +311,19 @@ export function OrderSummary({
           {/* Order Type */}
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Order Type</label>
-            <Select value={orderType} onValueChange={onOrderTypeChange}>
+            <Select 
+              value={orderType} 
+              onValueChange={(value) => {
+                console.log('Order type changed to:', value);
+                onOrderTypeChange(value as 'DINE_IN' | 'TAKEAWAY');
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select order type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="DINE_IN">Dine In</SelectItem>
-                <SelectItem value="TAKE_AWAY">Take Away</SelectItem>
+                <SelectItem value="TAKEAWAY">Take Away</SelectItem>
               </SelectContent>
             </Select>
           </div>

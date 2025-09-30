@@ -59,17 +59,18 @@ export function POSLayout() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
-  const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   // Get user information for branch filtering
   const { user, isAdmin } = useUser();
   const { hasPermission } = usePermissions();
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
   const canCreateMenuItems = hasPermission('MENU_CREATE');
 
   // Set default selected branch to user's branch if not admin
@@ -506,6 +507,8 @@ export function POSLayout() {
               customerName={customerName}
               onOrderPlaced={handleOrderPlaced}
               userBranch={user?.branch} // Pass user's branch to filter available branches
+              orderType={orderType}
+              onOrderTypeChange={setOrderType}
             />
           </div>
         </div>

@@ -46,4 +46,12 @@ export const menuApi = {
     api.get<MenuItem[]>(`/menu/items?category=${encodeURIComponent(category)}`),
 };
 
+export const fetchAnalytics = (params: { startDate?: string; endDate?: string } = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.startDate) queryParams.append('startDate', params.startDate);
+  if (params.endDate) queryParams.append('endDate', params.endDate);
+  
+  return api.get(`/analytics?${queryParams.toString()}`);
+};
+
 export default api;
