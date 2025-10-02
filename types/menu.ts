@@ -1,4 +1,5 @@
 export interface MenuItem {
+  modifiers: any[];
   id: string;
   name: string;
   description?: string;

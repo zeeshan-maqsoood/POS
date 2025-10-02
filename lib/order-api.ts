@@ -1,7 +1,7 @@
 import api from "@/utils/api";
 
 // Types
-export type OrderType = 'DINE_IN' | 'TAKEOUT' | 'DELIVERY';
+export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 
 export interface OrderItemInput {
@@ -122,9 +122,44 @@ export const orderApi = {
       };
     }>('/orders', { params: queryParams });
   },
-
+  getOrdersByBranch: async (branchName: string) => {
+    try {
+      const response = await api.get<{ 
+        success: boolean;
+        message: string;
+        data: Array<{ tableNumber: string }>;
+        statusCode: number;
+      }>('/orders/getOrderByTable', { params: { branchName } });
+      
+      // Ensure we always return a consistent response format
+      return {
+        success: true,
+        message: response.data.message || 'Orders retrieved successfully',
+        data: response.data.data || [],
+        statusCode: response.status || 200
+      };
+    } catch (error: any) {
+      // If it's a 404 or 500 error for no orders found, return empty array instead of error
+      if (error.response?.status === 404 || error.response?.status === 500) {
+        return {
+          success: true,
+          message: 'No orders found for this branch',
+          data: [],
+          statusCode: 200
+        };
+      }
+      // Re-throw other errors
+      throw error;
+    }
+  },
   // Get a single order by ID
-  getOrder: (id: string) => api.get<{ data: Order }>(`/orders/${id}`),
+  getOrder: (id: string) => api.get<{
+    items: any;
+    orderType: string;
+    branchId: null;
+    tableNumber: string;
+    customerName: string; data: Order 
+}>(`/orders/${id}`),
 
   // Create a new order
   createOrder: (data: CreateOrderInput) => api.post<{ data: Order }>('/orders', data),
@@ -137,21 +172,19 @@ export const orderApi = {
   deleteOrder: (id: string) => api.delete(`/orders/${id}`),
 
   // Update order status with optional notes
-  updateStatus: (id: string, status: OrderStatus, notes?: string) =>
+  updateStatus: (id: string, status: OrderStatus, notes?: string) => 
     api.put<{ data: Order }>(`/orders/${id}/status`, { status, notes }),
 
   // Get order statistics for dashboard
-  getStats(params?: { startDate?: string; endDate?: string }) {
-    return api.get<{ data: OrderStats }>('/orders/stats', { params });
-  },
+  getStats: (params?: { startDate?: string; endDate?: string }) => 
+    api.get<{ data: OrderStats }>('/orders/stats', { params }),
 
   // Update payment status and method
-  updatePaymentStatus(id: string, paymentStatus: PaymentStatus, paymentMethod: PaymentMethod) {
-    return api.put<{ data: Order }>(`/orders/${id}/payment-status`, {
+  updatePaymentStatus: (id: string, paymentStatus: PaymentStatus, paymentMethod: PaymentMethod) => 
+    api.put<{ data: Order }>(`/orders/${id}/payment-status`, {
       paymentStatus,
       paymentMethod
-    });
-  },
+    }),
 
   // Get orders by status with pagination (convenience method)
   getOrdersByStatus: (status: OrderStatus, page: number = 1, pageSize: number = 10) => 
@@ -162,6 +195,9 @@ export const orderApi = {
       sortBy: 'createdAt',
       sortOrder: 'desc' 
     }),
+ 
+ 
 };
+
 
 export default orderApi;

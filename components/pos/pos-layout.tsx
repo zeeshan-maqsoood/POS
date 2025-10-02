@@ -1,20 +1,22 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import Link from 'next/link';
-import { MenuItem } from '@/types/menu';
+import type { MenuItem } from '@/types/menu';
 import { MenuCategories } from "./menu-categories";
 import { MenuItems } from "./menu-items";
-import { OrderSummary } from "./order-summary";
+import { OrderSummary as BaseOrderSummary } from "./order-summary";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X, ArrowLeft, ShoppingCart, Loader2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { menuItemApi, categoryApi } from '@/lib/menu-api';
+import { orderApi } from '@/lib/order-api';
 import { toast } from 'sonner';
 import { useUser } from '@/hooks/use-user';
 import { usePermissions } from '@/hooks/use-permissions';
-
+import { CartItem } from '@/lib/types';
+import { useSearchParams } from 'next/navigation';
 // Define API response interfaces
 interface ApiResponse<T> {
   success: boolean;
@@ -40,35 +42,280 @@ interface Category {
 const initialMenuItems: MenuItem[] = [];
 const initialCategories: Category[] = [];
 
-interface CartItemModifier {
-  id: string;
-  name: string;
-  price: number;
+interface POSLayoutProps {
+  editOrderData?: any; // You might want to create a proper type for this
 }
 
-interface CartItem {
-  item: MenuItem;
-  quantity: number;
-  modifiers?: CartItemModifier[];
-  totalPrice: number;
-  basePrice: number;
-}
-
-export function POSLayout() {
+export function POSLayout({ editOrderData }: POSLayoutProps) {
+  const searchParams = useSearchParams();
+  const editOrderId = searchParams.get('editOrderId');
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    // Initialize cart with items from editOrderData if available
+    if (editOrderData?.items) {
+      return editOrderData.items.map((item: any) => ({
+        id: item.id || Math.random().toString(36).substr(2, 9),
+        name: item.name,
+        price: parseFloat(item.price.toString()),
+        quantity: item.quantity,
+        menuItemId: item.menuItemId,
+        taxRate: item.taxRate || 0,
+        tax: item.tax || 0,
+        total: item.total || 0,
+        notes: item.notes || '',
+        modifiers: item.modifiers || []
+      }));
+    }
+    return [];
+  });
+  useEffect(() => {
+    const fetchOrderData = async () => {
+      if (!editOrderId) return;
+
+      setIsLoadingOrder(true);
+      try {
+        const response = await orderApi.getOrder(editOrderId);
+        const orderData = response.data;
+
+        // Update cart with order items
+        if (orderData.items) {
+          const updatedCart = orderData.items.map((item: any) => ({
+            id: item.id || Math.random().toString(36).substr(2, 9),
+            name: item.menuItem?.name || item.name || 'Unknown Item',
+            price: parseFloat(item.price.toString()),
+            quantity: item.quantity,
+            menuItemId: item.menuItemId || item.id,
+            taxRate: item.taxRate || 0,
+            tax: item.tax || 0,
+            total: item.total || 0,
+            notes: item.notes || '',
+            modifiers: item.modifiers || []
+          }));
+
+          setCart(updatedCart);
+        }
+
+        // Update form fields
+        setOrderType(orderData.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN');
+        setSelectedBranch(orderData.branchId || null);
+        setTableNumber(orderData.tableNumber || '');
+        setCustomerName(orderData.customerName || '');
+
+      } catch (error) {
+        console.error('Error fetching order data:', error);
+        toast.error('Failed to load order data');
+      } finally {
+        setIsLoadingOrder(false);
+      }
+    };
+
+    fetchOrderData();
+  }, [editOrderId]);
+  // Initialize form state with editOrderData or defaults
+  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>(() => {
+    return editOrderData?.orderType === 'TAKEAWAY' || editOrderData?.orderType === 'TAKEOUT'
+      ? 'TAKEAWAY'
+      : 'DINE_IN';
+  });
+
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
-  const [tableNumber, setTableNumber] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [occupiedTables, setOccupiedTables] = useState<Set<string>>(new Set());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(editOrderData?.branchId || null);
+  const [tableNumber, setTableNumber] = useState<string>(editOrderData?.tableNumber || '');
+  const [customerName, setCustomerName] = useState<string>(editOrderData?.customerName || '');
+  // Initialize cart from editOrderData if it exists
+  const [hasInitializedCart, setHasInitializedCart] = useState(false);
+
+  // useEffect(() => {
+  //   if (editOrderData?.items && !hasInitializedCart) {
+  //     const initialCart = editOrderData.items.map(item => ({
+  //       item: {
+  //         id: item.menuItemId,
+  //         name: item.menuItem?.name || 'Unknown Item',
+  //         price: item.price,
+  //         // Add other required item properties
+  //       },
+  //       quantity: item.quantity,
+  //       notes: item.notes || '',
+  //       modifiers: item.modifiers || [],
+  //       // Add other required cart item properties
+  //     }));
+  //     setCart(initialCart);
+  //     setHasInitializedCart(true);
+  //   }
+  // }, [editOrderData, hasInitializedCart]);
+
+  // Reset initialization flag when editOrderData changes
+  useEffect(() => {
+    setHasInitializedCart(false);
+  }, [editOrderData?.id]);
+  // Add this useEffect right after your existing useEffects in POSLayout
+  useEffect(() => {
+    if (editOrderData?.data?.items) {
+      const updatedCart = editOrderData.data.items.map((item: any) => {
+
+        return {
+          id: item.id || Math.random().toString(36).substr(2, 9),
+          name: item.name,
+          price: parseFloat(item.price?.toString() || '0'),
+          quantity: item.quantity,
+          menuItemId: item.menuItemId,
+          taxRate: item.taxRate || 0,
+          tax: item.tax || 0,
+          total: item.total || 0,
+          notes: item.notes || '',
+          modifiers: item.modifiers || [],
+          item: {
+            id: item.menuItemId,
+            name: item.name,
+            price: parseFloat(item.price?.toString() || '0'),
+            description: '',
+            categoryId: '',
+            isActive: true,
+            imageUrl: '',
+            modifiers: item.modifiers || []
+          }
+        };
+      });
+      console.log('Updated cart:', updatedCart);
+      setCart(updatedCart);
+
+      // Update other form fields
+      if (editOrderData.data.orderType) {
+        setOrderType(editOrderData.data.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN');
+      }
+      if (editOrderData.data.branchName) {
+        setSelectedBranch(editOrderData.data.branchName);
+      }
+      if (editOrderData.data.tableNumber) {
+        setTableNumber(editOrderData.data.tableNumber.toString());
+      }
+      if (editOrderData.data.customerName) {
+        setCustomerName(editOrderData.data.customerName);
+      }
+    } else {
+      setCart([]);
+    }
+  }, [editOrderData]);
+  console.log('Edit order data received:', editOrderData);
+  console.log('Current cart state:', cart);
+
+
+  // Handler functions
+  const handleClearCart = useCallback(() => {
+    setCart([]);
+    setTableNumber('');
+    setCustomerName('');
+    setOrderType('DINE_IN');
+  }, []);
+
+  const handleBranchChange = useCallback((branchId: string) => {
+    setSelectedBranch(branchId);
+  }, []);
+
+  const handleTableNumberChange = useCallback((tableNum: string) => {
+    setTableNumber(tableNum);
+  }, []);
+
+  const handleCustomerNameChange = useCallback((name: string) => {
+    setCustomerName(name);
+  }, []);
+
+  const handleOrderTypeChange = useCallback((type: 'DINE_IN' | 'TAKEAWAY') => {
+    setOrderType(type);
+  }, []);
 
   // Get user information for branch filtering
   const { user, isAdmin } = useUser();
+
+  // Set initial branch when user data is loaded
+  // Set initial branch when user data is loaded
+  useEffect(() => {
+    if (user) {
+      // If user is not admin and has a branch, use that
+      if (!isAdmin && user.branch) {
+        setSelectedBranch(user.branch);
+      }
+      // If admin, you might want to set a default branch or leave it to be selected
+      // For now, we'll leave it as null for admins
+    }
+  }, [user, isAdmin]);
+
+  // Fetch occupied tables for the selected branch
+  const fetchOccupiedTables = async (branch: string | null) => {
+    if (!branch) {
+      console.log('No branch selected, clearing occupied tables');
+      setOccupiedTables(new Set<string>());
+      return;
+    }
+
+    try {
+      console.log('Fetching occupied tables for branch:', branch);
+      const response = await orderApi.getOrdersByBranch(branch);
+      console.log('Occupied tables response:', response);
+
+      const tables = new Set<string>();
+
+      // The response is an object with data property containing the array of orders
+      if (response && Array.isArray(response.data)) {
+        response.data.forEach((item: { tableNumber: string }) => {
+          if (item.tableNumber) {
+            tables.add(item.tableNumber);
+          }
+        });
+      }
+      setOccupiedTables(tables);
+    } catch (error: any) {
+      console.error('Error fetching occupied tables:', error);
+      // If there's an error, clear the tables
+      setOccupiedTables(new Set<string>());
+
+      if (error.response) {
+        console.error('Error response data:', error.response.data);
+        console.error('Error status:', error.response.status);
+      }
+    }
+  };
+
+  // Fetch occupied tables when branch changes
+  useEffect(() => {
+    fetchOccupiedTables(selectedBranch);
+  }, [selectedBranch]);
+
+  // Set up WebSocket listener for order updates
+  useEffect(() => {
+    const handleOrderUpdate = (data: any) => {
+      console.log('Received order update:', data);
+      // If the order is completed or cancelled, refresh the occupied tables
+      if (['COMPLETED', 'CANCELLED', 'PAID'].includes(data.status)) {
+        fetchOccupiedTables(selectedBranch);
+        // If the current table's order was completed, clear the selection
+        if (data.tableNumber === tableNumber) {
+          setTableNumber('');
+        }
+      }
+    };
+
+    // Check if WebSocket is available in the context
+    if (window.Echo) {
+      // Listen for order updates
+      window.Echo.channel('orders')
+        .listen('OrderStatusUpdated', handleOrderUpdate);
+    }
+
+    // Clean up listener when component unmounts
+    return () => {
+      if (window.Echo) {
+        window.Echo.leaveChannel('orders');
+      }
+    };
+  }, [selectedBranch, tableNumber]);
   const { hasPermission } = usePermissions();
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const canCreateMenuItems = hasPermission('MENU_CREATE');
@@ -154,7 +401,7 @@ export function POSLayout() {
 
         // Set categories and items even if one of them is empty
         setCategories(categoriesData);
-        
+
         // If no items found, set empty array and continue
         if (itemsData.length === 0) {
           setMenuItems([]);
@@ -203,51 +450,41 @@ export function POSLayout() {
   const filteredItems = useMemo(() => {
     if (isLoading || error) return [];
 
-    let result = [...menuItems];
-
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(item =>
-        item.name.toLowerCase().includes(query) ||
-        (item.description?.toLowerCase().includes(query) || '') ||
-        item.category?.toLowerCase().includes(query)
-      );
-    }
-
-    // Filter by category
-    if (selectedCategory !== 'All') {
-      result = result.filter(item => item.category === selectedCategory);
-    }
-
-    return result;
+    return menuItems.filter((item: MenuItem) => {
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      const categoryName = typeof item.category === 'string' ? item.category : item.category?.name;
+      const matchesCategory = selectedCategory === 'All' || categoryName === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
   }, [menuItems, searchQuery, selectedCategory, isLoading, error]);
 
-  const addToCart = (item: MenuItem, selectedModifiers: CartItemModifier[] = []) => {
+  const addToCart = (menuItem: MenuItem, modifiers: Array<{ id: string; name: string; price: number }> = []) => {
     setCart(prevCart => {
       // Create a unique key for this item + modifiers combination
-      const itemKey = `${item.id}-${selectedModifiers.map(m => m.id).sort().join('-')}`;
-      
+      const itemKey = `${menuItem.id}-${modifiers.map(m => m.id).sort().join('-')}`;
+
       // Check for existing item with same ID and modifiers
-      const existingItemIndex = prevCart.findIndex(cartItem => 
+
+      const existingItemIndex = prevCart.findIndex(cartItem =>
         `${cartItem.item.id}-${(cartItem.modifiers || []).map(m => m.id).sort().join('-')}` === itemKey
       );
-  
-      // Transform the modifiers to the correct format if they're in the item.modifiers format
-      const modifiers = selectedModifiers.length > 0 
-        ? selectedModifiers 
-        : (item.modifiers || []).map(mod => ({
-            id: mod.modifierId,  // Use modifierId from the item's modifiers
-            name: mod.name || `Modifier ${mod.modifierId}`, // Add a default name if not available
-            price: mod.price || 0 // Add a default price if not available
-          }));
-  
+
+      // Use the provided modifiers or default to an empty array
+      const itemModifiers = modifiers.length > 0
+        ? modifiers
+        : (menuItem.modifiers || []).map(mod => ({
+          id: mod.modifierId,  // Use modifierId from the item's modifiers
+          name: mod.name || `Modifier ${mod.modifierId}`, // Add a default name if not available
+          price: mod.price || 0 // Add a default price if not available
+        }));
+
       if (existingItemIndex >= 0) {
         // Item with same modifiers exists, just update quantity
         const updatedCart = [...prevCart];
         const modifiersTotal = (updatedCart[existingItemIndex].modifiers || []).reduce((sum, mod) => sum + (mod.price || 0), 0);
         const pricePerItem = updatedCart[existingItemIndex].basePrice + modifiersTotal;
-        
+
         updatedCart[existingItemIndex] = {
           ...updatedCart[existingItemIndex],
           quantity: updatedCart[existingItemIndex].quantity + 1,
@@ -255,35 +492,35 @@ export function POSLayout() {
         };
         return updatedCart;
       }
-  
+
       // Calculate base price and modifiers total
       const modifiersTotal = modifiers.reduce((sum, mod) => sum + (mod.price || 0), 0);
-      const itemTotal = item.price + modifiersTotal;
-  
+      const itemTotal = menuItem.price + modifiersTotal;
+
       // Add new item to cart
       return [
         ...prevCart,
         {
-          item,
+          item: menuItem,
           quantity: 1,
           modifiers: [...modifiers], // Include the transformed modifiers
           totalPrice: itemTotal,
-          basePrice: item.price
+          basePrice: menuItem.price
         }
       ];
     });
   };
-  
+
   const updateCartItemQuantity = (index: number, newQuantity: number) => {
     if (newQuantity < 1) {
       removeFromCart(index);
       return;
     }
-    
+
     setCart(prevCart => {
       const newCart = [...prevCart];
       const item = newCart[index];
-      
+
       if (item) {
         const pricePerItem = item.basePrice + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
         newCart[index] = {
@@ -292,11 +529,11 @@ export function POSLayout() {
           totalPrice: pricePerItem * newQuantity
         };
       }
-      
+
       return newCart;
     });
   };
-  
+
   const removeFromCart = (index: number) => {
     setCart(prevCart => prevCart.filter((_, i) => i !== index));
   };
@@ -309,11 +546,35 @@ export function POSLayout() {
     setCart([]);
   };
 
-  const handleOrderPlaced = () => {
-    // Refresh data or perform any other actions after order is placed
-    toast.success('Order placed successfully!');
-  };
+  const handleOrderPlaced = async (orderId?: string) => {
+    // If we're in edit mode, refresh the order data
+    if (editOrderData?.data?.id) {
+      try {
+        const response = await orderApi.getOrder(editOrderData.data.id);
+        console.log(response, "responsegetApi")
+        if (response?.data) {
+          editOrderData({
+            ...editOrderData,
+            data: response.data
+          });
+        }
+      } catch (error) {
+        console.error('Error refreshing order data:', error);
+      }
+    }
 
+    // Clear the table selection if this was a dine-in order
+    if (orderType === 'DINE_IN' && tableNumber) {
+      setTableNumber('');
+    }
+
+    // Clear the cart and refresh tables
+    setCart([]);
+    await fetchOccupiedTables(selectedBranch);
+
+    // Show success message
+    toast.success(editOrderData?.data?.id ? 'Order updated successfully!' : 'Order placed successfully!');
+  };
   const clearSearch = () => {
     setSearchQuery('');
   };
@@ -356,7 +617,6 @@ export function POSLayout() {
     }
     // For "no data" scenario, we'll continue to render the empty state below
   }
-
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
@@ -441,7 +701,7 @@ export function POSLayout() {
               <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Menu Items Found</h3>
                 <p className="text-gray-600 mb-4">
-                  {canCreateMenuItems 
+                  {canCreateMenuItems
                     ? "There are currently no menu items available. You can add new items below."
                     : "There are currently no menu items available. Please contact an administrator to add items."
                   }
@@ -490,26 +750,30 @@ export function POSLayout() {
 
           {/* Order Summary Content */}
           <div className="flex-1 overflow-y-auto">
-            <OrderSummary
-              cart={cart}
-              onUpdateCart={setCart}
-              onClearCart={clearCart}
-              subtotal={subtotal}
-              tax={tax}
-              total={total}
-              onBranchChange={(branchId) => {
-                setSelectedBranch(branchId || null);
-              }}
-              onTableNumberChange={setTableNumber}
-              onCustomerNameChange={setCustomerName}
-              selectedBranch={selectedBranch}
-              tableNumber={tableNumber}
-              customerName={customerName}
-              onOrderPlaced={handleOrderPlaced}
-              userBranch={user?.branch} // Pass user's branch to filter available branches
-              orderType={orderType}
-              onOrderTypeChange={setOrderType}
-            />
+            <div className="h-full flex flex-col">
+              <BaseOrderSummary
+                key={editOrderData?.id || 'new-order'}
+                cart={cart}
+                onUpdateCart={setCart}
+                onClearCart={handleClearCart}
+                selectedBranch={selectedBranch || ''}
+                tableNumber={tableNumber}
+                customerName={customerName}
+                onOrderPlaced={handleOrderPlaced}
+                userBranch={user?.branch || ''}
+                orderType={orderType}
+                onOrderTypeChange={handleOrderTypeChange}
+                onBranchChange={handleBranchChange}
+                onTableNumberChange={handleTableNumberChange}
+                onCustomerNameChange={handleCustomerNameChange}
+                occupiedTables={occupiedTables}
+                isEditMode={!!editOrderData}
+                editOrderData={editOrderData}
+                subtotal={subtotal}
+                tax={tax}
+                total={total}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -444,14 +444,14 @@ export const managerFormSchema = z.object({
     .string()
     .min(6, { message: "Password must be at least 6 characters." })
     .optional(),
-  role: z.enum(["MANAGER", "KITCHEN_STAFF"]),
+  role: z.enum(["MANAGER", "KITCHEN_STAFF","WAITER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   branch: z.string().min(1, { message: "Please select a branch." }),
   permissions: z.array(z.string()).default([]),
 });
 
 // Define types
-type Role = "MANAGER" | "KITCHEN_STAFF";
+type Role = "MANAGER" | "KITCHEN_STAFF" | "WAITER";
 type Status = "ACTIVE" | "INACTIVE";
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -694,6 +694,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                     <SelectContent>
                       <SelectItem value="MANAGER">Manager</SelectItem>
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
+                      <SelectItem value="WAITER">Waiter</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

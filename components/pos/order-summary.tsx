@@ -1,15 +1,13 @@
-
 'use client';
 
-import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, Minus, Trash2, Utensils, Loader2, ShoppingCart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import PermissionGate from '@/components/auth/permission-gate';
-import orderApi, { PaymentMethod, OrderStatus } from '@/lib/order-api';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { orderApi, PaymentMethod, OrderStatus, OrderType } from '@/lib/order-api';
 import { useSocket } from '@/contexts/SocketContext';
-import { formatCurrency } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -17,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CartItem, CartItemModifier } from '@/lib/types';
+import { CartItem } from '@/lib/types';
 import { ReceiptTemplate } from '../receipt/receipt-template';
 import { usePrintReceipt } from '@/hooks/use-print-receipt';
 import { ReceiptButton } from '../receipt/receipt-button';
@@ -37,14 +35,18 @@ interface OrderSummaryProps {
   customerName: string;
   onOrderPlaced?: (orderId?: string) => void;
   userBranch?: string;
-  orderType: 'DINE_IN' | 'TAKEAWAY';               // ✅ Added
-  onOrderTypeChange: (type: 'DINE_IN' | 'TAKEAWAY') => void; // ✅ Added
+  orderType: OrderType;
+  onOrderTypeChange: (type: OrderType) => void;
+  occupiedTables?: Set<string>;
+  isEditMode?: boolean;
+  editOrderData?: any;
 }
+
 const branches = [
   { id: 'Bradford', name: 'Bradford' },
   { id: 'Leeds', name: 'Leeds' },
-  { id: 'Helifax', name: 'Helifax' },
   { id: 'Darley St Market', name: 'Darley St Market' },
+  { id: 'Helifax', name: 'Helifax' },
 ];
 
 const tableNumbers = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
@@ -53,9 +55,9 @@ export function OrderSummary({
   cart,
   onUpdateCart,
   onClearCart,
-  subtotal,
-  tax,
-  total,
+  subtotal = 0,
+  tax = 0,
+  total = 0,
   onBranchChange,
   onTableNumberChange,
   onCustomerNameChange,
@@ -64,86 +66,259 @@ export function OrderSummary({
   customerName,
   onOrderPlaced,
   userBranch,
-  orderType,           // ✅ Added
-  onOrderTypeChange,   // ✅ Added
+  orderType = 'DINE_IN',
+  onOrderTypeChange,
+  occupiedTables = new Set(),
+  isEditMode = false,
+  editOrderData,
 }: OrderSummaryProps) {
-  const { socket } = useSocket();
-console.log(orderType,"orderType")
-  const availableBranches = userBranch
-    ? branches.filter(branch => branch.id === userBranch)
-    : branches;
-
-  const finalBranches = userBranch && availableBranches.length === 0
-    ? [{ id: userBranch, name: userBranch }]
-    : availableBranches;
-
-  const userRole =
-    typeof window !== 'undefined'
-      ? localStorage.getItem('userRole') || 'CASHIER'
-      : 'CASHIER';
-
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
-
+  const [isMounted, setIsMounted] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
-  const { printReceipt, isPrinting } = usePrintReceipt();
+  const { socket } = useSocket();
+  const userRole =
+    typeof window !== 'undefined' ? localStorage.getItem('userRole') || 'CASHIER' : 'CASHIER';
+  const { printReceipt } = usePrintReceipt();
 
-  const updateQuantity = (itemId: string, newQuantity: number, modifiers: CartItemModifier[] = []) => {
-    if (newQuantity < 1) {
-      onUpdateCart(cart.filter(item => item.item.id !== itemId));
-    } else {
-      onUpdateCart(
-        cart.map(item => {
-          if (item.item.id === itemId) {
-            const selectedModifiersPrice =
-              item.modifiers?.filter(m => m.selected).reduce((sum, mod) => sum + mod.price, 0) || 0;
+  // Initialize form when editing order
+  useEffect(() => {
+    if (isEditMode && editOrderData) {
+      const orderType = editOrderData.data.orderType || 'DINE_IN';
+      onOrderTypeChange(orderType);
 
-            return {
-              ...item,
-              quantity: newQuantity,
-              totalPrice: (item.basePrice + selectedModifiersPrice) * newQuantity,
-            };
-          }
-          return item;
-        })
-      );
+      const branchToSelect =
+        editOrderData.data.branchName || userBranch || (branches.length > 0 ? branches[0].id : null);
+      if (branchToSelect) {
+        onBranchChange(branchToSelect);
+      }
+
+      onCustomerNameChange(editOrderData.data.customerName || '');
+
+      if (orderType === 'DINE_IN' && editOrderData.data.tableNumber) {
+        onTableNumberChange(editOrderData.data.tableNumber.toString());
+      }
+      console.log(editOrderData,"editOrderData")
+
+      if (editOrderData.data.items && editOrderData.data.items.length > 0) {
+        const cartItems = editOrderData.data.items.map(
+          (item: { menuItemId: any; name: any; price: any; quantity: any,ImageUrl:any }) => ({
+            item: {
+              id: item.menuItemId,
+              name: item.name || `Item ${item.menuItemId}`,
+              price: item.price || 0,
+              description: '',
+              categoryId: '',
+              isActive: true,
+              imageUrl: item.ImageUrl || '',
+              modifiers: [],
+            },
+            quantity: item.quantity || 1,
+          })
+        );
+        onUpdateCart(cartItems);
+      }
     }
-  };
+
+    setIsMounted(true);
+
+    return () => {
+      if (isEditMode) {
+        onUpdateCart([]);
+        onOrderTypeChange('DINE_IN');
+        onBranchChange('');
+        onCustomerNameChange('');
+        onTableNumberChange('');
+      }
+    };
+  }, [
+    isEditMode,
+    editOrderData,
+    onBranchChange,
+    onTableNumberChange,
+    onCustomerNameChange,
+    onOrderTypeChange,
+    onUpdateCart,
+    userBranch,
+  ]);
+
+  const finalBranches = useMemo(
+    () => (userBranch ? branches.filter((branch) => branch.id === userBranch) : branches),
+    [userBranch]
+  );
+
+  const updateQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    const updatedCart = cart.map((item) =>
+      item.item.id === itemId ? { ...item, quantity: newQuantity } : item
+    );
+    onUpdateCart(updatedCart);
+  };  
+  console.log(cart,"cart");
 
   const removeItem = (itemId: string) => {
-    onUpdateCart(cart.filter(item => item.item.id !== itemId));
+    onUpdateCart(cart.filter((item) => item.item.id !== itemId));
   };
 
+  // const handlePlaceOrder = async () => {
+  //   // ✅ Update order
+  //   if (isEditMode && editOrderData?.id) {
+  //     try {
+  //       setIsPlacingOrder(true);
+  //       const items = cart.map(({ item, quantity }) => ({
+  //         menuItemId: item.id,
+  //         quantity,
+  //         name: item.name,
+  //         price: item.price,
+  //       }));
+
+  //       const payload = {
+  //         tableNumber: orderType === 'DINE_IN' ? tableNumber : null,
+  //         customerName: customerName || null,
+  //         items,
+  //         branchName: selectedBranch,
+  //         subtotal,
+  //         tax,
+  //         total,
+  //         orderType,
+  //         status: OrderStatus.PENDING,
+  //       };
+
+  //       const res = await orderApi.updateOrder(editOrderData.id, payload);
+  //       if (res?.data?.data) {
+  //         toast.success('Order updated successfully!');
+  //         onOrderPlaced?.(res.data.data.id);
+  //       } else {
+  //         toast.error('Failed to update order');
+  //       }
+  //     } catch (e: any) {
+  //       console.error('Update order error:', e);
+  //       toast.error(e?.response?.data?.message || 'Failed to update order');
+  //     } finally {
+  //       setIsPlacingOrder(false);
+  //     }
+  //     return;
+  //   }
+
+  //   // ✅ Create order
+  //   if (cart.length === 0) {
+  //     toast.error('Your cart is empty');
+  //     return;
+  //   }
+  //   try {
+  //     setIsPlacingOrder(true);
+  //     const items = cart.map(({ item, quantity }) => ({
+  //       menuItemId: item.id,
+  //       quantity,
+  //       name: item.name,
+  //       price: item.price,
+  //     }));
+
+  //     const payload = {
+  //       tableNumber: tableNumber || undefined,
+  //       customerName: customerName || undefined,
+  //       items,
+  //       paymentMethod: PaymentMethod.CASH,
+  //       branchName: selectedBranch || undefined,
+  //       subtotal,
+  //       tax,
+  //       total,
+  //       status: OrderStatus.PENDING,
+  //       orderType,
+  //       notes: '',
+  //     } as const;
+
+  //     const res = await orderApi.createOrder(payload as any);
+  //     if (res?.data?.data) {
+  //       if (socket) {
+  //         socket.emit('new-order', {
+  //           order: { ...payload, branchId: selectedBranch },
+  //           createdByRole: userRole,
+  //         });
+  //       }
+  //       onClearCart();
+  //       onOrderPlaced?.(res.data.data.id);
+  //     } else {
+  //       toast.error('Failed to place order');
+  //     }
+  //   } catch (e: any) {
+  //     console.error('Place order error:', e);
+  //     toast.error(e?.response?.data?.message || 'Failed to place order');
+  //   } finally {
+  //     setIsPlacingOrder(false);
+  //   }
+  // };
+
   const handlePlaceOrder = async () => {
+    if (!selectedBranch) {
+      toast.error('Please select a branch');
+      return;
+    }
+  
+    if (orderType === 'DINE_IN' && !tableNumber) {
+      toast.error('Please enter a table number');
+      return;
+    }
+  
     if (cart.length === 0) {
       toast.error('Your cart is empty');
       return;
     }
+  
     try {
       setIsPlacingOrder(true);
+      console.log('Edit mode:', isEditMode, 'Order ID:', editOrderData?.id);
+      
+      // Map the cart items to the format expected by the API
       const items = cart.map(({ item, quantity }) => ({
         menuItemId: item.id,
         quantity,
         name: item.name,
         price: item.price,
       }));
-
+  
       const payload = {
         tableNumber: tableNumber || undefined,
         customerName: customerName || undefined,
-        items,
+        items, // Make sure this includes all items including any new ones
         paymentMethod: PaymentMethod.CASH,
-        branchName: selectedBranch || undefined,
+        branchName: selectedBranch,
         subtotal,
         tax,
         total,
         status: OrderStatus.PENDING,
-        orderType, // ✅ Added
+        orderType,
         notes: '',
-      } as const;
-console.log(payload,"payload")
-      const res = await orderApi.createOrder(payload as any);
-      if (res?.data?.data) {
+      };
+  
+      console.log('Payload being sent:', JSON.stringify(payload, null, 2)); // Debug log
+  
+      let response;
+      if (isEditMode && editOrderData?.data?.id) {
+        console.log('Updating order with ID:', editOrderData.data.id);
+        
+        // Prepare the items array without any ID field
+        const updatePayload = {
+          ...payload,
+          items: items.map(item => ({
+            menuItemId: item.menuItemId,
+            quantity: item.quantity,
+            name: item.name,
+            price: item.price
+          }))
+        };
+      
+        console.log('Update payload with items:', JSON.stringify(updatePayload, null, 2));
+        
+        // For update, we need to send the full order data including items to be updated
+        response = await orderApi.updateOrder(editOrderData.data.id, updatePayload);
+      }else {
+        console.log('Creating new order');
+        response = await orderApi.createOrder(payload);
+      }
+  
+      if (response?.data?.data) {
         if (socket) {
           socket.emit('new-order', {
             order: { ...payload, branchId: selectedBranch },
@@ -151,13 +326,19 @@ console.log(payload,"payload")
           });
         }
         onClearCart();
-        onOrderPlaced?.(res.data.data.id);
+        onOrderPlaced?.(response.data.data.id);
+        toast.success(
+          isEditMode ? 'Order updated successfully' : 'Order placed successfully'
+        );
       } else {
-        toast.error('Failed to place order');
+        throw new Error('Failed to process order');
       }
     } catch (e: any) {
-      console.error('Place order error:', e);
-      toast.error(e?.response?.data?.message || 'Failed to place order');
+      console.error('Order error:', e);
+      toast.error(
+        e?.response?.data?.message || 
+        `Failed to ${isEditMode ? 'update' : 'place'} order`
+      );
     } finally {
       setIsPlacingOrder(false);
     }
@@ -165,6 +346,7 @@ console.log(payload,"payload")
 
   return (
     <div className="flex flex-col min-h-screen">
+      
       {/* Cart Items */}
       <div className="p-3 space-y-3 md:flex-1 md:overflow-y-auto">
         {cart.length === 0 ? (
@@ -179,17 +361,30 @@ console.log(payload,"payload")
               className="bg-white rounded-lg border p-3 shadow-sm flex items-start justify-between"
             >
               <div className="flex gap-3">
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="w-14 h-14 rounded-md object-cover"
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center">
+                <div className="relative w-14 h-14">
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl.startsWith('http') 
+                        ? item.imageUrl 
+                        : `/${item.imageUrl.replace(/^\/+/, '')}`
+                      }
+                      alt={item.name}
+                      className="w-full h-full rounded-md object-cover"
+                      onError={(e) => {
+                        // If image fails to load, show the placeholder
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const placeholder = target.nextElementSibling as HTMLElement;
+                        if (placeholder) {
+                          placeholder.classList.remove('hidden');
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <div className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}>
                     <Utensils className="h-5 w-5 text-gray-400" />
                   </div>
-                )}
+                </div>
                 <div>
                   <p className="font-medium">{item.name}</p>
                   <p className="text-sm text-gray-500">
@@ -259,7 +454,13 @@ console.log(payload,"payload")
           {/* Branch */}
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Branch</label>
-            {finalBranches.length === 0 ? (
+            {isEditMode ? (
+              <Input
+                value={editOrderData?.data?.branchName || ''}
+                disabled
+                className="bg-gray-100"
+              />
+            ) : finalBranches.length === 0 ? (
               <div className="w-full p-2 border rounded-md bg-gray-50 text-gray-500 text-sm">
                 No branch assigned
               </div>
@@ -269,7 +470,7 @@ console.log(payload,"payload")
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {finalBranches.map(branch => (
+                  {finalBranches.map((branch) => (
                     <SelectItem key={branch.id} value={branch.id}>
                       {branch.name}
                     </SelectItem>
@@ -282,41 +483,60 @@ console.log(payload,"payload")
           {/* Table */}
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Table</label>
-            <Select value={tableNumber} onValueChange={onTableNumberChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a table" />
-              </SelectTrigger>
-              <SelectContent>
-                {tableNumbers.map(num => (
-                  <SelectItem key={num} value={num}>
-                    Table {num}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isEditMode ? (
+              <Input value={tableNumber || 'N/A'} disabled className="bg-gray-100" />
+            ) : (
+              <Select
+                onValueChange={onTableNumberChange}
+                value={tableNumber}
+                disabled={orderType === 'TAKEAWAY'}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select table" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tableNumbers.map((num) => {
+                    const isOccupied =
+                      (occupiedTables as Set<string>).has(num) && num !== tableNumber;
+                    return (
+                      <SelectItem
+                        key={num}
+                        value={num}
+                        disabled={isOccupied}
+                        className={isOccupied ? 'opacity-50 cursor-not-allowed' : ''}
+                      >
+                        {isOccupied ? `Table ${num} (Occupied)` : `Table ${num}`}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Customer */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">Customer</label>
             <Input
               type="text"
               placeholder="Customer Name"
               value={customerName}
-              onChange={e => onCustomerNameChange(e.target.value)}
-              className="w-full text-sm"
+              onChange={(e) => onCustomerNameChange(e.target.value)}
+              className="w-full"
             />
           </div>
 
           {/* Order Type */}
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Order Type</label>
-            <Select 
-              value={orderType} 
-              onValueChange={(value) => {
-                console.log('Order type changed to:', value);
-                onOrderTypeChange(value as 'DINE_IN' | 'TAKEAWAY');
+            <Select
+              value={orderType}
+              onValueChange={(value: string) => {
+                if (value !== orderType) {
+                  onOrderTypeChange(value as OrderType);
+                }
               }}
+              disabled={!isEditMode}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select order type" />
@@ -332,15 +552,15 @@ console.log(payload,"payload")
         {/* Totals */}
         <div className="flex justify-between text-sm">
           <span>Subtotal</span>
-          <span>£{subtotal.toFixed(2)}</span>
+          <span>£{(subtotal || 0).toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span>Tax</span>
-          <span>£{tax.toFixed(2)}</span>
+          <span>£{(tax || 0).toFixed(2)}</span>
         </div>
         <div className="flex justify-between font-semibold text-lg">
           <span>Total</span>
-          <span>£{total.toFixed(2)}</span>
+          <span>£{(total || 0).toFixed(2)}</span>
         </div>
 
         <div className="space-y-2">
@@ -375,4 +595,3 @@ console.log(payload,"payload")
     </div>
   );
 }
-

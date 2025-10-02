@@ -37,13 +37,13 @@ export const managerFormSchema = z.object({
   email: z.string().email({
     message: "Please enter a valid email address.",
   }),
-  role: z.enum(["MANAGER", "KITCHEN_STAFF"]),
+  role: z.enum(["MANAGER", "KITCHEN_STAFF","WAITER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   permissions: z.array(z.string()).default([]).transform((val) => val || []),
 });
 
 // Define types
-type Role = 'MANAGER' | 'KITCHEN_STAFF';
+type Role = 'MANAGER' | 'KITCHEN_STAFF' | 'WAITER';
 type Status = 'ACTIVE' | 'INACTIVE';
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -101,6 +101,8 @@ const getDefaultPermissionsForRole = (role: Role): string[] => {
       return [...DefaultRolePermissions.MANAGER];
     case 'KITCHEN_STAFF':
       return [...DefaultRolePermissions.KITCHEN_STAFF];
+    case 'WAITER':
+      return [...DefaultRolePermissions.WAITER];
     default:
       return [...DefaultRolePermissions.MANAGER];
   }

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Order, OrderStatus, orderApi, PaymentMethod, type PaymentStatus as TPaymentStatus } from '@/lib/order-api';
+import { useRouter } from 'next/navigation';
 import PermissionGate from '@/components/auth/permission-gate';
 import { WithPermission } from '@/components/auth/with-permission';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -27,44 +28,72 @@ interface OrderStats {
   recentOrders: Order[];
   revenueByStatus: Record<OrderStatus, number>;
   paymentStatus: Record<string, number>;
+  completedOrders: number;
+  pendingOrders: number;
 }
-
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL'>('ALL');
   const { hasRole, user } = usePermissions();
+  const router = useRouter();
   const isKitchenStaff = hasRole('KITCHEN_STAFF');
   const isManager = hasRole('MANAGER');
   const userBranch = user?.branch; // Get the user's branch from the auth context
 
-  useEffect(() => {
-    fetchOrders();
-    fetchStats();
-  }, []);
+  const handleEditOrder = (order: Order) => {
+    const timeStamp = Date.now()
+    router.push(`/pos?editOrderId=${order.id}&t=${timeStamp}`);
+  };
 
-  const fetchOrders = async () => {
+  // const fetchOrders = async () => {
+  //   try {
+  //     // Only pass branch if user is not admin
+  //     const branch = (isManager || isKitchenStaff) ? userBranch : undefined;
+
+  //     const response = await orderApi.getOrders({
+  //       status: activeTab === 'ALL' ? undefined : activeTab,
+  //       branchName: branch,
+  //       page: 1,
+  //       pageSize: 100, // Adjust based on your needs
+  //       sortBy: 'createdAt',
+  //       sortOrder: 'desc'
+  //     });
+  //     const payload: any = response.data;
+  //     // Support both shapes: { data: Order[] } and { data: { data: Order[] } }
+  //     const list = Array.isArray(payload?.data)
+  //       ? payload.data
+  //       : Array.isArray(payload?.data?.data)
+  //         ? payload.data.data
+  //         : [];
+  //     console.log('orders payload parsed', list);
+  //     setOrders(list);
+  //   } catch (error) {
+  //     console.error('Error fetching orders:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+  const fetchOrders = async (status?: OrderStatus | 'ALL') => {
     try {
-      // Only pass branch if user is not admin
       const branch = (isManager || isKitchenStaff) ? userBranch : undefined;
-      
+
       const response = await orderApi.getOrders({
-        status: activeTab === 'ALL' ? undefined : activeTab,
+        status: status === 'ALL' ? undefined : status,
         branchName: branch,
         page: 1,
-        pageSize: 100, // Adjust based on your needs
+        pageSize: 100,
         sortBy: 'createdAt',
         sortOrder: 'desc'
       });
+
       const payload: any = response.data;
-      // Support both shapes: { data: Order[] } and { data: { data: Order[] } }
       const list = Array.isArray(payload?.data)
         ? payload.data
         : Array.isArray(payload?.data?.data)
           ? payload.data.data
           : [];
-      console.log('orders payload parsed', list);
       setOrders(list);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -72,7 +101,6 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
-
   const fetchStats = async () => {
     try {
       const response = await orderApi.getStats();
@@ -83,7 +111,7 @@ export default function OrdersPage() {
       setStats(statsData);
     } catch (error) {
       console.error('Error fetching stats:', error);
-      
+
       // Fallback to calculating from orders if stats endpoint fails
       try {
         const response = await orderApi.getOrders({
@@ -100,7 +128,7 @@ export default function OrdersPage() {
           : Array.isArray(opayload?.data?.data)
             ? opayload.data.data
             : [];
-        
+
         // Calculate stats - only include paid orders in revenue
         const totalOrders = allOrders.length;
         const totalRevenue = allOrders
@@ -121,17 +149,18 @@ export default function OrdersPage() {
           // Count orders by status
           const status = order.status as OrderStatus;
           ordersByStatus[status] = (ordersByStatus[status] || 0) + 1;
-          
+
           // Only include paid orders in revenue calculations
           if (order.paymentStatus === 'PAID') {
             // Sum revenue by status for paid orders only
             revenueByStatus[status] = (revenueByStatus[status] || 0) + order.total;
           }
-          
+
           // Count payment status
           const paymentStatusValue = order.paymentStatus as string;
           paymentStatus[paymentStatusValue] = (paymentStatus[paymentStatusValue] || 0) + 1;
         });
+
 
         setStats({
           totalOrders: allOrders.length,
@@ -146,7 +175,7 @@ export default function OrdersPage() {
       }
     }
   };
-console.log(stats,"stats")
+  console.log(stats, "stats")
   const updateOrderStatus = async (orderId: string, status: OrderStatus, notes?: string) => {
     try {
       await orderApi.updateStatus(orderId, status, notes);
@@ -156,12 +185,26 @@ console.log(stats,"stats")
       throw error; // Re-throw to handle in the UI if needed
     }
   };
-  console.log(orders,"orders")
-  const filteredOrders = activeTab === 'ALL' 
-    ? orders 
+  // Fetch data on component mount and when activeTab changes
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([fetchOrders(), fetchStats()]);
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [activeTab]);
+
+  const filteredOrders = activeTab === 'ALL'
+    ? orders
     : orders.filter(order => order.status === activeTab);
 
-    console.log(filteredOrders,"filteredOrders")
   if (loading || !orders) {
     return (
       <div className="container mx-auto p-4">
@@ -183,104 +226,110 @@ console.log(stats,"stats")
 
   return (
     <WithPermission requiredPermission="ORDER_READ" redirectTo="/unauthorized">
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Orders Management</h1>
-        <PermissionGate required="ORDER_READ">
-          <Button onClick={() => {
-            fetchOrders();
-            fetchStats();
-          }} variant="outline">
-            Refresh
-          </Button>
-        </PermissionGate>
-      </div>
-      
-      {/* Stats Cards */}
-      {stats && (
-        <div className={`grid gap-4 mb-6 ${isKitchenStaff ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-4'}`}>
-          <StatsCard 
-            title="Total Orders" 
-            value={String(stats.totalOrders ?? 0)} 
-            description="All time orders"
-          />
-          {!isKitchenStaff && (
-            <StatsCard 
-              title="Total Revenue" 
-              value={`£${(stats.totalRevenue ?? 0).toFixed(2)}`}
-              description="Total revenue from all orders"
-            />
-          )}
-          <StatsCard 
-            title="Pending Orders" 
-            value={String(stats.ordersByStatus?.PENDING ?? 0)} 
-            description="Orders awaiting processing"
-          />
-          <StatsCard 
-            title="Completed Orders" 
-            value={String(stats.ordersByStatus?.COMPLETED ?? 0)} 
-            description="Successfully completed orders"
-          />
+      <div className="container mx-auto p-4">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Orders Management</h1>
+          <PermissionGate required="ORDER_READ">
+            <Button onClick={() => {
+              fetchOrders();
+              fetchStats();
+            }} variant="outline">
+              Refresh
+            </Button>
+          </PermissionGate>
         </div>
-      )}
 
-      <Tabs defaultValue="all" className="space-y-4">
-        <div className="relative">
-          <div className="hidden sm:block absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-          <div className="hidden sm:block absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
-          <TabsList className="w-full overflow-x-auto pb-2 scrollbar-hide sm:overflow-visible">
-            <div className="flex space-x-1 sm:space-x-2 px-1">
-              <TabsTrigger 
-                value="all" 
-                onClick={() => setActiveTab('ALL')}
-                className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm"
-              >
-                All Orders
-              </TabsTrigger>
-              {Object.entries(OrderStatus || {}).map(([key, value]) => (
-                <TabsTrigger 
-                  key={key} 
-                  value={key}
-                  onClick={() => setActiveTab(value as OrderStatus)}
+        {/* Stats Cards */}
+        {stats && (
+          <div className={`grid gap-4 mb-6 ${isKitchenStaff ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-4'}`}>
+            <StatsCard
+              title="Total Orders"
+              value={String(stats.totalOrders ?? 0)}
+              description="All time orders"
+            />
+            {!isKitchenStaff && (
+              <StatsCard
+                title="Total Revenue"
+                value={`£${(stats.totalRevenue ?? 0)}`}
+                description="Total revenue from all orders"
+              />
+            )}
+            <StatsCard
+              title="Pending Orders"
+              value={String(stats.pendingOrders)}
+              description="Orders awaiting processing"
+            />
+            <StatsCard
+              title="Completed Orders"
+              value={String(stats.completedOrders)}
+              description="Successfully completed orders"
+            />
+          </div>
+        )}
+
+        <Tabs value={activeTab === "ALL" ? "all" : activeTab.toLowerCase()} className="space-y-4">
+          <div className="relative">
+            {/* left/right fade gradients */}
+            <div className="hidden sm:block absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+            <div className="hidden sm:block absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+
+            <TabsList className="w-full overflow-x-auto pb-2 scrollbar-hide sm:overflow-visible">
+              <div className="flex space-x-1 sm:space-x-2 px-1">
+                {/* All Orders */}
+                <TabsTrigger
+                  value="all"
+                  onClick={() => setActiveTab("ALL")}
                   className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm"
                 >
-                  {value.replace(/_/g, ' ')}
+                  All Orders
                 </TabsTrigger>
-              ))}
-            </div>
-          </TabsList>
-        </div>
 
-        <TabsContent value={activeTab === 'ALL' ? 'all' : activeTab} className="space-y-4 mt-2">
-  {filteredOrders.length > 0 ? (
-    <OrderList 
-      orders={filteredOrders} 
-      onStatusUpdate={updateOrderStatus}
-      onPaymentStatusUpdate={async (orderId, paymentStatus, paymentMethod) => {
-        try {
-          await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
-          // Refresh orders and stats
-          await Promise.all([fetchOrders(), fetchStats()]);
-        } catch (error) {
-          console.error('Error updating payment status:', error);
-        }
-      }} 
-    />
-  ) : (
-    <div className="text-center py-12 border rounded-lg">
-      <p className="text-muted-foreground">No orders found</p>
-      <Button 
-        variant="outline" 
-        className="mt-4"
-        onClick={() => setActiveTab('ALL')}
-      >
-        View All Orders
-      </Button>
-    </div>
-  )}
-</TabsContent>
-      </Tabs>
-    </div>
+                {/* Dynamic statuses */}
+                {Object.entries(OrderStatus || {}).map(([key, value]) => (
+                  <TabsTrigger
+                    key={key}
+                    value={key.toLowerCase()}
+                    onClick={() => setActiveTab(value as OrderStatus)}
+                    className="whitespace-nowrap px-2 sm:px-3 py-1.5 text-xs sm:text-sm"
+                  >
+                    {value.replace(/_/g, " ")}
+                  </TabsTrigger>
+                ))}
+              </div>
+            </TabsList>
+          </div>
+
+          {/* Tab Content */}
+          <TabsContent value={activeTab === "ALL" ? "all" : activeTab.toLowerCase()} className="space-y-4 mt-2">
+            {filteredOrders.length > 0 ? (
+              <OrderList
+                orders={filteredOrders}
+                onStatusUpdate={updateOrderStatus}
+                onPaymentStatusUpdate={async (orderId, paymentStatus, paymentMethod) => {
+                  try {
+                    await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
+                    await Promise.all([fetchOrders(activeTab), fetchStats()]);
+                  } catch (error) {
+                    console.error("Error updating payment status:", error);
+                  }
+                }}
+                onEditOrder={handleEditOrder}
+              />
+            ) : (
+              <div className="text-center py-12 border rounded-lg">
+                <p className="text-muted-foreground">No orders found</p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setActiveTab("ALL")}
+                >
+                  View All Orders
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
     </WithPermission>
   );
 }
@@ -303,9 +352,10 @@ interface OrderListProps {
   orders: Order[];
   onStatusUpdate: (orderId: string, status: OrderStatus) => void;
   onPaymentStatusUpdate: (orderId: string, paymentStatus: TPaymentStatus, paymentMethod: PaymentMethod) => Promise<void>;
+  onEditOrder: (order: Order) => void;
 }
 
-function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListProps) {
+function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate, onEditOrder }: OrderListProps) {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { hasRole } = usePermissions();
@@ -362,49 +412,47 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListP
         </div>
       ) : (
         orders.map((order) => (
-        <Card key={order.id}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
+          <Card key={order.id}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <div>
-                <h3 className="font-semibold">
-                  Order #{order.orderNumber || `#${order.id.slice(0, 8).toUpperCase()}`}
-                </h3>
+                <div>
+                  <h3 className="font-semibold">
+                    Order #{order.orderNumber || `#${order.id.slice(0, 8).toUpperCase()}`}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {order.customerName || 'Guest'}
+                    {order.tableNumber && ` • Table ${order.tableNumber}`}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-medium">£{order.total.toFixed(2)}</p>
                 <p className="text-sm text-muted-foreground">
-                  {order.customerName || 'Guest'}
-                  {order.tableNumber && ` • Table ${order.tableNumber}`}
+                  {format(new Date(order.createdAt), 'MMM d, yyyy h:mm a')}
                 </p>
               </div>
-            </div>
-            <div className="text-right">
-              <p className="font-medium">£{order.total.toFixed(2)}</p>
-              <p className="text-sm text-muted-foreground">
-                {format(new Date(order.createdAt), 'MMM d, yyyy h:mm a')}
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Status</p>
-                  <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(order.status)}`}>
-                    {order.status.charAt(0) + order.status.slice(1).toLowerCase()}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {!isKitchenStaff && (
-                    <>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Status</p>
+                    <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(order.status)}`}>
+                      {order.status.charAt(0) + order.status.slice(1).toLowerCase()}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {!isKitchenStaff && (
                       <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:space-x-2">
                         <PermissionGate required="ORDER_UPDATE" disableInsteadOfHide>
                           <div className="relative w-full sm:w-auto">
                             <select
                               value={order.paymentStatus}
                               onChange={(e) => onPaymentStatusUpdate(order.id, e.target.value as TPaymentStatus, order.paymentMethod)}
-                              className={`w-full px-2 py-1 text-xs font-medium rounded-full ${
-                                order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' :
+                              className={`w-full px-2 py-1 text-xs font-medium rounded-full ${order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' :
                                 order.paymentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              } border-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 appearance-none pr-6`}
+                                  'bg-red-100 text-red-800'
+                                } border-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 appearance-none pr-6`}
                             >
                               {Object.values(PaymentStatus).map((status) => (
                                 <option key={status} value={status} className="bg-white text-gray-900">
@@ -414,7 +462,7 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListP
                             </select>
                             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-700">
                               <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                               </svg>
                             </div>
                           </div>
@@ -434,97 +482,104 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListP
                             </select>
                             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-700">
                               <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                               </svg>
                             </div>
                           </div>
                         </PermissionGate>
                       </div>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t mt-2 gap-2">
-                <span className="text-sm font-medium">Update Status</span>
-                <PermissionGate required="ORDER_UPDATE" disableInsteadOfHide>
-                  <div className="relative w-full max-w-[200px] sm:w-40">
-                    <select
-                      value={order.status}
-                      onChange={(e) => handleStatusUpdate(order.id, e.target.value as OrderStatus)}
-                      disabled={updatingOrderId === order.id}
-                      className="w-full text-sm border rounded px-2 py-1.5 bg-background disabled:opacity-50 disabled:cursor-not-allowed appearance-none pr-6 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary truncate"
-                      style={{
-                        WebkitAppearance: 'none',
-                        MozAppearance: 'none',
-                        textOverflow: 'ellipsis',
-                      }}
-                      title={order.status.charAt(0) + order.status.slice(1).toLowerCase().replace('_', ' ')}
-                    >
-                      {updatingOrderId === order.id ? (
-                        <option value="">Updating...</option>
-                      ) : (
-                        statusOptions
-                          .filter(opt => opt.value !== order.status && opt.value !== OrderStatus.REFUNDED)
-                          .map((option) => (
-                            <option 
-                              key={option.value} 
-                              value={option.value}
-                              className="bg-white text-gray-900 truncate"
-                              title={option.label}
-                            >
-                              {option.label.replace('_', ' ')}
-                            </option>
-                          ))
-                      )}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
-                      </svg>
-                    </div>
+                    )}
                   </div>
-                </PermissionGate>
-              </div>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t mt-2 gap-2">
+                  <span className="text-sm font-medium">Update Status</span>
+                  <PermissionGate required="ORDER_UPDATE" disableInsteadOfHide>
+                    <div className="relative w-full max-w-[200px] sm:w-40">
+                      <select
+                        disabled={updatingOrderId === order.id}
 
-              <div className="pt-3 border-t mt-3">
-                <h4 className="text-sm font-medium mb-2">Order Details</h4>
-                <div className="space-y-2">
-                  {order.items?.map((item, index) => (
-                    <div key={`${item.menuItemId}-${index}`} className="flex justify-between text-sm">
-                      <div>
-                        <p className="font-medium">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.quantity} × £{item.price?.toFixed(2) || '0.00'}
-                        </p>
+                        style={{
+                          WebkitAppearance: 'none' as const,
+                          MozAppearance: 'none' as const,
+                          textOverflow: 'ellipsis',
+                        }}
+                        value={order.status}
+                        onChange={(e) => handleStatusUpdate(order.id, e.target.value as OrderStatus)}
+                        title={order.status.charAt(0) + order.status.slice(1).toLowerCase().replace('_', ' ')}
+                      >
+                        {updatingOrderId === order.id ? (
+                          <option value="">Updating...</option>
+                        ) : (
+                          Object.values(OrderStatus)
+                            .filter(status => status !== order.status && status !== OrderStatus.REFUNDED)
+                            .map((status) => (
+                              <option
+                                key={status}
+                                value={status}
+                                className="bg-white text-gray-900 truncate"
+                                title={status.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')}
+                              >
+                                {status.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')}
+                              </option>
+                            ))
+                        )}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                          <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                        </svg>
                       </div>
-                      <span className="font-medium">
-                        £{((item.price || 0) * (item.quantity || 1)).toFixed(2)}
-                      </span>
                     </div>
-                  ))}
+                  </PermissionGate>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEditOrder(order)}
+                    disabled={order.status === 'COMPLETED' || order.status === 'CANCELLED'}
+                  >
+                    Edit
+                  </Button>
                 </div>
-                
-                <div className="mt-4 pt-3 border-t space-y-1">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>£{order.subtotal?.toFixed(2) || '0.00'}</span>
+
+                <div className="pt-3 border-t mt-3">
+                  <h4 className="text-sm font-medium mb-2">Order Details</h4>
+                  <div className="space-y-2">
+                    {order.items?.map((item, index) => (
+                      <div key={`${item.menuItemId}-${index}`} className="flex justify-between text-sm">
+                        <div>
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.quantity} × £{item.price?.toFixed(2) || '0.00'}
+                          </p>
+                        </div>
+                        <span className="font-medium">
+                          £{((item.price || 0) * (item.quantity || 1)).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  {order.discount ? (
-                    <div className="flex justify-between text-rose-600">
-                      <span>Discount</span>
-                      <span>£{order.discount.toFixed(2)}</span>
+
+                  <div className="mt-4 pt-3 border-t space-y-1">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>£{order.subtotal?.toFixed(2) || '0.00'}</span>
                     </div>
-                  ) : null}
-                  <div className="flex justify-between">
-                    <span>Tax</span>
-                    <span>£{order.tax?.toFixed(2) || '0.00'}</span>
+                    {order.discount ? (
+                      <div className="flex justify-between text-rose-600">
+                        <span>Discount</span>
+                        <span>£{order.discount.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between">
+                      <span>Tax</span>
+                      <span>£{order.tax?.toFixed(2) || '0.00'}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold pt-2 mt-2 border-t">
+                      <span>Total</span>
+                      <span>£{order.total?.toFixed(2) || '0.00'}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between font-semibold pt-2 mt-2 border-t">
-                    <span>Total</span>
-                    <span>£{order.total?.toFixed(2) || '0.00'}</span>
-                  </div>
-                </div>
-{/*                 
+                  {/*                 
                 <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
                   <p>Ordered: {format(new Date(order.createdAt), 'MMM d, yyyy h:mm a')}</p>
                   {order.assignedToId && (
@@ -534,11 +589,11 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate }: OrderListP
                     <p className="mt-1">Notes: {order.notes}</p>
                   )}
                 </div> */}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )))}
+            </CardContent>
+          </Card>
+        )))}
     </div>
   );
 }

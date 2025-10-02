@@ -1,17 +1,24 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
+import orderApi from '@/lib/order-api';
 import { usePermissions } from '@/hooks/use-permissions';
-import { POSLayout } from '@/components/pos/pos-layout';
 import { useOrderNotifications } from '@/hooks/userOrderNotification';
+import { POSLayout } from "@/components/pos/pos-layout"
+import { EditOrderProvider } from "@/components/pos/edit-order-context"
 
 export default function POSPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { hasRole, isLoading } = usePermissions();
   useOrderNotifications();
-  // Check if user is authorized (ADMIN or MANAGER role required)
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+  const [orderData, setOrderData] = useState(null);
+
   const isAuthorized = hasRole('ADMIN') || hasRole('MANAGER');
+  const editOrderId = searchParams.get('editOrderId');
   
   useEffect(() => {
     if (!isLoading && !isAuthorized) {
@@ -20,8 +27,29 @@ export default function POSPage() {
     }
   }, [isAuthorized, isLoading, router]);
 
-  // Show loading state while checking permissions
-  if (isLoading || !isAuthorized) {
+  // Fetch order data when in edit mode
+  useEffect(() => {
+    if (editOrderId && isAuthorized && !isLoading) {
+      const fetchOrder = async () => {
+        try {
+          setIsLoadingOrder(true);
+          const response = await orderApi.getOrder(editOrderId);
+          console.log('Order data received:', response.data);
+          setOrderData(response.data);
+        } catch (error) {
+          console.error('Error fetching order:', error);
+        } finally {
+          setIsLoadingOrder(false); 
+        }
+      };
+      if(editOrderId){
+        fetchOrder();
+      }
+    }
+  }, [editOrderId, isAuthorized, isLoading]);
+
+  // Show loading state while checking permissions or loading order
+  if (isLoading || !isAuthorized || (editOrderId && isLoadingOrder)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
@@ -31,7 +59,8 @@ export default function POSPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      <POSLayout />
+      
+      <POSLayout editOrderData={orderData} key={editOrderId} />
     </div>
   );
 }
