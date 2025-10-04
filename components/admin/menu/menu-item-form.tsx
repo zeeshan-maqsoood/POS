@@ -56,7 +56,7 @@ const menuItemFormSchema = z.object({
   categoryId: z.string().optional(), // Made optional to handle managers without categories
   branchName: z.string().min(1, { message: "Branch is required." }),
   isActive: z.boolean().default(true),
-  taxRate: z.coerce.number().min(0).max(100).default(0),
+  taxRate: z.number().min(0).default(0),
   taxExempt: z.boolean().default(false),
   tags: z.array(z.string()).default([]),
   modifiers: z
@@ -97,7 +97,7 @@ console.log(allModifiers,"allModifiers")
   const router = useRouter();
   const { branches, loading: branchesLoading, error: branchesError } = useBranches();
   const { user, isAdmin } = useUser();
-
+  
   const isEditMode = !!initialData;
 
   // Helper function to normalize branch names
@@ -657,27 +657,32 @@ console.log(modifiersRes,"modifiersRes")
                 )}
               />
               {!form.watch('taxExempt') && (
-                <FormField
-                  control={form.control}
-                  name="taxRate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tax Rate (%)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          placeholder="0"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+               <FormField
+               control={form.control}
+               name="taxRate"
+               render={({ field }) => (
+                 <FormItem>
+                   <FormLabel>Tax Rate</FormLabel>
+                   <Select
+                     onValueChange={(value) => field.onChange(Number(value))}
+                     value={field.value.toString()}
+                   >
+                     <FormControl>
+                       <SelectTrigger>
+                         <SelectValue placeholder="Select tax rate" />
+                       </SelectTrigger>
+                     </FormControl>
+                     <SelectContent>
+                       <SelectItem value="0">0%</SelectItem>
+                       <SelectItem value="20">20%</SelectItem>
+                     </SelectContent>
+                   </Select>
+                   <FormMessage />
+                 </FormItem>
+               )}
+             />
               )}
-              <FormField
+              {/* <FormField
                 control={form.control}
                 name="taxExempt"
                 render={({ field }) => (
@@ -694,7 +699,7 @@ console.log(modifiersRes,"modifiersRes")
                     </FormControl>
                   </FormItem>
                 )}
-              />
+              /> */}
               <FormField
                 control={form.control}
                 name="tags"

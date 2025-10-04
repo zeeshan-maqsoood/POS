@@ -62,7 +62,7 @@ export function MenuItems({ menuItems: items, onAddToCart }: MenuItemsProps) {
                 </p>
               </div>
               <span className="font-semibold whitespace-nowrap">
-              £{item.price.toFixed(2)}
+              £{(Number(item.price) * (1 + Number(item.taxRate) / 100)).toFixed(2)}
               </span>
             </div>
             <Button 

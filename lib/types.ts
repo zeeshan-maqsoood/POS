@@ -7,6 +7,7 @@ export interface MenuCategory {
 }
 
 export interface MenuItem {
+  modifiers: any;
   id: string;
   name: string;
   description: string;
@@ -51,6 +52,8 @@ export interface CartItem {
   modifiers?: CartItemModifier[];
   totalPrice: number; // Item price + selected modifiers price
   basePrice: number;  // Original item price without modifiers
+  price:number;
+  taxRate:number
 }
 
 export interface OrderItem {

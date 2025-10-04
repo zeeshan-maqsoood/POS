@@ -12,7 +12,6 @@ interface MenuCategoriesProps {
 }
 
 export function MenuCategories({ categories, selectedCategory, onSelectCategory }: MenuCategoriesProps) {
-  console.log(categories,"categories")
   const scrollContainer = useRef<HTMLDivElement>(null);
 
   const scroll = (scrollOffset: number) => {

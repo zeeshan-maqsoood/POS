@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CartItem } from '@/lib/types';
+import { CartItem, MenuItem } from '@/lib/types';
 import { ReceiptTemplate } from '../receipt/receipt-template';
 import { usePrintReceipt } from '@/hooks/use-print-receipt';
 import { ReceiptButton } from '../receipt/receipt-button';
@@ -40,6 +40,7 @@ interface OrderSummaryProps {
   occupiedTables?: Set<string>;
   isEditMode?: boolean;
   editOrderData?: any;
+  menuItems?: MenuItem[];
 }
 
 const branches = [
@@ -71,6 +72,7 @@ export function OrderSummary({
   occupiedTables = new Set(),
   isEditMode = false,
   editOrderData,
+  menuItems,
 }: OrderSummaryProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -99,28 +101,97 @@ export function OrderSummary({
       if (orderType === 'DINE_IN' && editOrderData.data.tableNumber) {
         onTableNumberChange(editOrderData.data.tableNumber.toString());
       }
-      console.log(editOrderData,"editOrderData")
+      console.log(editOrderData, "editOrderData")
 
       if (editOrderData.data.items && editOrderData.data.items.length > 0) {
-        const cartItems = editOrderData.data.items.map(
-          (item: { menuItemId: any; name: any; price: any; quantity: any,ImageUrl:any }) => ({
+        const updatedCart = editOrderData.data.items.map((item: any) => {
+          const matchedItem = menuItems?.find((menuItem: MenuItem) => 
+            menuItem.id === item.menuItemId
+          );
+          const modifiersTotal = (item.modifiers || []).reduce(
+            (sum: number, mod: any) => sum + (Number(mod.price) || 0), 
+            0
+          );
+          const basePrice = (Number(item.price) || 0) - modifiersTotal;
+          console.log(basePrice,"basePrice")
+          // Get the modifier IDs that were selected in the original order
+          const selectedModifierIds = new Set(
+            (item.modifiers || []).map((m: any) => m.id || m.menuItemModifierId)
+          );
+          
+          // Process modifiers to ensure they have the correct structure
+          const modifiers = (matchedItem?.modifiers || []).map((mod: any) => {
+            // Check if this modifier was in the original order's modifiers
+            const isSelected = Array.from(selectedModifierIds).some(id => 
+              id === mod.id || id === mod.menuItemModifierId
+            );
+            
+            return {
+              ...mod,
+              selected: isSelected,
+              price: Number(mod.price || 0),
+              tax: Number(mod.tax || 0)
+            };
+          });
+      
+          // Get the selected modifiers for the cart item
+          const selectedModifiers = modifiers.filter((m: any) => m.selected);
+      
+          return {
+            id: Math.random().toString(36).substr(2, 9),
             item: {
-              id: item.menuItemId,
-              name: item.name || `Item ${item.menuItemId}`,
-              price: item.price || 0,
-              description: '',
-              categoryId: '',
+              id: item.menuItemId || item.id,
+              name: item.name || matchedItem?.name || 'Unknown Item',
+              price: basePrice, // Divide by quantity to get single item price
+              description: matchedItem?.description ?? '',
+              categoryId: matchedItem?.categoryId ?? '',
               isActive: true,
-              imageUrl: item.ImageUrl || '',
-              modifiers: [],
+              imageUrl: matchedItem?.imageUrl ?? '',
+              modifiers: modifiers
             },
             quantity: item.quantity || 1,
-          })
-        );
-        onUpdateCart(cartItems);
+            selectedModifiers: selectedModifiers
+          };
+        });
+        
+        onUpdateCart(updatedCart);
+      
+        const cartItems = editOrderData.data.items.map((item: {
+          id: any;
+          description: string;
+          categoryId: string;
+          imageUrl: string;
+          modifiers: any[];
+          menuItemId: any;
+          name: any;
+          price: any;
+          quantity: any;
+          ImageUrl: any;
+          taxRate: any
+        }) => {
+          // Find the matching menu item from the menuItems array
+          const matchedItem = menuItems?.find(menuItem =>
+            menuItem.id === (item.menuItemId || item.id)
+          );
+
+          return {
+            item: {
+              id: item.menuItemId || item.id,
+              name: item.name || matchedItem?.name || 'Unknown Item',
+              price: Number(item.price) * (1 + Number(item.taxRate) / 100),
+              description: item.description ?? matchedItem?.description ?? '',
+              categoryId: item.categoryId ?? matchedItem?.categoryId ?? '',
+              isActive: true,
+              imageUrl: item.imageUrl ?? matchedItem?.imageUrl ?? '',
+              modifiers: matchedItem?.modifiers ?? []
+            },
+            quantity: item.quantity || 1
+          };
+        });
+        // onUpdateCart(cartItems);
       }
     }
-
+    
     setIsMounted(true);
 
     return () => {
@@ -142,7 +213,7 @@ export function OrderSummary({
     onUpdateCart,
     userBranch,
   ]);
-
+console.log(cart,"cartItem")
   const finalBranches = useMemo(
     () => (userBranch ? branches.filter((branch) => branch.id === userBranch) : branches),
     [userBranch]
@@ -154,8 +225,7 @@ export function OrderSummary({
       item.item.id === itemId ? { ...item, quantity: newQuantity } : item
     );
     onUpdateCart(updatedCart);
-  };  
-  console.log(cart,"cart");
+  };
 
   const removeItem = (itemId: string) => {
     onUpdateCart(cart.filter((item) => item.item.id !== itemId));
@@ -255,69 +325,94 @@ export function OrderSummary({
       toast.error('Please select a branch');
       return;
     }
-  
+
     if (orderType === 'DINE_IN' && !tableNumber) {
       toast.error('Please enter a table number');
       return;
     }
-  
+
     if (cart.length === 0) {
       toast.error('Your cart is empty');
       return;
     }
-  
+
     try {
       setIsPlacingOrder(true);
       console.log('Edit mode:', isEditMode, 'Order ID:', editOrderData?.id);
-      
-      // Map the cart items to the format expected by the API
-      const items = cart.map(({ item, quantity }) => ({
-        menuItemId: item.id,
-        quantity,
-        name: item.name,
-        price: item.price,
-      }));
+console.log(cart,"cart")
+  // In the handlePlaceOrder function, update the items mapping:
+// Calculate the total price including modifiers
+const items = cart.map(({ item, quantity, selectedModifiers = [] }) => {
   
-      const payload = {
-        tableNumber: tableNumber || undefined,
-        customerName: customerName || undefined,
-        items, // Make sure this includes all items including any new ones
-        paymentMethod: PaymentMethod.CASH,
-        branchName: selectedBranch,
-        subtotal,
-        tax,
-        total,
-        status: OrderStatus.PENDING,
-        orderType,
-        notes: '',
+  // Calculate total price of selected modifiers (including their tax)
+  const modifiersTotal = selectedModifiers.reduce((sum, mod) => sum + Number(mod.price || 0), 0);
+  const itemPrice = Number(item.price) + modifiersTotal;
+  console.log(itemPrice,"itemPrice")
+  console.log(item.price,"price")
+  console.log(selectedModifiers,"selectedModifiers")
+  return {
+    menuItemId: item.id,
+    quantity,
+    name: item.name,
+    price: itemPrice,  // This is the total price including tax and modifiers
+    tax: 0,  // Tax is already included in the price
+    modifiers: selectedModifiers.map(m => ({
+      id: m.id,
+      name: m.name,
+      price: Number(m.price || 0)
+    }))
+  };
+});
+
+// Calculate subtotal (sum of all item prices * quantities)
+const calculateSubTotal = items.reduce((total, item) => {
+  return total + (item.price * item.quantity);
+}, 0);
+
+// No additional tax calculation needed since it's included in the prices
+const calculateTax = 0;
+const calculateTotal = calculateSubTotal;  // Total is the same as subtotal since tax is included
+
+    const payload = {
+      tableNumber: tableNumber || undefined,
+      customerName: customerName || undefined,
+      items,
+      paymentMethod: PaymentMethod.CASH,
+      branchName: selectedBranch,
+      subtotal: calculateSubTotal,
+      tax: calculateTax,
+      total: calculateTotal,
+      status: OrderStatus.PENDING,
+      orderType,
+      notes: '',
+    };
+
+    console.log('Payload being sent:', JSON.stringify(payload, null, 2));
+
+    let response;
+    if (isEditMode && editOrderData?.data?.id) {
+      console.log('Updating order with ID:', editOrderData.data.id);
+
+      // Prepare the items array with modifiers for update
+      const updatePayload = {
+        ...payload,
+        items: items.map(item => ({
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+          name: item.name,
+          price: item.price,
+          tax: item.tax,
+          modifiers: item.modifiers // Include modifiers in update payload
+        }))
       };
-  
-      console.log('Payload being sent:', JSON.stringify(payload, null, 2)); // Debug log
-  
-      let response;
-      if (isEditMode && editOrderData?.data?.id) {
-        console.log('Updating order with ID:', editOrderData.data.id);
-        
-        // Prepare the items array without any ID field
-        const updatePayload = {
-          ...payload,
-          items: items.map(item => ({
-            menuItemId: item.menuItemId,
-            quantity: item.quantity,
-            name: item.name,
-            price: item.price
-          }))
-        };
-      
-        console.log('Update payload with items:', JSON.stringify(updatePayload, null, 2));
-        
-        // For update, we need to send the full order data including items to be updated
-        response = await orderApi.updateOrder(editOrderData.data.id, updatePayload);
-      }else {
-        console.log('Creating new order');
-        response = await orderApi.createOrder(payload);
-      }
-  
+
+      console.log('Update payload with items:', JSON.stringify(updatePayload, null, 2));
+      response = await orderApi.updateOrder(editOrderData.data.id, updatePayload);
+    } else {
+      console.log('Creating new order');
+      response = await orderApi.createOrder(payload);
+    }
+
       if (response?.data?.data) {
         if (socket) {
           socket.emit('new-order', {
@@ -336,7 +431,7 @@ export function OrderSummary({
     } catch (e: any) {
       console.error('Order error:', e);
       toast.error(
-        e?.response?.data?.message || 
+        e?.response?.data?.message ||
         `Failed to ${isEditMode ? 'update' : 'place'} order`
       );
     } finally {
@@ -346,7 +441,7 @@ export function OrderSummary({
 
   return (
     <div className="flex flex-col min-h-screen">
-      
+
       {/* Cart Items */}
       <div className="p-3 space-y-3 md:flex-1 md:overflow-y-auto">
         {cart.length === 0 ? (
@@ -355,73 +450,148 @@ export function OrderSummary({
             <p>Your cart is empty</p>
           </div>
         ) : (
-          cart.map(({ item, quantity }) => (
-            <div
-              key={item.id}
-              className="bg-white rounded-lg border p-3 shadow-sm flex items-start justify-between"
-            >
-              <div className="flex gap-3">
-                <div className="relative w-14 h-14">
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl.startsWith('http') 
-                        ? item.imageUrl 
-                        : `/${item.imageUrl.replace(/^\/+/, '')}`
-                      }
-                      alt={item.name}
-                      className="w-full h-full rounded-md object-cover"
-                      onError={(e) => {
-                        // If image fails to load, show the placeholder
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const placeholder = target.nextElementSibling as HTMLElement;
-                        if (placeholder) {
-                          placeholder.classList.remove('hidden');
-                        }
-                      }}
-                    />
-                  ) : null}
-                  <div className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}>
-                    <Utensils className="h-5 w-5 text-gray-400" />
+          cart.map(({ item, quantity }) => {
+            const itemPrice = Number(item.price);
+            const selectedModifiers = item.modifiers?.filter(m => m.selected) || [];
+            const modifiersTotal = selectedModifiers.reduce((sum, m) => sum + Number(m.price || 0), 0);
+            const totalItemPrice = (itemPrice + modifiersTotal) * quantity;
+
+            return (
+              <div
+                key={item.id}
+                className="bg-white rounded-lg border p-3 shadow-sm"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex gap-3 flex-1">
+                    <div className="relative w-14 h-14 flex-shrink-0">
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl.startsWith('http')
+                            ? item.imageUrl
+                            : `/${item.imageUrl.replace(/^\/+/, '')}`
+                          }
+                          alt={item.name}
+                          className="w-full h-full rounded-md object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const placeholder = target.nextElementSibling as HTMLElement;
+                            if (placeholder) {
+                              placeholder.classList.remove('hidden');
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <div className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}>
+                        <Utensils className="h-5 w-5 text-gray-400" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="flex justify-between">
+                        <p className="font-medium">{item.name}</p>
+                        <p className="font-semibold">£{totalItemPrice.toFixed(2)}</p>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        £{itemPrice.toFixed(2)} × {quantity}
+                      </p>
+
+                      {/* Modifiers Section */}
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          <p className="text-xs font-medium text-gray-500">Modifiers:</p>
+                          <div className="space-y-1">
+                            {item.modifiers.map((modifier) => (
+                              <div key={modifier.id} className="flex items-center gap-2 text-xs">
+                                <input
+                                  type="checkbox"
+                                  id={`${item.id}-${modifier.id}`}
+                                  checked={modifier.selected || false}
+                                  onChange={(e) => {
+                                    const updatedCart = cart.map(cartItem => {
+                                      if (cartItem.item.id === item.id) {
+                                        const updatedModifiers = cartItem.item.modifiers?.map(m =>
+                                          m.id === modifier.id
+                                            ? { ...m, selected: e.target.checked }
+                                            : m
+                                        ) || [];
+                                  
+                                        // Update the selectedModifiers array in the cart item
+                                        const selectedModifiers = updatedModifiers
+                                          .filter(m => m.selected)
+                                          .map(({ id, name, price, selected,tax }) => ({ 
+                                            id, 
+                                            name, 
+                                            price: Number(price || 0)+Number(tax || 0),
+                                            selected: true,
+                                           
+                                          }));
+                                  
+                                        return {
+                                          ...cartItem,
+                                          item: {
+                                            ...cartItem.item,
+                                            modifiers: updatedModifiers
+                                          },
+                                          selectedModifiers // Add selectedModifiers to the cart item
+                                        };
+                                      }
+                                      console.log(selectedModifiers,"selectedModifiers")
+                                      return cartItem;
+                                    });
+                                    onUpdateCart(updatedCart);
+                                  }}
+
+                                  className="h-3 w-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+
+                                <label
+                                  htmlFor={`${item.id}-${modifier.id}`}
+                                  className="text-gray-700 cursor-pointer"
+                                >
+                                  {modifier.name} (+£{Number(modifier.price || 0).toFixed(2)})
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end ml-2">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 w-6 p-0"
+                        onClick={() => updateQuantity(item.id, quantity - 1)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="px-2 text-sm">{quantity}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 w-6 p-0"
+                        onClick={() => updateQuantity(item.id, quantity + 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 text-xs mt-1 h-6"
+                      onClick={() => removeItem(item.id)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" /> Remove
+                    </Button>
                   </div>
                 </div>
-                <div>
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-sm text-gray-500">
-                    £{item.price.toFixed(2)} × {quantity}
-                  </p>
-                </div>
               </div>
-              <div className="flex flex-col items-end">
-                <p className="font-semibold">£{(item.price * quantity).toFixed(2)}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => updateQuantity(item.id, quantity - 1)}
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="px-2">{quantity}</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => updateQuantity(item.id, quantity + 1)}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-500 text-xs mt-1"
-                  onClick={() => removeItem(item.id)}
-                >
-                  <Trash2 className="h-3 w-3 mr-1" /> Remove
-                </Button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -550,17 +720,17 @@ export function OrderSummary({
         </div>
 
         {/* Totals */}
-        <div className="flex justify-between text-sm">
+        {/* <div className="flex justify-between text-sm">
           <span>Subtotal</span>
-          <span>£{(subtotal || 0).toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-sm">
+          <span>£{(Number(subtotal) +Number(tax) || 0).toFixed(2)}</span>
+        </div> */}
+        {/* <div className="flex justify-between text-sm">
           <span>Tax</span>
-          <span>£{(tax || 0).toFixed(2)}</span>
-        </div>
+          <span>£{(Number(tax) || 0).toFixed(2)}</span>
+        </div> */}
         <div className="flex justify-between font-semibold text-lg">
           <span>Total</span>
-          <span>£{(total || 0).toFixed(2)}</span>
+          <span>£{(Number(total) || 0).toFixed(2)}</span>
         </div>
 
         <div className="space-y-2">
@@ -576,7 +746,7 @@ export function OrderSummary({
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
                 </>
               ) : (
-                `Place Order ( £${total.toFixed(2)})`
+                `Place Order ( £${(Number(total.toFixed(2)) + Number(tax.toFixed(2))).toFixed(2)})`
               )}
             </Button>
           </PermissionGate>

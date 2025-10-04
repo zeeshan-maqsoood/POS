@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo,useRef } from 'react';
 import Link from 'next/link';
 import type { MenuItem } from '@/types/menu';
 import { MenuCategories } from "./menu-categories";
@@ -52,13 +52,14 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const hasProcessedEditOrder=useRef(false);
   const [cart, setCart] = useState<CartItem[]>(() => {
     // Initialize cart with items from editOrderData if available
     if (editOrderData?.items) {
       return editOrderData.items.map((item: any) => ({
         id: item.id || Math.random().toString(36).substr(2, 9),
         name: item.name,
-        price: parseFloat(item.price.toString()),
+        price:Number(item.price)+Number(item.taxRate)/100,
         quantity: item.quantity,
         menuItemId: item.menuItemId,
         taxRate: item.taxRate || 0,
@@ -84,16 +85,17 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           const updatedCart = orderData.items.map((item: any) => ({
             id: item.id || Math.random().toString(36).substr(2, 9),
             name: item.menuItem?.name || item.name || 'Unknown Item',
-            price: parseFloat(item.price.toString()),
+            price: Number(item.price)+Number(item.taxRate)/100,
             quantity: item.quantity,
             menuItemId: item.menuItemId || item.id,
             taxRate: item.taxRate || 0,
             tax: item.tax || 0,
+            subtotal: item.subtotal || 0,
             total: item.total || 0,
             notes: item.notes || '',
             modifiers: item.modifiers || []
           }));
-
+         console.log(updatedCart,"updatedCart")
           setCart(updatedCart);
         }
 
@@ -119,6 +121,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
       ? 'TAKEAWAY'
       : 'DINE_IN';
   });
+  console.log(editOrderData,"editOrderData")
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,80 +135,32 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
   // Initialize cart from editOrderData if it exists
   const [hasInitializedCart, setHasInitializedCart] = useState(false);
 
-  // useEffect(() => {
-  //   if (editOrderData?.items && !hasInitializedCart) {
-  //     const initialCart = editOrderData.items.map(item => ({
-  //       item: {
-  //         id: item.menuItemId,
-  //         name: item.menuItem?.name || 'Unknown Item',
-  //         price: item.price,
-  //         // Add other required item properties
-  //       },
-  //       quantity: item.quantity,
-  //       notes: item.notes || '',
-  //       modifiers: item.modifiers || [],
-  //       // Add other required cart item properties
-  //     }));
-  //     setCart(initialCart);
-  //     setHasInitializedCart(true);
-  //   }
-  // }, [editOrderData, hasInitializedCart]);
+  useEffect(() => {
+    if (editOrderData?.items && !hasInitializedCart) {
+      const initialCart = editOrderData.items.map(item => ({
+        item: {
+          id: item.menuItemId,
+          name: item.menuItem?.name || 'Unknown Item',
+          price: item.price,
+          // Add other required item properties
+        },
+        quantity: item.quantity,
+        notes: item.notes || '',
+        modifiers: item.modifiers || [],
+        // Add other required cart item properties
+      }));
+      setCart(initialCart);
+      setHasInitializedCart(true);
+    }
+  }, [editOrderData, hasInitializedCart]);
 
   // Reset initialization flag when editOrderData changes
   useEffect(() => {
     setHasInitializedCart(false);
   }, [editOrderData?.id]);
   // Add this useEffect right after your existing useEffects in POSLayout
-  useEffect(() => {
-    if (editOrderData?.data?.items) {
-      const updatedCart = editOrderData.data.items.map((item: any) => {
 
-        return {
-          id: item.id || Math.random().toString(36).substr(2, 9),
-          name: item.name,
-          price: parseFloat(item.price?.toString() || '0'),
-          quantity: item.quantity,
-          menuItemId: item.menuItemId,
-          taxRate: item.taxRate || 0,
-          tax: item.tax || 0,
-          total: item.total || 0,
-          notes: item.notes || '',
-          modifiers: item.modifiers || [],
-          item: {
-            id: item.menuItemId,
-            name: item.name,
-            price: parseFloat(item.price?.toString() || '0'),
-            description: '',
-            categoryId: '',
-            isActive: true,
-            imageUrl: '',
-            modifiers: item.modifiers || []
-          }
-        };
-      });
-      console.log('Updated cart:', updatedCart);
-      setCart(updatedCart);
-
-      // Update other form fields
-      if (editOrderData.data.orderType) {
-        setOrderType(editOrderData.data.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN');
-      }
-      if (editOrderData.data.branchName) {
-        setSelectedBranch(editOrderData.data.branchName);
-      }
-      if (editOrderData.data.tableNumber) {
-        setTableNumber(editOrderData.data.tableNumber.toString());
-      }
-      if (editOrderData.data.customerName) {
-        setCustomerName(editOrderData.data.customerName);
-      }
-    } else {
-      setCart([]);
-    }
-  }, [editOrderData]);
-  console.log('Edit order data received:', editOrderData);
-  console.log('Current cart state:', cart);
-
+console.log(menuItems,"menuItems")
 
   // Handler functions
   const handleClearCart = useCallback(() => {
@@ -446,71 +401,157 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
 
     fetchData();
   }, [user, isAdmin]);
+  console.log(menuItems,"menuItems")
+  const editOrderDataId=editOrderData?.data?.items.map((item:any)=>item.menuItemId)
+  console.log(editOrderDataId,"editOrderDataId")
+  const menuItemsIds = menuItems.filter((item:any)=>item.id)
+  console.log(menuItemsIds,"menuItemsIds")
+  // const matchedMenuItems = menuItems.filter((item: any) => 
+  //   editOrderDataId?.includes(item.id));
+  // );
+  // console.log('Matched Menu Items:', matchedMenuItems);
+// Memoize the matched menu items to prevent unnecessary recalculations
+ // Handle order data when editing
+ 
+//  const updateCartFromOrder = useCallback(() => {
+//   if (!editOrderData?.data?.items?.length || hasProcessedEditOrder.current) return;
 
-  const filteredItems = useMemo(() => {
-    if (isLoading || error) return [];
+//   const updatedCart = editOrderData.data.items.map((item: any) => {
+//     const matchedItem = menuItems.find((menuItem: MenuItem) => menuItem.id === item.menuItemId);
+    
+//     return {
+//       item: {
+//         id: item.menuItemId || item.id,
+//         name: item.name || matchedItem?.name || 'Unknown Item',
+//         price: parseFloat((item.price || matchedItem?.price || 0).toString()),
+//         description: item.description ?? matchedItem?.description ?? '',
+//         categoryId: item.categoryId ?? matchedItem?.categoryId ?? '',
+//         isActive: true,
+//         imageUrl: item.imageUrl ?? matchedItem?.imageUrl ?? '',
+//         modifiers: item.modifiers ?? []
+//       },
+//       quantity: item.quantity || 1
+//     };
+//   });
 
-    return menuItems.filter((item: MenuItem) => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
-      const categoryName = typeof item.category === 'string' ? item.category : item.category?.name;
-      const matchesCategory = selectedCategory === 'All' || categoryName === selectedCategory;
-      return matchesSearch && matchesCategory;
+//   console.log('Updated cart:', updatedCart);
+//   // Use functional update to ensure we have the latest state
+//   setCart(prevCart => {
+//     // Only update if the cart is empty or we have editOrderData
+//     if (editOrderData?.data?.items?.length) {
+//       return updatedCart;
+//     }
+//     return prevCart;
+//   });
+  
+//   hasProcessedEditOrder.current = true;
+
+//   // Update other form fields
+//   if (editOrderData.data.orderType) {
+//     setOrderType(editOrderData.data.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN');
+//   }
+//   if (editOrderData.data.branchName) {
+//     setSelectedBranch(editOrderData.data.branchName);
+//   }
+//   if (editOrderData.data.tableNumber) {
+//     setTableNumber(editOrderData.data.tableNumber.toString());
+//   }
+//   if (editOrderData.data.customerName) {
+//     setCustomerName(editOrderData.data.customerName);
+//   }
+// }, [editOrderData, menuItems]);
+
+// Update cart when menu items and order data are available
+// useEffect(() => {
+//   if (menuItems.length > 0 && editOrderData?.data?.items?.length) {
+//     updateCartFromOrder(); 
+//   }
+// }, [menuItems, editOrderData, updateCartFromOrder]);
+// Reset the processed flag when the component unmounts or when editOrderId changes
+
+// Filter items based on search and category
+const filteredItems = useMemo(() => {
+  if (isLoading || error) return [];
+
+  let result = [...menuItems];
+  
+  // Filter by search query
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    result = result.filter(item => 
+      item.name.toLowerCase().includes(query) || 
+      item.description?.toLowerCase().includes(query)
+    );
+  }
+  
+  // Filter by category
+  if (selectedCategory !== 'All') {
+    result = result.filter(item => 
+      item.categoryId === selectedCategory
+    );
+  }
+  
+  return result;
+}, [menuItems, searchQuery, selectedCategory, isLoading, error]);
+
+const addToCart = (menuItem: MenuItem, modifiers: Array<{ id: string; name: string; price: number }> = []) => {
+  setCart(prevCart => {
+    const itemKey = `${menuItem.id}-${modifiers.map(m => m.id).sort().join('-')}`;
+    const existingItemIndex = prevCart.findIndex(cartItem =>
+      `${cartItem.item.id}-${(cartItem.modifiers || []).map(m => m.id).sort().join('-')}` === itemKey
+    );
+
+    // Create a new menu item with tax-included price
+    const menuItemWithTax = {
+      ...menuItem,
+      price: Number(menuItem.price) * (1 + (Number(menuItem.taxRate) / 100))
+    };
+    
+    // Process modifiers to include tax
+    const processedModifiers = (modifiers.length > 0 ? modifiers : (menuItem.modifiers || []).map(m => ({
+      id: m.id || m.modifierId,
+      name: m.name || `Modifier ${m.id || m.modifierId}`,
+      price: Number(m.price || 0)
+    }))).map(mod => {
+      const modPrice = Number(mod.price) * (1 + (Number(menuItem.taxRate) / 100));
+      return {
+        ...mod,
+        price: modPrice,
+        originalPrice: Number(mod.price)
+      };
     });
-  }, [menuItems, searchQuery, selectedCategory, isLoading, error]);
 
-  const addToCart = (menuItem: MenuItem, modifiers: Array<{ id: string; name: string; price: number }> = []) => {
-    setCart(prevCart => {
-      // Create a unique key for this item + modifiers combination
-      const itemKey = `${menuItem.id}-${modifiers.map(m => m.id).sort().join('-')}`;
+    // Calculate total price for the item including all modifiers
+    const modifiersTotal = processedModifiers.reduce((sum, mod) => sum + mod.price, 0);
+    const itemTotal = menuItemWithTax.price + modifiersTotal;
 
-      // Check for existing item with same ID and modifiers
+    if (existingItemIndex >= 0) {
+      // Update existing item
+      const updatedCart = [...prevCart];
+      updatedCart[existingItemIndex] = {
+        ...updatedCart[existingItemIndex],
+        quantity: updatedCart[existingItemIndex].quantity + 1,
+        totalPrice: updatedCart[existingItemIndex].totalPrice + itemTotal,
+        item: menuItemWithTax, // Update with tax-included price
+        modifiers: processedModifiers
+      };
+      return updatedCart;
+    }
 
-      const existingItemIndex = prevCart.findIndex(cartItem =>
-        `${cartItem.item.id}-${(cartItem.modifiers || []).map(m => m.id).sort().join('-')}` === itemKey
-      );
-
-      // Use the provided modifiers or default to an empty array
-      const itemModifiers = modifiers.length > 0
-        ? modifiers
-        : (menuItem.modifiers || []).map(mod => ({
-          id: mod.modifierId,  // Use modifierId from the item's modifiers
-          name: mod.name || `Modifier ${mod.modifierId}`, // Add a default name if not available
-          price: mod.price || 0 // Add a default price if not available
-        }));
-
-      if (existingItemIndex >= 0) {
-        // Item with same modifiers exists, just update quantity
-        const updatedCart = [...prevCart];
-        const modifiersTotal = (updatedCart[existingItemIndex].modifiers || []).reduce((sum, mod) => sum + (mod.price || 0), 0);
-        const pricePerItem = updatedCart[existingItemIndex].basePrice + modifiersTotal;
-
-        updatedCart[existingItemIndex] = {
-          ...updatedCart[existingItemIndex],
-          quantity: updatedCart[existingItemIndex].quantity + 1,
-          totalPrice: pricePerItem * (updatedCart[existingItemIndex].quantity + 1)
-        };
-        return updatedCart;
+    // Add new item to cart
+    return [
+      ...prevCart,
+      {
+        item: menuItemWithTax, // Use the tax-included menu item
+        quantity: 1,
+        modifiers: processedModifiers,
+        totalPrice: itemTotal,
+        basePrice: menuItemWithTax.price
       }
-
-      // Calculate base price and modifiers total
-      const modifiersTotal = modifiers.reduce((sum, mod) => sum + (mod.price || 0), 0);
-      const itemTotal = menuItem.price + modifiersTotal;
-
-      // Add new item to cart
-      return [
-        ...prevCart,
-        {
-          item: menuItem,
-          quantity: 1,
-          modifiers: [...modifiers], // Include the transformed modifiers
-          totalPrice: itemTotal,
-          basePrice: menuItem.price
-        }
-      ];
-    });
-  };
-
+    ];
+  });
+};
+console.log(cart,"cart")
   const updateCartItemQuantity = (index: number, newQuantity: number) => {
     if (newQuantity < 1) {
       removeFromCart(index);
@@ -522,7 +563,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
       const item = newCart[index];
 
       if (item) {
-        const pricePerItem = item.basePrice + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
+        const pricePerItem = Number(item.basePrice)+Number(item.taxRate)/100 + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
         newCart[index] = {
           ...item,
           quantity: newQuantity,
@@ -772,6 +813,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
                 subtotal={subtotal}
                 tax={tax}
                 total={total}
+                menuItems={menuItems}
               />
             </div>
           </div>
