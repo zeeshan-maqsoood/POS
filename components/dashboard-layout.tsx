@@ -82,6 +82,7 @@
         { name: "Orders", href: "/dashboard/orders", icon: Package },
         // { name: "Customers", href: "/dashboard/customers", icon: User },
         { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
+        { name: "Reports", href: "/dashboard/reports", icon: BarChart2 },
         // { name: "Settings", href: "/dashboard/settings", icon: Settings },
       ],
       []
