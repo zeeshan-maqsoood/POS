@@ -61,10 +61,30 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: 0 },
         },
+        "popover-fade-in": {
+          from: { opacity: 0 },
+          to: { opacity: 1 },
+        },
+        "popover-fade-out": {
+          from: { opacity: 1 },
+          to: { opacity: 0 },
+        },
+        "popover-slide-in": {
+          from: { transform: "translateY(-10px)" },
+          to: { transform: "translateY(0)" },
+        },
+        "popover-slide-out": {
+          from: { transform: "translateY(0)" },
+          to: { transform: "translateY(-10px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "popover-fade-in": "popover-fade-in 0.2s ease-out",
+        "popover-fade-out": "popover-fade-out 0.2s ease-out",
+        "popover-slide-in": "popover-slide-in 0.2s ease-out",
+        "popover-slide-out": "popover-slide-out 0.2s ease-out",
       },
     },
   },

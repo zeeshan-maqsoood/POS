@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ManagerForm } from "@/components/admin/managers/new-manager-form";
-
 export default function NewManagerPage() {
   return (
     <div className="container mx-auto py-6">

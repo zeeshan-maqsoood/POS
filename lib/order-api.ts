@@ -123,6 +123,7 @@ export const orderApi = {
     }>('/orders', { params: queryParams });
   },
   getOrdersByBranch: async (branchName: string) => {
+    console.log(branchName,"branchName")
     try {
       const response = await api.get<{ 
         success: boolean;

@@ -279,10 +279,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="ADMIN">Admin</SelectItem>
                         <SelectItem value="MANAGER">Manager</SelectItem>
-                        <SelectItem value="CASHIER">Cashier</SelectItem>
-                        <SelectItem value="WAITER">Waiter</SelectItem>
                         <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
                       </SelectContent>
                     </Select>
@@ -325,34 +322,10 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                 Select the permissions to grant to this manager
               </p>
 
-              {!isPermissionsLoaded ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-muted-foreground">Loading permissions...</span>
-                </div>
-              ) : (
+              
                 <div className="space-y-6">
                   {/* Debug Button */}
-                  <div className="mb-4 p-4 bg-gray-100 rounded">
-                    <p className="text-sm">Debug Info:</p>
-                    <p>Permissions: {JSON.stringify(watchedPermissions)}</p>
-                    <p>Is Editing: {isEditing ? 'Yes' : 'No'}</p>
-                    <p>Initial Data: {initialData ? 'Present' : 'None'}</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('Test button clicked');
-                        const currentPerms = form.getValues('permissions');
-                        console.log('Current permissions:', currentPerms);
-                        const newPerms = [...(currentPerms || []), 'TEST_PERMISSION'];
-                        console.log('Setting test permissions:', newPerms);
-                        form.setValue('permissions', newPerms);
-                      }}
-                      className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm"
-                    >
-                      Test Set Permissions
-                    </button>
-                  </div>
+                 
 
                   {Object.entries(permissionGroups).map(([category, permissions]) => (
                     <div key={category} className="space-y-3">

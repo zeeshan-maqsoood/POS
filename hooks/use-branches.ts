@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export interface Branch {
+  id: Key;
   name: string;
   value: string;
 }

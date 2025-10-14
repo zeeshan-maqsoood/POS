@@ -22,6 +22,10 @@ export interface Category {
 }
 
 export interface Modifier {
+  type: string;
+  minSelection: number;
+  maxSelection: number;
+  modifierIngredients: any;
   id: string;
   name: string;
   description?: string;
@@ -33,29 +37,79 @@ export interface Modifier {
 }
 
 export interface MenuItem {
-    id: string
-    name: string
-    description?: string
-    imageUrl?: string
-    price: number
-    taxRate: number
-    taxExempt: boolean
-    isActive: boolean
-    categoryId: string
-    tags?: string[]
-    branchName?: string
-    createdAt: string
-    updatedAt: string
-    category?: { id: string; name: string }
-    modifiers?: {
-    id: string;
-    name: string;
-    price: number;
-    isActive: boolean;
-  }[]
-  }
+  menuItemIngredients: boolean;
+  ingredients: boolean;
+  id: string
+  name: string
+  description?: string
+  imageUrl?: string
+  price: number
+  taxRate: number
+  taxExempt: boolean
+  isActive: boolean
+  categoryId: string
+  tags?: string[]
+  branchName?: string
+  createdAt: string
+  updatedAt: string
+  category?: { id: string; name: string }
+  modifiers?: {
+  modifier: {
+    type: string; id: string; name: string; price: number; isActive: boolean; 
+};
+  id: string;
+  name: string;
+  price: number;
+  isActive: boolean;
+}[]
+}
   
+export interface MenuItem {
+  id: string
+  name: string
+  description?: string
+  imageUrl?: string
+  price: number
+  taxRate: number
+  taxExempt: boolean
+  isActive: boolean
+  categoryId: string
+  tags?: string[]
+  branchName?: string
+  createdAt: string
+  updatedAt: string
+  category?: { id: string; name: string }
+  modifiers?: {
+  id: string;
+  name: string;
+  price: number;
+  isActive: boolean;
+}[]
+}
 
+// Add Prisma nested operations types
+export interface MenuItemNestedOperations {
+modifiers?: {
+  connect?: { id: string }[];
+  create?: Array<{
+    name: string;
+    description?: string;
+    price: number;
+    type?: string;
+    isRequired?: boolean;
+    isActive?: boolean;
+  }>;
+  deleteMany?: {};
+};
+ingredients?: {
+  create?: Array<{
+    inventoryItemId: string;
+    quantity: number;
+    unit: string;
+  }>;
+  deleteMany?: {};
+};
+}
 // Category API
 export const categoryApi = {
   // Get all categories

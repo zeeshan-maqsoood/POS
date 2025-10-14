@@ -12,6 +12,7 @@ export default function NewMenuItemPage() {
   const router = useRouter()
 
   const handleSuccess = () => {
+    router.push('/dashboard/menu/items')
     // The form will handle the redirect after successful submission
   }
 

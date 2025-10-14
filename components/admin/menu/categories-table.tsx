@@ -89,7 +89,7 @@ export function CategoriesTable({
       cell: ({ row }) => {
         const category = row.original;
         const isOpen = openDropdownId === category.id;
-        
+
         return (
           <div className="relative">
             <Button
@@ -103,9 +103,9 @@ export function CategoriesTable({
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
-            
+
             {isOpen && (
-              <div 
+              <div
                 className="absolute right-0 z-50 mt-2 w-40 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
                 role="menu"
                 aria-orientation="vertical"
@@ -119,7 +119,7 @@ export function CategoriesTable({
                         onEdit(category);
                         setOpenDropdownId(null);
                       }}
-                      className="text-gray-700 block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                      className="text-gray-700 block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 relative"
                       role="menuitem"
                       tabIndex={-1}
                       disabled={isLoading}

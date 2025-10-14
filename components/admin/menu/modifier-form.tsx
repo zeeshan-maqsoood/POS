@@ -17,18 +17,30 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Save, X, Plus, Trash2 } from "lucide-react"
+import { Loader2, Save, X, Plus, Trash2, ChefHat, ChevronDown, ChevronUp } from "lucide-react"
 import { Modifier, modifierApi } from "@/lib/menu-api"
+import { inventoryItemApi } from "@/lib/inventory-api"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { v4 as uuidv4 } from 'uuid'
 
-const modifierOptionSchema = z.object({
+const units = ["kg", "g", "lb", "oz", "L", "ml", "pieces", "bunch", "pack", "case"]
+
+const modifierIngredientSchema = z.object({
   id: z.string().default(() => uuidv4()),
-  name: z.string().min(1, "Option name is required"),
-  price: z.coerce.number().min(0, "Price cannot be negative").default(0),
-  isDefault: z.boolean().default(false),
-  isActive: z.boolean().default(true),
+  inventoryItemId: z.string().min(1, "Inventory item is required"),
+  name: z.string().min(1, "Name is required"),
+  quantity: z.coerce.number().min(0.01, "Quantity must be greater than 0"),
+  unit: z.string().min(1, "Unit is required"),
+  currentStock: z.number().optional(),
 })
 
 const modifierFormSchema = z.object({
@@ -39,6 +51,10 @@ const modifierFormSchema = z.object({
   price: z.coerce.number().min(0, "Price cannot be negative").default(0),
   isRequired: z.boolean().default(false),
   isActive: z.boolean().default(true),
+  type: z.enum(["SINGLE", "MULTIPLE"]).default("SINGLE"),
+  minSelection: z.coerce.number().min(0).default(0),
+  maxSelection: z.coerce.number().min(1).default(1),
+  ingredients: z.array(modifierIngredientSchema).default([]),
 })
 
 type ModifierFormValues = z.infer<typeof modifierFormSchema>
@@ -51,6 +67,14 @@ interface ModifierFormProps {
 
 export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormProps) {
   const [isLoading, setIsLoading] = React.useState(false)
+  const [inventoryItems, setInventoryItems] = React.useState<{
+    id: string;
+    name: string;
+    quantity: number;
+    unit: string;
+  }[]>([])
+  const [isIngredientDropdownOpen, setIsIngredientDropdownOpen] = React.useState(false)
+  const [ingredientSearchTerm, setIngredientSearchTerm] = React.useState("")
   const router = useRouter()
 
   const form = useForm<ModifierFormValues>({
@@ -61,36 +85,123 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
       price: initialData?.price || 0,
       isRequired: initialData?.isRequired || false,
       isActive: initialData?.isActive ?? true,
+      type: initialData?.type || "SINGLE",
+
+      ingredients: initialData?.modifierIngredients?.map(ing => ({
+        id: ing.id,
+        inventoryItemId: ing.inventoryItemId,
+        name: ing.inventoryItem?.name || `Item ${ing.inventoryItemId}`,
+        quantity: ing.quantity || 0,
+        unit: ing.unit || "pieces",
+        currentStock: ing.inventoryItem?.quantity || 0
+      })) || [],
     },
   })
 
+  const { fields: ingredientFields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "ingredients",
+  })
 
+  // Fetch inventory items
+  React.useEffect(() => {
+    const fetchInventoryItems = async () => {
+      try {
+        const inventoryRes = await inventoryItemApi.getItems()
+        const inventoryData = Array.isArray(inventoryRes?.data?.data) ? inventoryRes.data.data : []
 
+        setInventoryItems(inventoryData.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity || 0,
+          unit: item.unit || "pieces",
+        })))
+      } catch (error) {
+        console.error("Error loading inventory items:", error)
+      }
+    }
 
+    fetchInventoryItems()
+  }, [])
 
+  const selectedIngredients = form.watch("ingredients") || []
+  const filteredInventoryItems = inventoryItems.filter(
+    item =>
+      item.name.toLowerCase().includes(ingredientSearchTerm.toLowerCase()) &&
+      !selectedIngredients.some(selected => selected.inventoryItemId === item.id)
+  )
 
+  const handleAddIngredient = (inventoryItem: {
+    quantity: number;
+    id: string;
+    name: string;
+    unit: string;
+  }) => {
+    append({
+      inventoryItemId: inventoryItem.id,
+      name: inventoryItem.name,
+      quantity: 1,
+      unit: inventoryItem.unit,
+      currentStock: inventoryItem.quantity || 0
+    })
+    setIngredientSearchTerm("")
+    setIsIngredientDropdownOpen(false)
+  }
+
+  const handleRemoveIngredient = (index: number) => {
+    remove(index)
+  }
+
+  const handleIngredientQuantityChange = (index: number, quantity: number) => {
+    const currentIngredients = form.getValues("ingredients") || []
+    const updatedIngredients = [...currentIngredients]
+    updatedIngredients[index] = { ...updatedIngredients[index], quantity }
+    form.setValue("ingredients", updatedIngredients)
+  }
+
+  const handleIngredientUnitChange = (index: number, unit: string) => {
+    const currentIngredients = form.getValues("ingredients") || []
+    const updatedIngredients = [...currentIngredients]
+    updatedIngredients[index] = { ...updatedIngredients[index], unit }
+    form.setValue("ingredients", updatedIngredients)
+  }
 
   const onSubmit = async (data: ModifierFormValues) => {
     try {
       setIsLoading(true)
-      
+      const { ingredients, minSelection, maxSelection, ...allData } = data
+
+      const formattedData = {
+        ...allData,
+        price: Number(allData.price),
+        // Format ingredients for the backend
+        modifierIngredients: {
+          create: ingredients.map(ing => ({
+            inventoryItemId: ing.inventoryItemId,
+            quantity: ing.quantity,
+            unit: ing.unit
+          }))
+        }
+      }
+
+      console.log('Submitting modifier data:', formattedData)
+
       if (initialData) {
         // Update existing modifier
-        await modifierApi.updateModifier(initialData.id, data)
+        await modifierApi.updateModifier(initialData.id, formattedData)
         toast({
           title: "Success",
           description: "Modifier updated successfully.",
         })
       } else {
-        console.log(data,"data")
         // Create new modifier
-        await modifierApi.createModifier(data)
+        await modifierApi.createModifier(formattedData)
         toast({
           title: "Success",
           description: "Modifier created successfully.",
         })
       }
-      
+
       onSuccess?.()
       router.refresh()
       router.push("/dashboard/menu/modifiers")
@@ -106,15 +217,14 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
     }
   }
 
-
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Basic Information */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Basic Information</h3>
-            
+
             <FormField
               control={form.control}
               name="name"
@@ -136,12 +246,12 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
                 <FormItem>
                   <FormLabel>Price *</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      min="0" 
-                      step="0.01" 
-                      placeholder="0.00" 
-                      {...field} 
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -167,8 +277,6 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
               )}
             />
 
-       
-
             <FormField
               control={form.control}
               name="isRequired"
@@ -189,114 +297,146 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="isActive"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Active</FormLabel>
+                    <FormDescription>
+                      This modifier will be available when active
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
           </div>
 
-          {/* Modifier Options */}
-          {/* <div className="space-y-4">
+          {/* Ingredients Section */}
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Options</h3>
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm"
-                onClick={addOption}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Option
-              </Button>
+              <h3 className="text-lg font-medium flex items-center gap-2">
+                <ChefHat className="h-5 w-5" />
+                Ingredients
+              </h3>
             </div>
 
-            <div className="space-y-4">
-              {fields.map((field, index) => (
-                <div key={field.id} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <h4 className="font-medium">Option {index + 1}</h4>
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-6 w-6"
-                      onClick={() => removeOption(index)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+            <div className="space-y-2">
+              {ingredientFields.map((field, index) => (
+                <div
+                  key={field.id}
+                  className="flex items-center justify-between rounded-md border p-3"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium">{field.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={field.quantity}
+                        onChange={(e) =>
+                          handleIngredientQuantityChange(
+                            index,
+                            parseFloat(e.target.value) || 0
+                          )
+                        }
+                        className="w-20 h-8"
+                      />
+                      <Select
+                        value={field.unit}
+                        onValueChange={(value) =>
+                          handleIngredientUnitChange(index, value)
+                        }
+                      >
+                        <SelectTrigger className="w-24 h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {units.map((unit) => (
+                            <SelectItem key={unit} value={unit}>
+                              {unit}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">
+                        Stock: {field.currentStock} {field.unit}
+                      </span>
+                    </div>
                   </div>
-                  
-                  <FormField
-                    control={form.control}
-                    name={`options.${index}.name`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., Extra Cheese" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name={`options.${index}.price`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Additional Price</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span className="text-gray-500 sm:text-sm">$</span>
-                              </div>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="pl-7"
-                                {...field}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name={`options.${index}.isDefault`}
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col justify-end h-full">
-                          <FormLabel>Default Selection</FormLabel>
-                          <FormControl>
-                            <div className="flex items-center space-x-2">
-                              <Switch
-                                id={`default-${index}`}
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                              <label
-                                htmlFor={`default-${index}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                              >
-                                {field.value ? 'Yes' : 'No'}
-                              </label>
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveIngredient(index)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
-              {form.formState.errors.options && (
-                <p className="text-sm font-medium text-destructive">
-                  {form.formState.errors.options.message}
-                </p>
-              )}
+
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  onClick={() => setIsIngredientDropdownOpen(!isIngredientDropdownOpen)}
+                >
+                  Add Ingredient
+                  <ChevronDown
+                    className={`ml-2 h-4 w-4 transition-transform ${isIngredientDropdownOpen ? "rotate-180" : ""
+                      }`}
+                  />
+                </Button>
+
+                {isIngredientDropdownOpen && (
+                  <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Search ingredients..."
+                        value={ingredientSearchTerm}
+                        onChange={(e) => setIngredientSearchTerm(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <ScrollArea className="h-[200px]">
+                      {filteredInventoryItems.length > 0 ? (
+                        filteredInventoryItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-2 hover:bg-accent cursor-pointer"
+                            onClick={() => handleAddIngredient(item)}
+                          >
+                            <div>
+                              <span>{item.name}</span>
+                              <p className="text-sm text-muted-foreground">
+                                Available: {item.quantity} {item.unit}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          {ingredientSearchTerm
+                            ? "No ingredients found."
+                            : "No available ingredients."}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
             </div>
-          </div> */}
+          </div>
         </div>
 
         <div className="flex justify-end space-x-4">

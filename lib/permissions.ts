@@ -40,6 +40,12 @@ export const PermissionGroups = {
     READ: 'MANAGER_READ' as const,
     CREATE: 'MANAGER_CREATE' as const,
     UPDATE: 'MANAGER_UPDATE' as const,
+  },
+  inventory:{
+    READ:"PRODUCT_READ" as const,
+    CREATE:"PRODUCT_CREATE" as const,
+    UPDATE:"PRODUCT_UPDATE" as const,
+    DELETE:"PRODUCT_DELETE" as const,
   }
 } as const;
 
@@ -69,6 +75,10 @@ export const DefaultRolePermissions = {
     PermissionGroups.manager.READ,
     PermissionGroups.manager.CREATE,
     PermissionGroups.manager.UPDATE,
+    PermissionGroups.inventory.CREATE,
+    PermissionGroups.inventory.UPDATE,
+    PermissionGroups.inventory.READ,
+    PermissionGroups.inventory.DELETE
   ],
   CASHIER: [
     PermissionGroups.ORDER.READ,

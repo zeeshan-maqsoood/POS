@@ -730,7 +730,7 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
         </div> */}
         <div className="flex justify-between font-semibold text-lg">
           <span>Total</span>
-          <span>£{(Number(total) || 0).toFixed(2)}</span>
+          <span>£{(Number(total)-Number(tax) || 0).toFixed(2)}</span>
         </div>
 
         <div className="space-y-2">
@@ -746,7 +746,7 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
                 </>
               ) : (
-                `Place Order ( £${(Number(total.toFixed(2)) + Number(tax.toFixed(2))).toFixed(2)})`
+                `Place Order ( £${(Number(total.toFixed(2))-Number(tax.toFixed(2)))})`
               )}
             </Button>
           </PermissionGate>

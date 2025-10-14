@@ -1,7 +1,19 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
+/* @import 'tailwindcss';
+@import 'tw-animate-css'; */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@import "@radix-ui/colors/black-alpha.css";
+@import "@radix-ui/colors/green.css";
+@import "@radix-ui/colors/mauve.css";
+@import "@radix-ui/colors/violet.css";
+@import "@radix-ui/colors/white-alpha.css";
+
+@import "@radix-ui/react-popover/dist/index.css";
 
 @custom-variant dark (&:is(.dark *));
+/* @custom-variant dark (&:is(.dark *)); */
 
 :root {
   --background: oklch(1 0 0);

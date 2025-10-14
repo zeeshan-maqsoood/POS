@@ -694,7 +694,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                     <SelectContent>
                       <SelectItem value="MANAGER">Manager</SelectItem>
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
-                      <SelectItem value="WAITER">Waiter</SelectItem>
+                   
                     </SelectContent>
                   </Select>
                   <FormMessage />
