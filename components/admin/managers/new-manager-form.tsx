@@ -142,7 +142,11 @@
 //         role: data.role,
 //         status: data.status,
 //         branch: data.branch,
-//         permissions: data.permissions
+//         permissions: data.permissions,
+//         shiftStartTime: data.shiftStartTime,
+//         shiftEndTime: data.shiftEndTime,
+//         shiftDays: data.shiftDays,
+//         isShiftActive: data.isShiftActive,
 //       };
 
 //       if (isEditing && initialData?.id) {
@@ -436,18 +440,50 @@ import managerApi from "@/lib/manager-api";
 // Import the permission utilities
 import { getAllPermissions, getPermissionLabel, Permission } from "@/lib/permissions";
 
+// Define shift schedule for each day
+const shiftScheduleSchema = z.object({
+  MONDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+  TUESDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+  WEDNESDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+  THURSDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+  FRIDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+  SATURDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+  SUNDAY: z.object({
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).optional(),
+}).optional();
+
 // Define the form schema
 export const managerFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
-  password: z
-    .string()
-    .min(6, { message: "Password must be at least 6 characters." })
-    .optional(),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional(),
   role: z.enum(["MANAGER", "KITCHEN_STAFF","WAITER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   branch: z.string().min(1, { message: "Please select a branch." }),
   permissions: z.array(z.string()).default([]),
+  // Shift management fields - now per day
+  shiftSchedule: shiftScheduleSchema.optional(),
+  isShiftActive: z.boolean().optional(),
 });
 
 // Define types
@@ -462,6 +498,20 @@ interface ManagerFormProps {
     role: Role;
     status: Status;
     permissions?: string[];
+    shiftSchedule?: {
+      MONDAY?: { startTime?: string; endTime?: string };
+      TUESDAY?: { startTime?: string; endTime?: string };
+      WEDNESDAY?: { startTime?: string; endTime?: string };
+      THURSDAY?: { startTime?: string; endTime?: string };
+      FRIDAY?: { startTime?: string; endTime?: string };
+      SATURDAY?: { startTime?: string; endTime?: string };
+      SUNDAY?: { startTime?: string; endTime?: string };
+    };
+    // Legacy fields for backward compatibility
+    shiftStartTime?: string;
+    shiftEndTime?: string;
+    shiftDays?: string[];
+    isShiftActive?: boolean;
   };
   isEditing?: boolean;
 }
@@ -523,6 +573,16 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
     status: "ACTIVE",
     branch: "",
     permissions: getDefaultManagerPermissions(),
+    shiftSchedule: {
+      MONDAY: { startTime: "", endTime: "" },
+      TUESDAY: { startTime: "", endTime: "" },
+      WEDNESDAY: { startTime: "", endTime: "" },
+      THURSDAY: { startTime: "", endTime: "" },
+      FRIDAY: { startTime: "", endTime: "" },
+      SATURDAY: { startTime: "", endTime: "" },
+      SUNDAY: { startTime: "", endTime: "" },
+    },
+    isShiftActive: true,
   };
 
   const form = useForm<ManagerFormValues>({
@@ -543,11 +603,30 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
         ? LEGACY_BRANCH_MAPPING[initialData.branch]
         : initialData.branch;
 
+      // Convert old shift format to new shiftSchedule format for editing
+      let shiftSchedule: any = defaultValues.shiftSchedule;
+      if (initialData.shiftSchedule) {
+        shiftSchedule = initialData.shiftSchedule;
+      } else if (initialData.shiftStartTime && initialData.shiftEndTime && initialData.shiftDays) {
+        // Convert from old format to new format
+        const { shiftStartTime, shiftEndTime, shiftDays } = initialData as any;
+        shiftSchedule = {
+          MONDAY: shiftDays?.includes('MONDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+          TUESDAY: shiftDays?.includes('TUESDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+          WEDNESDAY: shiftDays?.includes('WEDNESDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+          THURSDAY: shiftDays?.includes('THURSDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+          FRIDAY: shiftDays?.includes('FRIDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+          SATURDAY: shiftDays?.includes('SATURDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+          SUNDAY: shiftDays?.includes('SUNDAY') ? { startTime: shiftStartTime, endTime: shiftEndTime } : { startTime: "", endTime: "" },
+        };
+      }
+
       form.reset({
         ...defaultValues,
         ...initialData,
         branch: displayBranch, // Use mapped branch name for display
         permissions: initialData.permissions || [],
+        shiftSchedule,
       });
     }
   }, [initialData]);
@@ -571,6 +650,9 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
         status: data.status,
         branch: data.branch, // This will now be "Uptown Branch" instead of "branch3"
         permissions: data.role === "KITCHEN_STAFF" ? KITCHEN_STAFF_PERMISSIONS : data.permissions,
+        // Send the complete shift schedule for all days
+        shiftSchedule: data.shiftSchedule,
+        isShiftActive: data.isShiftActive,
       };
 
       console.log('Sending manager data to API:', managerData);
@@ -832,6 +914,88 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Shift Management */}
+          <div className="space-y-4 pt-6 border-t">
+            <h3 className="text-lg font-medium">Shift Management</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Configure shift times for each day of the week
+            </p>
+
+            <div className="space-y-4">
+              {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].map((day) => (
+                <div key={day} className="p-4 border rounded-lg">
+                  <h4 className="font-medium mb-3 capitalize">{day.toLowerCase()}</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name={`shiftSchedule.${day}.startTime` as any}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Start Time</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="time"
+                              {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name={`shiftSchedule.${day}.endTime` as any}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>End Time</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="time"
+                              {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <FormField
+              control={form.control}
+              name="isShiftActive"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value || false}
+                      onCheckedChange={field.onChange}
+                      disabled={isLoading}
+                    />
+                    
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>
+                      Enable Shift Management
+                    </FormLabel>
+                    <p className="text-sm text-muted-foreground">
+                      When enabled, this manager will have scheduled shift times for each day
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
           </div>
 
           {/* Actions */}

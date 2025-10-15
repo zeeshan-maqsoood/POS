@@ -14,7 +14,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-r
 
 interface DataTablePaginationProps<TData> {
   table: Table<TData>
-}
+} 
 
 export function DataTablePagination<TData>({
   table,

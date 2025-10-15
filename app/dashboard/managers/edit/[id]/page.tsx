@@ -46,10 +46,21 @@ export const managerFormSchema = z.object({
     message: "Please select a branch.",
   }),
   permissions: z.array(z.string()).default([]),
+  // Updated shift management - now uses shiftSchedule JSON field
+  shiftSchedule: z.object({
+    MONDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+    TUESDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+    WEDNESDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+    THURSDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+    FRIDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+    SATURDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+    SUNDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
+  }).optional(),
+  isShiftActive: z.boolean().optional(),
 });
 
 // Define types
-type Role = "MANAGER" | "KITCHEN_STAFF";
+type Role = "MANAGER" | "KITCHEN_STAFF" | "ADMIN" | "CASHIER" | "WAITER" | "USER";
 type Status = "ACTIVE" | "INACTIVE";
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -64,6 +75,17 @@ interface ManagerFormProps {
     lastLogin?: string;
     createdAt?: string;
     updatedAt?: string;
+    // Updated shift management - now uses shiftSchedule JSON field
+    shiftSchedule?: {
+      MONDAY?: { startTime?: string; endTime?: string };
+      TUESDAY?: { startTime?: string; endTime?: string };
+      WEDNESDAY?: { startTime?: string; endTime?: string };
+      THURSDAY?: { startTime?: string; endTime?: string };
+      FRIDAY?: { startTime?: string; endTime?: string };
+      SATURDAY?: { startTime?: string; endTime?: string };
+      SUNDAY?: { startTime?: string; endTime?: string };
+    };
+    isShiftActive?: boolean;
   };
   isEditing?: boolean;
 }
@@ -130,6 +152,17 @@ export default function EditManagerPage({ params }: { params: { id: string } }) 
           lastLogin: managerData.lastLogin,
           createdAt: managerData.createdAt,
           updatedAt: managerData.updatedAt,
+          // Use the new shiftSchedule structure
+          shiftSchedule: managerData.shiftSchedule || {
+            MONDAY: { startTime: "", endTime: "" },
+            TUESDAY: { startTime: "", endTime: "" },
+            WEDNESDAY: { startTime: "", endTime: "" },
+            THURSDAY: { startTime: "", endTime: "" },
+            FRIDAY: { startTime: "", endTime: "" },
+            SATURDAY: { startTime: "", endTime: "" },
+            SUNDAY: { startTime: "", endTime: "" },
+          },
+          isShiftActive: managerData.isShiftActive || false,
         });
       } catch (err: any) {
         setError(err.message || 'Failed to load manager');
@@ -193,6 +226,17 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
     status: initialData?.status || "ACTIVE",
     branch: initialData?.branch || "",
     permissions: initialData?.permissions || [],
+    // Updated shift management - now uses shiftSchedule JSON field
+    shiftSchedule: initialData?.shiftSchedule || {
+      MONDAY: { startTime: "", endTime: "" },
+      TUESDAY: { startTime: "", endTime: "" },
+      WEDNESDAY: { startTime: "", endTime: "" },
+      THURSDAY: { startTime: "", endTime: "" },
+      FRIDAY: { startTime: "", endTime: "" },
+      SATURDAY: { startTime: "", endTime: "" },
+      SUNDAY: { startTime: "", endTime: "" },
+    },
+    isShiftActive: initialData?.isShiftActive || false,
   };
 
   const form = useForm<ManagerFormValues>({
@@ -300,7 +344,7 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                   <FormLabel>Role</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -327,7 +371,7 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                   <FormLabel>Branch</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -357,7 +401,7 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                   <FormLabel>Status</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -437,6 +481,132 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Shift Management */}
+          <div className="space-y-4 pt-6 border-t">
+            <h3 className="text-lg font-medium">Shift Management</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Configure shift times and working days for this manager
+            </p>
+
+            {/* Days of the week with time inputs */}
+            <div className="space-y-4">
+              {[
+                { key: 'MONDAY', label: 'Monday' },
+                { key: 'TUESDAY', label: 'Tuesday' },
+                { key: 'WEDNESDAY', label: 'Wednesday' },
+                { key: 'THURSDAY', label: 'Thursday' },
+                { key: 'FRIDAY', label: 'Friday' },
+                { key: 'SATURDAY', label: 'Saturday' },
+                { key: 'SUNDAY', label: 'Sunday' },
+              ].map((day) => (
+                <div key={day.key} className="p-4 border rounded-lg">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Checkbox
+                      checked={(() => {
+                        const schedule = form.watch('shiftSchedule');
+                        return schedule?.[day.key]?.startTime;
+                      })()}
+                      onCheckedChange={(checked) => {
+                        const currentSchedule = form.getValues('shiftSchedule') || {};
+                        if (checked) {
+                          currentSchedule[day.key] = { startTime: "", endTime: "" };
+                        } else {
+                          delete currentSchedule[day.key];
+                        }
+                        form.setValue('shiftSchedule', currentSchedule);
+                      }}
+                      disabled={isLoading}
+                    />
+                    <label className="text-sm font-medium">{day.label}</label>
+                  </div>
+
+                  {(() => {
+                    const schedule = form.watch('shiftSchedule');
+                    return schedule?.[day.key];
+                  })() && (
+                    <div className="grid grid-cols-2 gap-3 ml-6">
+                      <FormField
+                        control={form.control}
+                        name="shiftSchedule"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Start Time</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                value={field.value?.[day.key]?.startTime || ""}
+                                onChange={(e) => {
+                                  const currentSchedule = field.value || {};
+                                  if (!currentSchedule[day.key]) {
+                                    currentSchedule[day.key] = { startTime: "", endTime: "" };
+                                  }
+                                  currentSchedule[day.key].startTime = e.target.value;
+                                  field.onChange(currentSchedule);
+                                }}
+                                disabled={isLoading}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="shiftSchedule"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">End Time</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                value={field.value?.[day.key]?.endTime || ""}
+                                onChange={(e) => {
+                                  const currentSchedule = field.value || {};
+                                  if (!currentSchedule[day.key]) {
+                                    currentSchedule[day.key] = { startTime: "", endTime: "" };
+                                  }
+                                  currentSchedule[day.key].endTime = e.target.value;
+                                  field.onChange(currentSchedule);
+                                }}
+                                disabled={isLoading}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <FormField
+              control={form.control}
+              name="isShiftActive"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value || false}
+                      onCheckedChange={field.onChange}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>
+                      Enable Shift Management
+                    </FormLabel>
+                    <p className="text-sm text-muted-foreground">
+                      When enabled, this manager will have scheduled shift times and working days
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
           </div>
 
           {/* Buttons */}

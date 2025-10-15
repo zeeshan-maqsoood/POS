@@ -40,6 +40,41 @@ console.log(managers,"managers")
       header: "Role",
     },
     {
+      accessorKey: "shiftInfo",
+      header: "Shift",
+      cell: ({ row }) => {
+        const manager = row.original;
+        if (!manager.isShiftActive) {
+          return <span className="text-muted-foreground">No shift</span>;
+        }
+
+        // Parse shiftSchedule JSON field
+        const shiftSchedule = manager.shiftSchedule;
+        if (!shiftSchedule) {
+          return <span className="text-muted-foreground">No schedule</span>;
+        }
+
+        // Extract days and times from shiftSchedule
+        const daysWithShifts = Object.entries(shiftSchedule)
+          .filter(([_, schedule]) => schedule?.startTime && schedule?.endTime)
+          .map(([day, schedule]) => ({
+            day: day.slice(0, 3), // MON, TUE, etc.
+            time: `${schedule!.startTime} - ${schedule!.endTime}`
+          }));
+
+        if (daysWithShifts.length === 0) {
+          return <span className="text-muted-foreground">No schedule</span>;
+        }
+
+        return (
+          <div className="text-sm">
+            <div className="font-medium">{daysWithShifts.map(d => d.day).join(', ')}</div>
+            <div className="text-muted-foreground">{daysWithShifts[0]?.time}</div>
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: "permissions",
       header: "Permissions",
       cell: ({ row }) => {

@@ -40,6 +40,11 @@ export const managerFormSchema = z.object({
   role: z.enum(["MANAGER", "KITCHEN_STAFF","WAITER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   permissions: z.array(z.string()).default([]).transform((val) => val || []),
+  // Shift management fields
+  shiftStartTime: z.string().optional(),
+  shiftEndTime: z.string().optional(),
+  shiftDays: z.array(z.string()).optional(),
+  isShiftActive: z.boolean().optional(),
 });
 
 // Define types
@@ -54,6 +59,10 @@ interface ManagerFormProps {
     role: Role;
     status: Status;
     permissions?: string[];
+    shiftStartTime?: string;
+    shiftEndTime?: string;
+    shiftDays?: string[];
+    isShiftActive?: boolean;
   };
   isEditing?: boolean;
 }
@@ -121,6 +130,10 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
     role: "MANAGER" as const,
     status: "ACTIVE" as const,
     permissions: getDefaultPermissionsForRole("MANAGER"),
+    shiftStartTime: "",
+    shiftEndTime: "",
+    shiftDays: [],
+    isShiftActive: false,
   };
 
   const form = useForm<ManagerFormValues>({
@@ -383,10 +396,109 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                     </div>
                   ))}
                 </div>
-              )}
+              
+            {/* Shift Management Section */}
+            <div className="space-y-4 pt-6 border-t">
+              <h3 className="text-lg font-medium">Shift Management</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Configure shift times and working days for this manager
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="shiftStartTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Shift Start Time</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="shiftEndTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Shift End Time</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="shiftDays"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Working Days</FormLabel>
+                    <div className="grid grid-cols-7 gap-2">
+                      {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].map((day) => (
+                        <div key={day} className="flex items-center space-x-2">
+                          <Checkbox
+                            checked={field.value?.includes(day) || false}
+                            onCheckedChange={(checked) => {
+                              const currentDays = field.value || [];
+                              let newDays;
+                              if (checked) {
+                                newDays = [...currentDays, day];
+                              } else {
+                                newDays = currentDays.filter(d => d !== day);
+                              }
+                              field.onChange(newDays);
+                            }}
+                          />
+                          <label className="text-sm font-medium leading-none">
+                            {day.slice(0, 3)}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isShiftActive"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value || false}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>
+                        Enable Shift Management
+                      </FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        When enabled, this manager will have scheduled shift times and working days
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
             </div>
             
-            <div className="flex justify-end pt-6 border-t">
               <Button 
                 type="button" 
                 variant="outline" 

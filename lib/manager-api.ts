@@ -4,7 +4,6 @@ import api from '@/utils/api';
 // Types
 // ==================
 export interface Manager {
-  permissions: any;
   id: string;
   name: string;
   email: string;
@@ -14,6 +13,18 @@ export interface Manager {
   createdAt: string;
   updatedAt: string;
   branch?: string;
+  permissions: any;
+  // Updated shift management - now uses shiftSchedule JSON field
+  shiftSchedule?: {
+    MONDAY?: { startTime?: string; endTime?: string };
+    TUESDAY?: { startTime?: string; endTime?: string };
+    WEDNESDAY?: { startTime?: string; endTime?: string };
+    THURSDAY?: { startTime?: string; endTime?: string };
+    FRIDAY?: { startTime?: string; endTime?: string };
+    SATURDAY?: { startTime?: string; endTime?: string };
+    SUNDAY?: { startTime?: string; endTime?: string };
+  };
+  isShiftActive?: boolean;
 }
 
 export interface CreateManagerData {
@@ -23,6 +34,18 @@ export interface CreateManagerData {
   role: 'ADMIN' | 'MANAGER' | 'CASHIER' | 'WAITER' | 'KITCHEN_STAFF' | 'USER';
   status?: 'ACTIVE' | 'INACTIVE';
   permissions?: string[];
+  branch?: string;
+  // Updated shift management - now uses shiftSchedule JSON field
+  shiftSchedule?: {
+    MONDAY?: { startTime?: string; endTime?: string };
+    TUESDAY?: { startTime?: string; endTime?: string };
+    WEDNESDAY?: { startTime?: string; endTime?: string };
+    THURSDAY?: { startTime?: string; endTime?: string };
+    FRIDAY?: { startTime?: string; endTime?: string };
+    SATURDAY?: { startTime?: string; endTime?: string };
+    SUNDAY?: { startTime?: string; endTime?: string };
+  };
+  isShiftActive?: boolean;
 }
 
 export interface UpdateManagerData {
@@ -32,6 +55,18 @@ export interface UpdateManagerData {
   status?: 'ACTIVE' | 'INACTIVE';
   password?: string;
   permissions?: string[];
+  branch?: string;
+  // Updated shift management - now uses shiftSchedule JSON field
+  shiftSchedule?: {
+    MONDAY?: { startTime?: string; endTime?: string };
+    TUESDAY?: { startTime?: string; endTime?: string };
+    WEDNESDAY?: { startTime?: string; endTime?: string };
+    THURSDAY?: { startTime?: string; endTime?: string };
+    FRIDAY?: { startTime?: string; endTime?: string };
+    SATURDAY?: { startTime?: string; endTime?: string };
+    SUNDAY?: { startTime?: string; endTime?: string };
+  };
+  isShiftActive?: boolean;
 }
 
 export interface LoginData {

@@ -1,5 +1,4 @@
 export interface InventoryItem {
-  [x: string]: string
   id: string
   name: string
   description?: string
@@ -360,3 +359,161 @@ export const locations = [
 
 export type Unit = typeof units[number]
 export type Location = typeof locations[number]
+
+export interface Supplier {
+  id: string
+  code: string
+  name: string
+  legalName?: string
+  description?: string
+  taxNumber?: string
+  registrationNumber?: string
+  email?: string
+  phone?: string
+  mobile?: string
+  website?: string
+  address?: string
+  city?: string
+  state?: string
+  country: string
+  postalCode?: string
+  businessType?: string
+  industry?: string
+  establishedYear?: number
+  employeeCount?: number
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "BLACKLISTED"
+  rating?: "EXCELLENT" | "GOOD" | "AVERAGE" | "POOR" | "VERY_POOR"
+  creditLimit?: number
+  paymentTerms: "NET_15" | "NET_30" | "NET_45" | "NET_60" | "DUE_ON_RECEIPT" | "ADVANCE"
+  bankName?: string
+  bankAccount?: string
+  bankRouting?: string
+  currency: string
+  contacts: SupplierContact[]
+  products: SupplierProduct[]
+  purchaseOrders: any[]
+  evaluations: SupplierEvaluation[]
+  createdById: string
+  createdAt: string
+  updatedAt: string
+  notes?: string
+  purchaseOrderCount: number
+  productCount: number
+}
+
+export interface SupplierContact {
+  id: string
+  supplierId: string
+  name: string
+  position?: string
+  email?: string
+  phone?: string
+  mobile?: string
+  isPrimary: boolean
+  department?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SupplierProduct {
+  id: string
+  supplierId: string
+  inventoryItemId: string
+  supplierCode?: string
+  supplierName?: string
+  unitPrice: number
+  minOrderQuantity?: number
+  packSize?: string
+  leadTime?: number
+  isActive: boolean
+  previousPrice?: number
+  priceLastUpdated?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+  supplier?: Supplier
+  inventoryItem?: InventoryItem
+}
+
+export interface SupplierEvaluation {
+  id: string
+  supplierId: string
+  evaluationDate: string
+  evaluatedById: string
+  qualityRating: number
+  deliveryRating: number
+  priceRating: number
+  serviceRating: number
+  communicationRating: number
+  overallRating: number
+  comments?: string
+  recommendations?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Request DTOs for forms
+export interface SupplierFormData {
+  code?: string
+  name: string
+  legalName?: string
+  description?: string
+  taxNumber?: string
+  registrationNumber?: string
+  email?: string
+  phone?: string
+  mobile?: string
+  website?: string
+  address?: string
+  city?: string
+  state?: string
+  country?: string
+  postalCode?: string
+  businessType?: string
+  industry?: string
+  establishedYear?: number
+  employeeCount?: number
+  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "BLACKLISTED"
+  rating?: "EXCELLENT" | "GOOD" | "AVERAGE" | "POOR" | "VERY_POOR"
+  creditLimit?: number
+  paymentTerms?: "NET_15" | "NET_30" | "NET_45" | "NET_60" | "DUE_ON_RECEIPT" | "ADVANCE"
+  bankName?: string
+  bankAccount?: string
+  bankRouting?: string
+  currency?: string
+  notes?: string
+}
+
+export interface SupplierContactFormData {
+  name: string
+  position?: string
+  email?: string
+  phone?: string
+  mobile?: string
+  isPrimary?: boolean
+  department?: string
+  notes?: string
+}
+
+export interface SupplierProductFormData {
+  supplierCode?: string
+  supplierName?: string
+  unitPrice: number
+  minOrderQuantity?: number
+  packSize?: string
+  leadTime?: number
+  isActive?: boolean
+  notes?: string
+}
+
+export interface SupplierEvaluationFormData {
+  qualityRating: number
+  deliveryRating: number
+  priceRating: number
+  serviceRating: number
+  communicationRating: number
+  comments?: string
+  recommendations?: string
+}

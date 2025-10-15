@@ -706,7 +706,6 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                   onOrderTypeChange(value as OrderType);
                 }
               }}
-              disabled={!isEditMode}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select order type" />

@@ -106,6 +106,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const inventoryItems = [
     { name: "All Inventory Items", href: "/dashboard/Inventory" },
     { name: "Categories", href: "/dashboard/Inventory/categories" },
+    {name:"Suppliers",href:"/dashboard/Inventory/suppliers"}
   
   ]
 

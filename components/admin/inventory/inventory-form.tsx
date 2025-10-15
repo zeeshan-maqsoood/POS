@@ -21,8 +21,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { inventoryItemApi, inventoryCategoryApi, inventorySubcategoryApi } from "@/lib/inventory-api"
-import { InventoryItem, InventoryCategory, InventorySubcategory } from "@/types/inventory"
+import { inventoryItemApi, inventoryCategoryApi, inventorySubcategoryApi, supplierApi } from "@/lib/inventory-api"
+import { InventoryItem, InventoryCategory, InventorySubcategory, Supplier } from "@/types/inventory"
 
 const units = ["kg", "g", "lb", "oz", "L", "ml", "pieces", "bunch", "pack", "case"]
 const locations = ["Walk-in Fridge", "Freezer", "Dry Storage", "Pantry", "Wine Cellar", "Prep Station"]
@@ -60,6 +60,7 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
     const router = useRouter()
     const [categories, setCategories] = useState<InventoryCategory[]>([])
     const [subcategories, setSubcategories] = useState<InventorySubcategory[]>([])
+    const [suppliers, setSuppliers] = useState<Supplier[]>([])
     const [loading, setLoading] = useState(false)
 
     const form = useForm<InventoryFormData>({
@@ -96,19 +97,19 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
         }
     })
 
-    // Fetch categories on component mount
+    // Fetch suppliers on component mount
     useEffect(() => {
-        const fetchCategories = async () => {
+        const fetchSuppliers = async () => {
             try {
-                const response = await inventoryCategoryApi.getCategories()
+                const response = await supplierApi.getSuppliers()
                 if (response.data.success) {
-                    setCategories(response.data.data)
+                    setSuppliers(response.data.data)
                 }
             } catch (err) {
-                console.error('Error fetching categories:', err)
+                console.error('Error fetching suppliers:', err)
             }
         }
-        fetchCategories()
+        fetchSuppliers()
     }, [])
 
     // Fetch subcategories when category changes

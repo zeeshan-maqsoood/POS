@@ -486,8 +486,8 @@ const filteredItems = useMemo(() => {
   
   // Filter by category
   if (selectedCategory !== 'All') {
-    result = result.filter(item => 
-      item.categoryId === selectedCategory
+    result = result.filter(item =>
+      item.category === selectedCategory
     );
   }
   

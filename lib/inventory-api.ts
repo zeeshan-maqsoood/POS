@@ -1,4 +1,5 @@
 import api from '@/utils/api';
+import { Supplier, SupplierFormData, SupplierProduct, SupplierProductFormData } from '@/types/inventory';
 
 // Types
 export interface ApiResponse<T> {
@@ -126,9 +127,49 @@ export const inventoryItemApi = {
     api.delete<ApiResponse<null>>(`/inventory/items/${id}`)
 };
 
+// Supplier API
+export const supplierApi = {
+  // Get all suppliers
+  getSuppliers: (params?: any) => 
+    api.get<ApiResponse<Supplier[]>>('/inventory/suppliers', { params }),
+  
+  // Get a single supplier by ID
+  getSupplier: (id: string) => 
+    api.get<ApiResponse<Supplier>>(`/inventory/suppliers/${id}`),
+  
+  // Create a new supplier
+  createSupplier: (data: SupplierFormData) => 
+    api.post<ApiResponse<Supplier>>('/inventory/suppliers', data),
+  
+  // Update a supplier
+  updateSupplier: (id: string, data: Partial<SupplierFormData>) => 
+    api.put<ApiResponse<Supplier>>(`/inventory/suppliers/${id}`, data),
+  
+  // Delete a supplier
+  deleteSupplier: (id: string) => 
+    api.delete<ApiResponse<null>>(`/inventory/suppliers/${id}`),
+
+  // Get supplier products
+  getSupplierProducts: (supplierId: string, params?: any) => 
+    api.get<ApiResponse<SupplierProduct[]>>(`/inventory/suppliers/${supplierId}/products`, { params }),
+
+  // Add product to supplier
+  addProductToSupplier: (supplierId: string, data: SupplierProductFormData & { inventoryItemId: string }) => 
+    api.post<ApiResponse<SupplierProduct>>(`/inventory/suppliers/${supplierId}/products`, data),
+
+  // Update supplier product
+  updateSupplierProduct: (supplierProductId: string, data: Partial<SupplierProductFormData>) => 
+    api.put<ApiResponse<SupplierProduct>>(`/inventory/supplier-products/${supplierProductId}`, data),
+
+  // Remove product from supplier
+  removeSupplierProduct: (supplierProductId: string) => 
+    api.delete<ApiResponse<null>>(`/inventory/supplier-products/${supplierProductId}`)
+};
+
 // Export all APIs
 export default {
   category: inventoryCategoryApi,
   subcategory: inventorySubcategoryApi,
-  item: inventoryItemApi
+  item: inventoryItemApi,
+  supplier: supplierApi
 };
