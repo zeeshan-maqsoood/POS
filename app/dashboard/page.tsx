@@ -116,6 +116,8 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
+  const [mounted, setMounted] = useState(false);
+  const [cache, setCache] = useState<Record<string, DashboardData>>({});
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardData>({
     totalRevenue: 0,
