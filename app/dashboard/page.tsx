@@ -17,7 +17,9 @@ import {
 } from "lucide-react"
 import { formatEuro } from "@/lib/format-currency"
 import { dashboardApi } from "@/lib/dashbaord-api"
+import { shiftApi } from "@/lib/shift-api"
 import type { DashboardData } from "@/lib/dashbaord-api"
+import type { Shift } from "@/lib/shift-api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -164,16 +166,58 @@ export default function DashboardPage() {
   });
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
   const [refreshing, setRefreshing] = useState(false);
-  const [cache, setCache] = useState<Record<'day' | 'week' | 'month', DashboardData | null>>({
-    day: null,
-    week: null,
-    month: null,
+  const [shiftStats, setShiftStats] = useState<{
+    activeShifts: number;
+    todayHours: number;
+    avgShiftLength: number;
+  }>({
+    activeShifts: 0,
+    todayHours: 0,
+    avgShiftLength: 0,
   });
-  const [mounted, setMounted] = useState(false);
+  const [shiftLoading, setShiftLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
   }, [])
+
+  // Load shift statistics
+  useEffect(() => {
+    const loadShiftStats = async () => {
+      try {
+        setShiftLoading(true);
+
+        // Get today's date range
+        const today = new Date();
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+        // Get active shifts and today's stats
+        const [activeShiftsRes, statsRes] = await Promise.all([
+          shiftApi.getActiveShifts(),
+          shiftApi.getShiftStats({ from: startOfDay.toISOString(), to: endOfDay.toISOString() })
+        ]);
+
+        if (activeShiftsRes.data?.data && statsRes.data?.data) {
+          const activeShifts = activeShiftsRes.data.data.length;
+          const todayHours = statsRes.data.data.totalHours || 0;
+          const avgShiftLength = statsRes.data.data.averageHoursPerShift || 0;
+
+          setShiftStats({
+            activeShifts,
+            todayHours: parseFloat(todayHours.toFixed(1)),
+            avgShiftLength: parseFloat(avgShiftLength.toFixed(1)),
+          });
+        }
+      } catch (error) {
+        console.error('Error loading shift statistics:', error);
+      } finally {
+        setShiftLoading(false);
+      }
+    };
+
+    loadShiftStats();
+  }, []);
 
   // Initial load for default period
   useEffect(() => {
@@ -398,6 +442,111 @@ console.log(stats,"stats")
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Shift Overview Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Active Shifts</p>
+                <p className="text-2xl font-bold mt-1 text-gray-900" id="active-shifts-count">
+                  {shiftLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  ) : (
+                    shiftStats.activeShifts
+                  )}
+                </p>
+                <div className="flex items-center mt-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <svg className="-ml-0.5 mr-1 h-3 w-3 text-green-500" fill="currentColor" viewBox="0 0 8 8">
+                      <path d="M2 6l3-4 3 4z" />
+                    </svg>
+                    Live
+                  </span>
+                  <span className="ml-2 text-xs text-gray-500">Currently working</span>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-green-50 text-green-600">
+                <Clock className="h-6 w-6" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Today's Hours</p>
+                <p className="text-2xl font-bold mt-1 text-gray-900" id="today-hours">
+                  {shiftLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  ) : (
+                    `${shiftStats.todayHours}h`
+                  )}
+                </p>
+                <div className="flex items-center mt-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <svg className="-ml-0.5 mr-1 h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 8 8">
+                      <path d="M2 6l3-4 3 4z" />
+                    </svg>
+                    +5.2%
+                  </span>
+                  <span className="ml-2 text-xs text-gray-500">vs yesterday</span>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600">
+                <BarChart3 className="h-6 w-6" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Avg. Shift Length</p>
+                <p className="text-2xl font-bold mt-1 text-gray-900" id="avg-shift-length">
+                  {shiftLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  ) : (
+                    `${shiftStats.avgShiftLength}h`
+                  )}
+                </p>
+                <div className="flex items-center mt-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    <svg className="-ml-0.5 mr-1 h-3 w-3 text-purple-500" fill="currentColor" viewBox="0 0 8 8">
+                      <path d="M2 6l3-4 3 4z" />
+                    </svg>
+                    +12 min
+                  </span>
+                  <span className="ml-2 text-xs text-gray-500">vs last week</span>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-purple-50 text-purple-600">
+                <Users className="h-6 w-6" />
+              </div>
+            </div>
+          </div>
+
+          <Link href="/dashboard/shift-management" className="block">
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Shift Management</p>
+                  <p className="text-sm font-medium mt-1 text-gray-900">Manage team shifts</p>
+                  <div className="flex items-center mt-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                      View Details
+                    </span>
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-indigo-50 text-indigo-600">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* Charts Section */}

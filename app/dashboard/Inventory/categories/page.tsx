@@ -81,7 +81,7 @@ export default function CategoriesPage() {
       console.log(response,"response")
       if (response.status===200) {
         console.log(response.data,"data")
-        setCategories(response.data||[])
+        setCategories(response.data.data || [])
       }
     } catch (err) {
       setError('Failed to fetch categories')
