@@ -26,6 +26,7 @@ export interface CreateOrderInput {
   items: OrderItemInput[];
   paymentMethod: PaymentMethod;
   branchName?: string | null;
+  restaurantId?: string | null;
   subtotal: number;
   tax: number;
   total: number;
@@ -46,9 +47,11 @@ export enum PaymentMethod {
 export enum OrderStatus {
   PENDING = "PENDING",
   PROCESSING = "PROCESSING",
+  CONFIRMED = "CONFIRMED",
+  PREPARING = "PREPARING",
+  READY_FOR_PICKUP = "READY_FOR_PICKUP",
   COMPLETED = "COMPLETED",
   CANCELLED = "CANCELLED",
-  REFUNDED = "REFUNDED",
 }
 
 export interface Order {
@@ -67,7 +70,13 @@ export interface Order {
   customerEmail: string | null;
   customerPhone: string | null;
   notes: string | null;
+  branchName?: string | null;
+  restaurantId?: string | null;
   branch?: {
+    id: string;
+    name: string;
+  };
+  restaurant?: {
     id: string;
     name: string;
   };
@@ -85,6 +94,11 @@ export interface OrderStats {
   revenueByStatus: Record<OrderStatus, number>;
   paymentStatus: Record<string, number>;
   recentOrders: Order[];
+  completedOrders: number;
+  pendingOrders: number;
+  processingOrders: number;
+  cancellationRate?: number;
+  avgOrderValue?: number;
 }
 
 interface GetOrdersParams {
@@ -92,6 +106,7 @@ interface GetOrdersParams {
   paymentStatus?: PaymentStatus;
   orderType?: OrderType;
   branchName?: string | null;
+  restaurantId?: string | null;
   startDate?: string;
   endDate?: string;
   search?: string;
@@ -125,13 +140,13 @@ export const orderApi = {
   getOrdersByBranch: async (branchName: string) => {
     console.log(branchName,"branchName")
     try {
-      const response = await api.get<{ 
+      const response = await api.get<{
         success: boolean;
         message: string;
-        data: Array<{ tableNumber: string }>;
+        data: Array<{ tableNumber: string; paymentStatus?: string; status?: string }>;
         statusCode: number;
       }>('/orders/getOrderByTable', { params: { branchName } });
-      
+
       // Ensure we always return a consistent response format
       return {
         success: true,
@@ -177,7 +192,7 @@ export const orderApi = {
     api.put<{ data: Order }>(`/orders/${id}/status`, { status, notes }),
 
   // Get order statistics for dashboard
-  getStats: (params?: { startDate?: string; endDate?: string }) => 
+  getStats: (params?: { startDate?: string; endDate?: string; branchName?: string; restaurantId?: string }) => 
     api.get<{ data: OrderStats }>('/orders/stats', { params }),
 
   // Update payment status and method

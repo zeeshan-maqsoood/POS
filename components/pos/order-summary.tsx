@@ -19,6 +19,8 @@ import { CartItem, MenuItem } from '@/lib/types';
 import { ReceiptTemplate } from '../receipt/receipt-template';
 import { usePrintReceipt } from '@/hooks/use-print-receipt';
 import { ReceiptButton } from '../receipt/receipt-button';
+import { restaurantApi, Restaurant } from '@/lib/restaurant-api';
+import { branchApi, Branch } from '@/lib/branch-api';
 
 interface OrderSummaryProps {
   cart: CartItem[];
@@ -30,7 +32,9 @@ interface OrderSummaryProps {
   onBranchChange: (branchId: string) => void;
   onTableNumberChange: (tableNumber: string) => void;
   onCustomerNameChange: (name: string) => void;
+  onRestaurantChange: (restaurantId: string) => void;
   selectedBranch: string | null;
+  selectedRestaurant: string;
   tableNumber: string;
   customerName: string;
   onOrderPlaced?: (orderId?: string) => void;
@@ -38,9 +42,14 @@ interface OrderSummaryProps {
   orderType: OrderType;
   onOrderTypeChange: (type: OrderType) => void;
   occupiedTables?: Set<string>;
+  isLoadingTables?: boolean;
+  tableError?: string | null;
   isEditMode?: boolean;
   editOrderData?: any;
   menuItems?: MenuItem[];
+  restaurants?: Restaurant[];
+  branches?: Branch[];
+  filteredBranches?: Branch[];
 }
 
 const branches = [
@@ -62,7 +71,9 @@ export function OrderSummary({
   onBranchChange,
   onTableNumberChange,
   onCustomerNameChange,
+  onRestaurantChange,
   selectedBranch,
+  selectedRestaurant,
   tableNumber,
   customerName,
   onOrderPlaced,
@@ -70,9 +81,14 @@ export function OrderSummary({
   orderType = 'DINE_IN',
   onOrderTypeChange,
   occupiedTables = new Set(),
+  isLoadingTables = false,
+  tableError = null,
   isEditMode = false,
   editOrderData,
   menuItems,
+  restaurants = [],
+  branches = [],
+  filteredBranches = [],
 }: OrderSummaryProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -101,108 +117,68 @@ export function OrderSummary({
       if (orderType === 'DINE_IN' && editOrderData.data.tableNumber) {
         onTableNumberChange(editOrderData.data.tableNumber.toString());
       }
-      console.log(editOrderData, "editOrderData")
+      console.log(editOrderData, 'editOrderData');
 
       if (editOrderData.data.items && editOrderData.data.items.length > 0) {
         const updatedCart = editOrderData.data.items.map((item: any) => {
-          const matchedItem = menuItems?.find((menuItem: MenuItem) => 
-            menuItem.id === item.menuItemId
-          );
+          const matchedItem = menuItems?.find((menuItem: MenuItem) => menuItem.id === item.menuItemId);
           const modifiersTotal = (item.modifiers || []).reduce(
-            (sum: number, mod: any) => sum + (Number(mod.price) || 0), 
+            (sum: number, mod: any) => sum + (Number(mod.price) || 0),
             0
           );
-          const basePrice = (Number(item.price) || 0) - modifiersTotal;
-          console.log(basePrice,"basePrice")
-          // Get the modifier IDs that were selected in the original order
+          const basePrice = Number(item.price) || 0; // Price includes tax
+
           const selectedModifierIds = new Set(
             (item.modifiers || []).map((m: any) => m.id || m.menuItemModifierId)
           );
-          
-          // Process modifiers to ensure they have the correct structure
+
           const modifiers = (matchedItem?.modifiers || []).map((mod: any) => {
-            // Check if this modifier was in the original order's modifiers
-            const isSelected = Array.from(selectedModifierIds).some(id => 
-              id === mod.id || id === mod.menuItemModifierId
+            const isSelected = Array.from(selectedModifierIds).some(
+              (id) => id === mod.id || id === mod.menuItemModifierId
             );
-            
             return {
               ...mod,
               selected: isSelected,
               price: Number(mod.price || 0),
-              tax: Number(mod.tax || 0)
+              tax: Number(mod.tax || 0),
             };
           });
-      
-          // Get the selected modifiers for the cart item
+
           const selectedModifiers = modifiers.filter((m: any) => m.selected);
-      
+
           return {
             id: Math.random().toString(36).substr(2, 9),
             item: {
               id: item.menuItemId || item.id,
               name: item.name || matchedItem?.name || 'Unknown Item',
-              price: basePrice, // Divide by quantity to get single item price
+              price: basePrice, // Price includes tax
               description: matchedItem?.description ?? '',
               categoryId: matchedItem?.categoryId ?? '',
               isActive: true,
               imageUrl: matchedItem?.imageUrl ?? '',
-              modifiers: modifiers
+              modifiers: modifiers,
             },
             quantity: item.quantity || 1,
-            selectedModifiers: selectedModifiers
+            selectedModifiers,
+            totalPrice: (basePrice + modifiersTotal) * (item.quantity || 1), // Include modifiers only if selected
           };
         });
-        
+
         onUpdateCart(updatedCart);
-      
-        const cartItems = editOrderData.data.items.map((item: {
-          id: any;
-          description: string;
-          categoryId: string;
-          imageUrl: string;
-          modifiers: any[];
-          menuItemId: any;
-          name: any;
-          price: any;
-          quantity: any;
-          ImageUrl: any;
-          taxRate: any
-        }) => {
-          // Find the matching menu item from the menuItems array
-          const matchedItem = menuItems?.find(menuItem =>
-            menuItem.id === (item.menuItemId || item.id)
-          );
-
-          return {
-            item: {
-              id: item.menuItemId || item.id,
-              name: item.name || matchedItem?.name || 'Unknown Item',
-              price: Number(item.price) * (1 + Number(item.taxRate) / 100),
-              description: item.description ?? matchedItem?.description ?? '',
-              categoryId: item.categoryId ?? matchedItem?.categoryId ?? '',
-              isActive: true,
-              imageUrl: item.imageUrl ?? matchedItem?.imageUrl ?? '',
-              modifiers: matchedItem?.modifiers ?? []
-            },
-            quantity: item.quantity || 1
-          };
-        });
-        // onUpdateCart(cartItems);
       }
+
+      setIsMounted(true);
+
+      return () => {
+        if (isEditMode) {
+          onUpdateCart([]);
+          onOrderTypeChange('DINE_IN');
+          onBranchChange('');
+          onCustomerNameChange('');
+          onTableNumberChange('');
+        }
+      };
     }
-    
-    setIsMounted(true);
-
-    return () => {
-      if (isEditMode) {
-        onUpdateCart([]);
-        onOrderTypeChange('DINE_IN');
-        onBranchChange('');
-        onCustomerNameChange('');
-        onTableNumberChange('');
-      }
-    };
   }, [
     isEditMode,
     editOrderData,
@@ -212,17 +188,68 @@ export function OrderSummary({
     onOrderTypeChange,
     onUpdateCart,
     userBranch,
+    menuItems,
   ]);
-console.log(cart,"cartItem")
+
+  console.log(cart, 'cartItem');
+
   const finalBranches = useMemo(
     () => (userBranch ? branches.filter((branch) => branch.id === userBranch) : branches),
-    [userBranch]
+    [userBranch, branches]
   );
+
+  const selectedBranchObj = useMemo(
+    () => filteredBranches.find((b) => b.id === selectedBranch),
+    [filteredBranches, selectedBranch]
+  );
+
+  const allowedOrderTypes = useMemo<OrderType[]>(() => {
+    if (!selectedBranchObj) return ['DINE_IN'];
+
+    const allowed: OrderType[] = (() => {
+      const serviceType = selectedBranchObj.serviceType;
+
+      if (!serviceType) {
+        return ['DINE_IN'];
+      }
+
+      switch (serviceType) {
+        case 'BOTH':
+          return ['DINE_IN', 'TAKEAWAY'];
+        case 'DINE_IN':
+          return ['DINE_IN'];
+        case 'TAKE_AWAY':
+          return ['TAKEAWAY'];
+        default:
+          return ['DINE_IN'];
+      }
+    })();
+
+    return allowed;
+  }, [selectedBranchObj]);
+
+  useEffect(() => {
+    if (allowedOrderTypes.length > 0 && !allowedOrderTypes.includes(orderType)) {
+      onOrderTypeChange(allowedOrderTypes[0]);
+    }
+  }, [allowedOrderTypes, orderType, onOrderTypeChange]);
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
     const updatedCart = cart.map((item) =>
-      item.item.id === itemId ? { ...item, quantity: newQuantity } : item
+      item.item.id === itemId
+        ? {
+            ...item,
+            quantity: newQuantity,
+            totalPrice:
+              (Number(item.item.price) +
+                (item.selectedModifiers || []).reduce(
+                  (sum, mod) => sum + Number(mod.price || 0),
+                  0
+                )) *
+              newQuantity,
+          }
+        : item
     );
     onUpdateCart(updatedCart);
   };
@@ -231,189 +258,99 @@ console.log(cart,"cartItem")
     onUpdateCart(cart.filter((item) => item.item.id !== itemId));
   };
 
-  // const handlePlaceOrder = async () => {
-  //   // ✅ Update order
-  //   if (isEditMode && editOrderData?.id) {
-  //     try {
-  //       setIsPlacingOrder(true);
-  //       const items = cart.map(({ item, quantity }) => ({
-  //         menuItemId: item.id,
-  //         quantity,
-  //         name: item.name,
-  //         price: item.price,
-  //       }));
-
-  //       const payload = {
-  //         tableNumber: orderType === 'DINE_IN' ? tableNumber : null,
-  //         customerName: customerName || null,
-  //         items,
-  //         branchName: selectedBranch,
-  //         subtotal,
-  //         tax,
-  //         total,
-  //         orderType,
-  //         status: OrderStatus.PENDING,
-  //       };
-
-  //       const res = await orderApi.updateOrder(editOrderData.id, payload);
-  //       if (res?.data?.data) {
-  //         toast.success('Order updated successfully!');
-  //         onOrderPlaced?.(res.data.data.id);
-  //       } else {
-  //         toast.error('Failed to update order');
-  //       }
-  //     } catch (e: any) {
-  //       console.error('Update order error:', e);
-  //       toast.error(e?.response?.data?.message || 'Failed to update order');
-  //     } finally {
-  //       setIsPlacingOrder(false);
-  //     }
-  //     return;
-  //   }
-
-  //   // ✅ Create order
-  //   if (cart.length === 0) {
-  //     toast.error('Your cart is empty');
-  //     return;
-  //   }
-  //   try {
-  //     setIsPlacingOrder(true);
-  //     const items = cart.map(({ item, quantity }) => ({
-  //       menuItemId: item.id,
-  //       quantity,
-  //       name: item.name,
-  //       price: item.price,
-  //     }));
-
-  //     const payload = {
-  //       tableNumber: tableNumber || undefined,
-  //       customerName: customerName || undefined,
-  //       items,
-  //       paymentMethod: PaymentMethod.CASH,
-  //       branchName: selectedBranch || undefined,
-  //       subtotal,
-  //       tax,
-  //       total,
-  //       status: OrderStatus.PENDING,
-  //       orderType,
-  //       notes: '',
-  //     } as const;
-
-  //     const res = await orderApi.createOrder(payload as any);
-  //     if (res?.data?.data) {
-  //       if (socket) {
-  //         socket.emit('new-order', {
-  //           order: { ...payload, branchId: selectedBranch },
-  //           createdByRole: userRole,
-  //         });
-  //       }
-  //       onClearCart();
-  //       onOrderPlaced?.(res.data.data.id);
-  //     } else {
-  //       toast.error('Failed to place order');
-  //     }
-  //   } catch (e: any) {
-  //     console.error('Place order error:', e);
-  //     toast.error(e?.response?.data?.message || 'Failed to place order');
-  //   } finally {
-  //     setIsPlacingOrder(false);
-  //   }
-  // };
+  // Calculate cart total
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, { item, quantity, selectedModifiers }) => {
+      const modifierTotal = (selectedModifiers || []).reduce(
+        (modSum, mod) => modSum + Number(mod.price || 0),
+        0
+      );
+      return sum + (Number(item.price) + modifierTotal) * quantity;
+    }, 0);
+  }, [cart]);
 
   const handlePlaceOrder = async () => {
-    if (!selectedBranch) {
-      toast.error('Please select a branch');
+    // Update order
+    if (isEditMode && editOrderData?.id) {
+      try {
+        setIsPlacingOrder(true);
+        const items = cart.map(({ item, quantity, selectedModifiers }) => ({
+          menuItemId: item.id,
+          quantity,
+          name: item.name,
+          price: Number(item.price), // Price includes tax
+          modifiers: (selectedModifiers || []).map((mod) => ({
+            id: mod.id,
+            name: mod.name,
+            price: Number(mod.price),
+          })),
+        }));
+
+        const payload = {
+          tableNumber: orderType === 'DINE_IN' ? tableNumber : null,
+          customerName: customerName || null,
+          items,
+          branchName: selectedBranch ? filteredBranches.find(branch => branch.id === selectedBranch)?.name : undefined,
+          restaurantId: selectedRestaurant, // Add restaurantId to the update payload
+          subtotal: cartTotal, // Subtotal includes item prices (with tax) and modifiers
+          total: cartTotal, // No separate tax
+          orderType,
+          status: OrderStatus.PENDING,
+        };
+
+        const res = await orderApi.updateOrder(editOrderData.id, payload);
+        if (res?.data?.data) {
+          toast.success('Order updated successfully!');
+          setLastOrder(res.data.data);
+          onOrderPlaced?.(res.data.data.id);
+        } else {
+          toast.error('Failed to update order');
+        }
+      } catch (e: any) {
+        console.error('Update order error:', e);
+        toast.error(e?.response?.data?.message || 'Failed to update order');
+      } finally {
+        setIsPlacingOrder(false);
+      }
       return;
     }
 
-    if (orderType === 'DINE_IN' && !tableNumber) {
-      toast.error('Please enter a table number');
-      return;
-    }
-
+    // Create order
     if (cart.length === 0) {
       toast.error('Your cart is empty');
       return;
     }
-
     try {
       setIsPlacingOrder(true);
-      console.log('Edit mode:', isEditMode, 'Order ID:', editOrderData?.id);
-console.log(cart,"cart")
-  // In the handlePlaceOrder function, update the items mapping:
-// Calculate the total price including modifiers
-const items = cart.map(({ item, quantity, selectedModifiers = [] }) => {
-  
-  // Calculate total price of selected modifiers (including their tax)
-  const modifiersTotal = selectedModifiers.reduce((sum, mod) => sum + Number(mod.price || 0), 0);
-  const itemPrice = Number(item.price) + modifiersTotal;
-  console.log(itemPrice,"itemPrice")
-  console.log(item.price,"price")
-  console.log(selectedModifiers,"selectedModifiers")
-  return {
-    menuItemId: item.id,
-    quantity,
-    name: item.name,
-    price: itemPrice,  // This is the total price including tax and modifiers
-    tax: 0,  // Tax is already included in the price
-    modifiers: selectedModifiers.map(m => ({
-      id: m.id,
-      name: m.name,
-      price: Number(m.price || 0)
-    }))
-  };
-});
+      const items = cart.map(({ item, quantity, selectedModifiers }) => ({
+        menuItemId: item.id,
+        quantity,
+        name: item.name,
+        price: Number(item.price), // Price includes tax
+        modifiers: (selectedModifiers || []).map((mod) => ({
+          id: mod.id,
+          name: mod.name,
+          price: Number(mod.price),
+        })),
+      }));
 
-// Calculate subtotal (sum of all item prices * quantities)
-const calculateSubTotal = items.reduce((total, item) => {
-  return total + (item.price * item.quantity);
-}, 0);
+      const payload = {
+        tableNumber: orderType === 'DINE_IN' ? tableNumber : undefined,
+        customerName: customerName || undefined,
+        items,
+        paymentMethod: PaymentMethod.CASH,
+        branchName: selectedBranch ? filteredBranches.find(branch => branch.id === selectedBranch)?.name : undefined,
+        restaurantId: selectedRestaurant || undefined, // Add restaurantId to the payload
+        subtotal: cartTotal, // Subtotal includes item prices (with tax) and modifiers
+        total: cartTotal, // No separate tax
+        status: OrderStatus.PENDING,
+        orderType,
+        notes: '',
+      } as const;
 
-// No additional tax calculation needed since it's included in the prices
-const calculateTax = 0;
-const calculateTotal = calculateSubTotal;  // Total is the same as subtotal since tax is included
-
-    const payload = {
-      tableNumber: tableNumber || undefined,
-      customerName: customerName || undefined,
-      items,
-      paymentMethod: PaymentMethod.CASH,
-      branchName: selectedBranch,
-      subtotal: calculateSubTotal,
-      tax: calculateTax,
-      total: calculateTotal,
-      status: OrderStatus.PENDING,
-      orderType,
-      notes: '',
-    };
-
-    console.log('Payload being sent:', JSON.stringify(payload, null, 2));
-
-    let response;
-    if (isEditMode && editOrderData?.data?.id) {
-      console.log('Updating order with ID:', editOrderData.data.id);
-
-      // Prepare the items array with modifiers for update
-      const updatePayload = {
-        ...payload,
-        items: items.map(item => ({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          name: item.name,
-          price: item.price,
-          tax: item.tax,
-          modifiers: item.modifiers // Include modifiers in update payload
-        }))
-      };
-
-      console.log('Update payload with items:', JSON.stringify(updatePayload, null, 2));
-      response = await orderApi.updateOrder(editOrderData.data.id, updatePayload);
-    } else {
-      console.log('Creating new order');
-      response = await orderApi.createOrder(payload);
-    }
-
-      if (response?.data?.data) {
+      const res = await orderApi.createOrder(payload as any);
+      if (res?.data?.data) {
+        setLastOrder(res.data.data);
         if (socket) {
           socket.emit('new-order', {
             order: { ...payload, branchId: selectedBranch },
@@ -421,19 +358,14 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
           });
         }
         onClearCart();
-        onOrderPlaced?.(response.data.data.id);
-        toast.success(
-          isEditMode ? 'Order updated successfully' : 'Order placed successfully'
-        );
+        onOrderPlaced?.(res.data.data.id);
+        toast.success('Order placed successfully!');
       } else {
-        throw new Error('Failed to process order');
+        toast.error('Failed to place order');
       }
     } catch (e: any) {
-      console.error('Order error:', e);
-      toast.error(
-        e?.response?.data?.message ||
-        `Failed to ${isEditMode ? 'update' : 'place'} order`
-      );
+      console.error('Place order error:', e);
+      toast.error(e?.response?.data?.message || 'Failed to place order');
     } finally {
       setIsPlacingOrder(false);
     }
@@ -441,7 +373,6 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
 
   return (
     <div className="flex flex-col min-h-screen">
-
       {/* Cart Items */}
       <div className="p-3 space-y-3 md:flex-1 md:overflow-y-auto">
         {cart.length === 0 ? (
@@ -450,26 +381,15 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
             <p>Your cart is empty</p>
           </div>
         ) : (
-          cart.map(({ item, quantity }) => {
-            const itemPrice = Number(item.price);
-            const selectedModifiers = item.modifiers?.filter(m => m.selected) || [];
-            const modifiersTotal = selectedModifiers.reduce((sum, m) => sum + Number(m.price || 0), 0);
-            const totalItemPrice = (itemPrice + modifiersTotal) * quantity;
-
+          cart.map(({ item, quantity, totalPrice, selectedModifiers }) => {
             return (
-              <div
-                key={item.id}
-                className="bg-white rounded-lg border p-3 shadow-sm"
-              >
+              <div key={item.id} className="bg-white rounded-lg border p-3 shadow-sm">
                 <div className="flex justify-between items-start">
                   <div className="flex gap-3 flex-1">
                     <div className="relative w-14 h-14 flex-shrink-0">
                       {item.imageUrl ? (
                         <img
-                          src={item.imageUrl.startsWith('http')
-                            ? item.imageUrl
-                            : `/${item.imageUrl.replace(/^\/+/, '')}`
-                          }
+                          src={item.imageUrl.startsWith('http') ? item.imageUrl : `/${item.imageUrl.replace(/^\/+/, '')}`}
                           alt={item.name}
                           className="w-full h-full rounded-md object-cover"
                           onError={(e) => {
@@ -482,7 +402,9 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                           }}
                         />
                       ) : null}
-                      <div className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}>
+                      <div
+                        className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}
+                      >
                         <Utensils className="h-5 w-5 text-gray-400" />
                       </div>
                     </div>
@@ -490,10 +412,10 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                     <div className="flex-1">
                       <div className="flex justify-between">
                         <p className="font-medium">{item.name}</p>
-                        <p className="font-semibold">£{totalItemPrice.toFixed(2)}</p>
+                        <p className="font-semibold">£{totalPrice.toFixed(2)}</p>
                       </div>
                       <p className="text-sm text-gray-500">
-                        £{itemPrice.toFixed(2)} × {quantity}
+                        £{Number(item.price || 0).toFixed(2)} × {quantity}
                       </p>
 
                       {/* Modifiers Section */}
@@ -508,43 +430,45 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                                   id={`${item.id}-${modifier.id}`}
                                   checked={modifier.selected || false}
                                   onChange={(e) => {
-                                    const updatedCart = cart.map(cartItem => {
+                                    const updatedCart = cart.map((cartItem) => {
                                       if (cartItem.item.id === item.id) {
-                                        const updatedModifiers = cartItem.item.modifiers?.map(m =>
-                                          m.id === modifier.id
-                                            ? { ...m, selected: e.target.checked }
-                                            : m
+                                        const updatedModifiers = cartItem.item.modifiers?.map((m) =>
+                                          m.id === modifier.id ? { ...m, selected: e.target.checked } : m
                                         ) || [];
-                                  
-                                        // Update the selectedModifiers array in the cart item
+
+                                        const selectedModifiersTotal = updatedModifiers
+                                          .filter((m) => m.selected)
+                                          .reduce((sum, m) => sum + Number(m.price || 0), 0);
+
                                         const selectedModifiers = updatedModifiers
-                                          .filter(m => m.selected)
-                                          .map(({ id, name, price, selected,tax }) => ({ 
-                                            id, 
-                                            name, 
-                                            price: Number(price || 0)+Number(tax || 0),
+                                          .filter((m) => m.selected)
+                                          .map(({ id, name, price, selected, tax }) => ({
+                                            id,
+                                            name,
+                                            price: Number(price || 0) + Number(tax || 0),
                                             selected: true,
-                                           
                                           }));
-                                  
+
+                                        const updatedTotalPrice =
+                                          (Number(cartItem.item.price) + selectedModifiersTotal) *
+                                          cartItem.quantity;
+
                                         return {
                                           ...cartItem,
                                           item: {
                                             ...cartItem.item,
-                                            modifiers: updatedModifiers
+                                            modifiers: updatedModifiers,
                                           },
-                                          selectedModifiers // Add selectedModifiers to the cart item
+                                          totalPrice: updatedTotalPrice,
+                                          selectedModifiers,
                                         };
                                       }
-                                      console.log(selectedModifiers,"selectedModifiers")
                                       return cartItem;
                                     });
                                     onUpdateCart(updatedCart);
                                   }}
-
                                   className="h-3 w-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                 />
-
                                 <label
                                   htmlFor={`${item.id}-${modifier.id}`}
                                   className="text-gray-700 cursor-pointer"
@@ -621,16 +545,37 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
       {/* Form + Totals */}
       <div className="p-4 border-t space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {/* Restaurant */}
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">Restaurant</label>
+            {isEditMode ? (
+              <Input
+                value={restaurants.find((r) => r.id === selectedRestaurant)?.name || ''}
+                disabled
+                className="bg-gray-100"
+              />
+            ) : (
+              <Select value={selectedRestaurant} onValueChange={onRestaurantChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select restaurant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {restaurants.map((restaurant) => (
+                    <SelectItem key={restaurant.id} value={restaurant.id}>
+                      {restaurant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
           {/* Branch */}
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Branch</label>
             {isEditMode ? (
-              <Input
-                value={editOrderData?.data?.branchName || ''}
-                disabled
-                className="bg-gray-100"
-              />
-            ) : finalBranches.length === 0 ? (
+              <Input value={editOrderData?.data?.branchName || ''} disabled className="bg-gray-100" />
+            ) : filteredBranches.length === 0 ? (
               <div className="w-full p-2 border rounded-md bg-gray-50 text-gray-500 text-sm">
                 No branch assigned
               </div>
@@ -640,7 +585,7 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {finalBranches.map((branch) => (
+                  {filteredBranches.map((branch) => (
                     <SelectItem key={branch.id} value={branch.id}>
                       {branch.name}
                     </SelectItem>
@@ -656,31 +601,39 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
             {isEditMode ? (
               <Input value={tableNumber || 'N/A'} disabled className="bg-gray-100" />
             ) : (
-              <Select
-                onValueChange={onTableNumberChange}
-                value={tableNumber}
-                disabled={orderType === 'TAKEAWAY'}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select table" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tableNumbers.map((num) => {
-                    const isOccupied =
-                      (occupiedTables as Set<string>).has(num) && num !== tableNumber;
-                    return (
-                      <SelectItem
-                        key={num}
-                        value={num}
-                        disabled={isOccupied}
-                        className={isOccupied ? 'opacity-50 cursor-not-allowed' : ''}
-                      >
-                        {isOccupied ? `Table ${num} (Occupied)` : `Table ${num}`}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              <>
+                {tableError && (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                    {tableError}
+                  </div>
+                )}
+                <Select
+                  onValueChange={onTableNumberChange}
+                  value={tableNumber}
+                  disabled={orderType === 'TAKEAWAY' || isLoadingTables}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={isLoadingTables ? 'Loading tables...' : 'Select table'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tableNumbers.map((num) => {
+                      const isOccupied = (occupiedTables as Set<string>).has(num) && num !== tableNumber;
+                      return (
+                        <SelectItem
+                          key={num}
+                          value={num}
+                          disabled={isOccupied}
+                          className={isOccupied ? 'opacity-50 cursor-not-allowed' : ''}
+                        >
+                          {isOccupied
+                            ? `Table ${num} (Occupied - ${occupiedTables.has(num) ? 'Payment Pending' : 'Available'})`
+                            : `Table ${num}`}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </>
             )}
           </div>
 
@@ -711,25 +664,20 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                 <SelectValue placeholder="Select order type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="DINE_IN">Dine In</SelectItem>
-                <SelectItem value="TAKEAWAY">Take Away</SelectItem>
+                {allowedOrderTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type === 'DINE_IN' ? 'Dine In' : 'Take Away'}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
 
         {/* Totals */}
-        {/* <div className="flex justify-between text-sm">
-          <span>Subtotal</span>
-          <span>£{(Number(subtotal) +Number(tax) || 0).toFixed(2)}</span>
-        </div> */}
-        {/* <div className="flex justify-between text-sm">
-          <span>Tax</span>
-          <span>£{(Number(tax) || 0).toFixed(2)}</span>
-        </div> */}
         <div className="flex justify-between font-semibold text-lg">
           <span>Total</span>
-          <span>£{(Number(total)-Number(tax) || 0).toFixed(2)}</span>
+          <span>£{cartTotal.toFixed(2)}</span>
         </div>
 
         <div className="space-y-2">
@@ -745,7 +693,7 @@ const calculateTotal = calculateSubTotal;  // Total is the same as subtotal sinc
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
                 </>
               ) : (
-                `Place Order ( £${(Number(total.toFixed(2))-Number(tax.toFixed(2)))})`
+                `Place Order ( £${cartTotal.toFixed(2)})`
               )}
             </Button>
           </PermissionGate>

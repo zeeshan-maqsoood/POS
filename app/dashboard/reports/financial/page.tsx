@@ -31,6 +31,7 @@ import {
   Area
 } from 'recharts';
 import { reportApi, ReportParams } from '@/lib/report-api';
+import { useBranches } from '@/hooks/use-branches';
 
 export default function FinancialReportsPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -43,6 +44,9 @@ export default function FinancialReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [revenueData, setRevenueData] = useState<any>(null);
   const [taxData, setTaxData] = useState<any>(null);
+
+  // Get dynamic branches
+  const { branches, loading: branchesLoading } = useBranches();
 
   const fetchReports = async () => {
     setLoading(true);
@@ -149,14 +153,17 @@ export default function FinancialReportsPage() {
             </div>
             <div className="w-full sm:w-48">
               <label className="text-sm font-medium mb-2 block">Branch</label>
-              <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <Select value={branchFilter} onValueChange={setBranchFilter} disabled={branchesLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Branches" />
+                  <SelectValue placeholder={branchesLoading ? "Loading branches..." : "All Branches"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Branches</SelectItem>
-                  <SelectItem value="Bradford">Bradford</SelectItem>
-                  <SelectItem value="Leeds">Leeds</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.value}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

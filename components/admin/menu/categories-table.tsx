@@ -75,13 +75,19 @@ export function CategoriesTable({
       ),
     },
     {
-      accessorKey: "branchName",
+      accessorKey: "branch",
       header: "Branch",
-      cell: ({ row }) => (
-        <div className="text-sm">
-          {row.original.branchName || 'All Branches'}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const branch = row.original.branch;
+        const branchId = row.original.branchId;
+        const branchName = row.original.branchName;
+
+        return (
+          <div className="text-sm">
+            {branch?.name || branchName || (!branchId ? 'All Branches' : `Branch ID: ${branchId}`)}
+          </div>
+        );
+      },
     },
     {
       id: "actions",
@@ -181,6 +187,8 @@ export function CategoriesTable({
       </div>
     );
   }
+
+  
 
   return (
     <div onClick={() => setOpenDropdownId(null)}>

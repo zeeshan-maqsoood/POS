@@ -11,6 +11,7 @@ import { Category, categoryApi } from "@/lib/menu-api"
 import { toast } from "@/components/ui/use-toast"
 import PermissionGate from "@/components/auth/permission-gate"
 import { useUser } from "@/hooks/use-user"
+import { branchApi } from "@/lib/branch-api"
 
 export default function CategoriesPage() {
   const router = useRouter()
@@ -26,24 +27,21 @@ export default function CategoriesPage() {
       // For managers, filter by their branch. For admins, show all categories.
       const params: any = { status: 'all' }
 
-      // If user is a manager (not admin), filter by their branch
+      // If user is a manager (not admin), filter by their branch ID
       if (user && !isAdmin && user.branch) {
-        // Normalize the branch name for the API call
-        const normalizedBranchName = user.branch.startsWith('branch')
-          ? user.branch.replace('branch1', 'Main Branch')
-            .replace('branch2', 'Downtown Branch')
-            .replace('branch3', 'Uptown Branch')
-            .replace('branch4', 'Westside Branch')
-            .replace('branch5', 'Eastside Branch')
-          : user.branch;
-        params.branchName = normalizedBranchName
-        console.log('Filtering categories by branch:', user.branch, '->', normalizedBranchName)
-      } else {
-        console.log('User branch info:', {
-          user: user,
-          isAdmin: isAdmin,
-          userBranch: user?.branch
-        })
+        // For managers, we need to get their branch ID to filter categories
+        // Since we changed to store branch ID as branchName value, we filter by branch ID
+        try {
+          const branchResponse = await branchApi.getUserBranches();
+          const userBranches = Array.isArray(branchResponse?.data?.data) ? branchResponse.data.data : [];
+
+          if (userBranches.length > 0) {
+            params.branchName = userBranches[0].id; // Send branch ID as branchName value
+            console.log('Filtering categories by branch ID:', userBranches[0].id);
+          }
+        } catch (error) {
+          console.error('Error fetching manager branch for filtering:', error);
+        }
       }
 
       console.log('Categories API request params:', params)
@@ -137,13 +135,14 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">Categories</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground ">
             {isAdmin
               ? "Organize your menu items into categories"
               : `Manage categories for ${user?.branch} branch`
             }
           </p>
         </div>
+        
         <PermissionGate required="MENU_CREATE">
           <Button asChild>
             <Link href="/dashboard/menu/categories/new">

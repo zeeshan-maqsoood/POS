@@ -66,7 +66,7 @@ console.log(menuItem,"menuItem")
   if (!menuItem) {
     return <div>Menu item not found</div>
   }
-
+   
   return (
     <div className="container mx-auto py-6">
       <div className="mb-6">

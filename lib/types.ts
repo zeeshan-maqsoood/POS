@@ -36,6 +36,8 @@ export interface MenuItem {
   // Timestamps
   createdAt?: Date;
   updatedAt?: Date;
+  // Display category name (added during transformation)
+  category?: string;
 }
 
 export interface CartItemModifier {
@@ -50,6 +52,7 @@ export interface CartItem {
   quantity: number;
   notes?: string;
   modifiers?: CartItemModifier[];
+  selectedModifiers?: CartItemModifier[];
   totalPrice: number; // Item price + selected modifiers price
   basePrice: number;  // Original item price without modifiers
   price:number;

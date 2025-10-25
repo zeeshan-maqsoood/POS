@@ -12,7 +12,7 @@ export interface InventoryItem {
   supplier: string
   location: string
   status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK"
-  branchName?: string
+  restaurantId: string
   expiryDate?: string
   lastUpdated: string
   createdAt: string
@@ -28,7 +28,7 @@ export interface InventoryCategory {
   name: string
   description?: string
   color: string
-  branchName?: string
+  restaurantId: string
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -41,7 +41,7 @@ export interface InventorySubcategory {
   name: string
   description?: string
   categoryId: string
-  branchName?: string
+  restaurantId: string
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -70,14 +70,14 @@ export interface CategoryFormData {
   name: string
   description?: string
   color: string
-  branchName?: string
+  restaurantId: string
 }
 
 export interface SubcategoryFormData {
   name: string
   description?: string
   categoryId: string
-  branchName?: string
+  restaurantId: string
 }
 
 // Default categories for initial setup
@@ -87,44 +87,44 @@ export const defaultCategories: InventoryCategory[] = [
     name: "Produce",
     description: "Fresh fruits and vegetables",
     color: "bg-green-500",
+    restaurantId: "default-restaurant",
     isActive: true,
-    branchName: "Main Branch",
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     itemCount: 15,
     subcategories: [
-      { 
-        id: "1-1", 
-        name: "Vegetables", 
+      {
+        id: "1-1",
+        name: "Vegetables",
         description: "Fresh vegetables",
         categoryId: "1",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 8 
+        itemCount: 8
       },
-      { 
-        id: "1-2", 
-        name: "Fruits", 
+      {
+        id: "1-2",
+        name: "Fruits",
         description: "Fresh fruits",
         categoryId: "1",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 5 
+        itemCount: 5
       },
-      { 
-        id: "1-3", 
-        name: "Herbs", 
+      {
+        id: "1-3",
+        name: "Herbs",
         description: "Fresh herbs",
         categoryId: "1",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 2 
+        itemCount: 2
       }
     ]
   },
@@ -133,44 +133,44 @@ export const defaultCategories: InventoryCategory[] = [
     name: "Meat & Poultry",
     description: "Fresh and frozen meats",
     color: "bg-red-500",
+    restaurantId: "default-restaurant",
     isActive: true,
-    branchName: "Main Branch",
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     itemCount: 12,
     subcategories: [
-      { 
-        id: "2-1", 
-        name: "Beef", 
+      {
+        id: "2-1",
+        name: "Beef",
         description: "Beef products",
         categoryId: "2",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 4 
+        itemCount: 4
       },
-      { 
-        id: "2-2", 
-        name: "Chicken", 
+      {
+        id: "2-2",
+        name: "Chicken",
         description: "Chicken products",
         categoryId: "2",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 5 
+        itemCount: 5
       },
-      { 
-        id: "2-3", 
-        name: "Pork", 
+      {
+        id: "2-3",
+        name: "Pork",
         description: "Pork products",
         categoryId: "2",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 3 
+        itemCount: 3
       }
     ]
   },
@@ -179,33 +179,33 @@ export const defaultCategories: InventoryCategory[] = [
     name: "Seafood",
     description: "Fresh and frozen seafood",
     color: "bg-blue-500",
+    restaurantId: "default-restaurant",
     isActive: true,
-    branchName: "Main Branch",
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     itemCount: 8,
     subcategories: [
-      { 
-        id: "3-1", 
-        name: "Fish", 
+      {
+        id: "3-1",
+        name: "Fish",
         description: "Fresh and frozen fish",
         categoryId: "3",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 5 
+        itemCount: 5
       },
-      { 
-        id: "3-2", 
-        name: "Shellfish", 
+      {
+        id: "3-2",
+        name: "Shellfish",
         description: "Shellfish products",
         categoryId: "3",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 3 
+        itemCount: 3
       }
     ]
   },
@@ -214,44 +214,44 @@ export const defaultCategories: InventoryCategory[] = [
     name: "Dairy & Eggs",
     description: "Dairy products and eggs",
     color: "bg-yellow-500",
+    restaurantId: "default-restaurant",
     isActive: true,
-    branchName: "Main Branch",
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     itemCount: 10,
     subcategories: [
-      { 
-        id: "4-1", 
-        name: "Cheese", 
+      {
+        id: "4-1",
+        name: "Cheese",
         description: "Various cheese types",
         categoryId: "4",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 4 
+        itemCount: 4
       },
-      { 
-        id: "4-2", 
-        name: "Milk & Cream", 
+      {
+        id: "4-2",
+        name: "Milk & Cream",
         description: "Dairy milk and cream",
         categoryId: "4",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 3 
+        itemCount: 3
       },
-      { 
-        id: "4-3", 
-        name: "Eggs", 
+      {
+        id: "4-3",
+        name: "Eggs",
         description: "Fresh eggs",
         categoryId: "4",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 3 
+        itemCount: 3
       }
     ]
   },
@@ -260,44 +260,44 @@ export const defaultCategories: InventoryCategory[] = [
     name: "Dry Goods",
     description: "Non-perishable food items",
     color: "bg-orange-500",
+    restaurantId: "default-restaurant",
     isActive: true,
-    branchName: "Main Branch",
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     itemCount: 20,
     subcategories: [
-      { 
-        id: "5-1", 
-        name: "Grains & Rice", 
+      {
+        id: "5-1",
+        name: "Grains & Rice",
         description: "Grains and rice products",
         categoryId: "5",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 6 
+        itemCount: 6
       },
-      { 
-        id: "5-2", 
-        name: "Pasta", 
+      {
+        id: "5-2",
+        name: "Pasta",
         description: "Pasta and noodles",
         categoryId: "5",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 4 
+        itemCount: 4
       },
-      { 
-        id: "5-3", 
-        name: "Canned Goods", 
+      {
+        id: "5-3",
+        name: "Canned Goods",
         description: "Canned food items",
         categoryId: "5",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 10 
+        itemCount: 10
       }
     ]
   },
@@ -306,44 +306,44 @@ export const defaultCategories: InventoryCategory[] = [
     name: "Beverages",
     description: "Drinks and beverages",
     color: "bg-purple-500",
+    restaurantId: "default-restaurant",
     isActive: true,
-    branchName: "Main Branch",
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     itemCount: 15,
     subcategories: [
-      { 
-        id: "6-1", 
-        name: "Soft Drinks", 
+      {
+        id: "6-1",
+        name: "Soft Drinks",
         description: "Carbonated beverages",
         categoryId: "6",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 8 
+        itemCount: 8
       },
-      { 
-        id: "6-2", 
-        name: "Juices", 
+      {
+        id: "6-2",
+        name: "Juices",
         description: "Fruit and vegetable juices",
         categoryId: "6",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 4 
+        itemCount: 4
       },
-      { 
-        id: "6-3", 
-        name: "Alcoholic Beverages", 
+      {
+        id: "6-3",
+        name: "Alcoholic Beverages",
         description: "Alcoholic drinks",
         categoryId: "6",
+        restaurantId: "default-restaurant",
         isActive: true,
-        branchName: "Main Branch",
         createdAt: "2024-01-01",
         updatedAt: "2024-01-01",
-        itemCount: 3 
+        itemCount: 3
       }
     ]
   }

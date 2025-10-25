@@ -29,6 +29,8 @@ import { toast } from "@/components/ui/use-toast"
 import { Loader2, Save, X, Plus, Trash2, ChefHat, ChevronDown, ChevronUp } from "lucide-react"
 import { Modifier, modifierApi } from "@/lib/menu-api"
 import { inventoryItemApi } from "@/lib/inventory-api"
+import { branchApi } from "@/lib/branch-api"
+import { restaurantApi } from "@/lib/restaurant-api"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { v4 as uuidv4 } from 'uuid'
 
@@ -54,6 +56,10 @@ const modifierFormSchema = z.object({
   type: z.enum(["SINGLE", "MULTIPLE"]).default("SINGLE"),
   minSelection: z.coerce.number().min(0).default(0),
   maxSelection: z.coerce.number().min(1).default(1),
+  restaurantId: z.string().optional(),
+  restaurantName: z.string().optional(),
+  branchId: z.string().optional(),
+  branchName: z.string().optional(),
   ingredients: z.array(modifierIngredientSchema).default([]),
 })
 
@@ -73,6 +79,8 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
     quantity: number;
     unit: string;
   }[]>([])
+  const [restaurants, setRestaurants] = React.useState<any[]>([])
+  const [branches, setBranches] = React.useState<any[]>([])
   const [isIngredientDropdownOpen, setIsIngredientDropdownOpen] = React.useState(false)
   const [ingredientSearchTerm, setIngredientSearchTerm] = React.useState("")
   const router = useRouter()
@@ -85,7 +93,13 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
       price: initialData?.price || 0,
       isRequired: initialData?.isRequired || false,
       isActive: initialData?.isActive ?? true,
-      type: initialData?.type || "SINGLE",
+      type: (initialData?.type as "SINGLE" | "MULTIPLE") || "SINGLE",
+      minSelection: initialData?.minSelection || 0,
+      maxSelection: initialData?.maxSelection || 1,
+      restaurantId: initialData?.restaurantId === null ? "global" : (initialData?.restaurantId || ""),
+      restaurantName: initialData?.restaurantName || "",
+      branchId: initialData?.branchId === null ? "global" : (initialData?.branchId || ""),
+      branchName: initialData?.branchName || "",
 
       ingredients: initialData?.modifierIngredients?.map(ing => ({
         id: ing.id,
@@ -123,6 +137,47 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
 
     fetchInventoryItems()
   }, [])
+
+  // Fetch restaurants
+  React.useEffect(() => {
+    const fetchRestaurants = async () => {
+      try {
+        const response = await restaurantApi.getActiveRestaurants()
+        const restaurantData = Array.isArray(response?.data?.data) ? response.data.data : []
+        setRestaurants(restaurantData)
+      } catch (error) {
+        console.error("Error loading restaurants:", error)
+      }
+    }
+
+    fetchRestaurants()
+  }, [])
+
+  // Watch for restaurant changes and update branches
+  const selectedRestaurantId = form.watch("restaurantId")
+  React.useEffect(() => {
+    const fetchBranches = async () => {
+      if (!selectedRestaurantId) {
+        setBranches([])
+        return
+      }
+
+      try {
+        const response = await restaurantApi.getRestaurantById(selectedRestaurantId)
+        const restaurantData = response?.data?.data
+        if (restaurantData?.branches) {
+          setBranches(restaurantData.branches.filter((branch: any) => branch.isActive))
+        } else {
+          setBranches([])
+        }
+      } catch (error) {
+        console.error("Error loading branches:", error)
+        setBranches([])
+      }
+    }
+
+    fetchBranches()
+  }, [selectedRestaurantId])
 
   const selectedIngredients = form.watch("ingredients") || []
   const filteredInventoryItems = inventoryItems.filter(
@@ -171,9 +226,20 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
       setIsLoading(true)
       const { ingredients, minSelection, maxSelection, ...allData } = data
 
+      // Filter out empty/undefined fields before sending to backend
+      const filteredData: any = {}
+      Object.keys(allData).forEach(key => {
+        const value = allData[key as keyof typeof allData]
+        if (value !== undefined && value !== "" && value !== null) {
+          filteredData[key] = value
+        }
+      })
+
       const formattedData = {
-        ...allData,
-        price: Number(allData.price),
+        ...filteredData,
+        price: Number(data.price),
+        minSelection: Number(data.minSelection || 0),
+        maxSelection: Number(data.maxSelection || 1),
         // Format ingredients for the backend
         modifierIngredients: {
           create: ingredients.map(ing => ({
@@ -272,6 +338,70 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
                       {...field}
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="restaurantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Restaurant</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a restaurant (optional)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="global">Global (All Restaurants)</SelectItem>
+                      {restaurants.map((restaurant) => (
+                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                          {restaurant.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Select which restaurant this modifier belongs to, or leave empty for global availability.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="branchId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Branch</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedRestaurantId && branches.length === 0}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          !selectedRestaurantId
+                            ? "Select a restaurant first"
+                            : branches.length === 0
+                            ? "No branches available"
+                            : "Select a branch (leave empty for global)"
+                        } />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="global">Global (All Branches)</SelectItem>
+                      {branches.map((branch) => (
+                        <SelectItem key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Select which branch this modifier belongs to, or leave empty for global availability.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

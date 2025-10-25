@@ -1,13 +1,13 @@
 'use client';
 
-import { MenuItem } from '@/types/menu';
+import { MenuItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MenuItemsProps {
   menuItems: MenuItem[];
-  onAddToCart: (item: MenuItem) => void;
+  onAddToCart: (item: MenuItem, modifiers?: Array<{ id: string; name: string; price: number }>) => void;
 }
 
 export function MenuItems({ menuItems: items, onAddToCart }: MenuItemsProps) {

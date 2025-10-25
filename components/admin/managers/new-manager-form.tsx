@@ -437,6 +437,9 @@ import { Loader2 } from "lucide-react";
 
 // Import API
 import managerApi from "@/lib/manager-api";
+import restaurantApi from "@/lib/restaurant-api"
+import branchApi from "@/lib/branch-api";
+import { Branch } from "@/lib/branch-api";
 // Import the permission utilities
 import { getAllPermissions, getPermissionLabel, Permission } from "@/lib/permissions";
 
@@ -479,6 +482,7 @@ export const managerFormSchema = z.object({
   password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional(),
   role: z.enum(["MANAGER", "KITCHEN_STAFF","WAITER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
+  restaurantId: z.string().min(1, { message: "Please select a restaurant." }),
   branch: z.string().min(1, { message: "Please select a branch." }),
   permissions: z.array(z.string()).default([]),
   // Shift management fields - now per day
@@ -543,14 +547,6 @@ const getDefaultManagerPermissions = (): string[] => [
 // Fixed permissions for kitchen staff
 const KITCHEN_STAFF_PERMISSIONS = ["ORDER_READ", "ORDER_UPDATE"];
 
-// Static list of branches - matching the menu system
-const branches = [
-  { id: "Bradford", name: "Bradford" },
-  { id: "Leeds", name: "Leeds" },
-  { id: "Helifax", name: "Helifax" },
-  { id: "Darley St Market", name: "Darley St Market" },
-];
-
 // Legacy branch mapping for backward compatibility
 const LEGACY_BRANCH_MAPPING: Record<string, string> = {
   "Bradford": "Main Branch",
@@ -563,6 +559,10 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [permissionGroups, setPermissionGroups] = useState<{ [key: string]: string[] }>({});
+  const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
 
   // Initialize form with default values
   const defaultValues: ManagerFormValues = {
@@ -571,6 +571,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
     password: "",
     role: "MANAGER",
     status: "ACTIVE",
+    restaurantId: "",
     branch: "",
     permissions: getDefaultManagerPermissions(),
     shiftSchedule: {
@@ -590,10 +591,65 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
     defaultValues: { ...defaultValues, ...initialData },
   });
 
+  // Watch form values
+  const selectedRestaurantId = form.watch("restaurantId");
+
   // Load permission groups on mount
   useEffect(() => {
     setPermissionGroups(groupPermissionsByCategory());
   }, []);
+
+  // Fetch restaurants and branches on component mount
+  useEffect(() => {
+    const loadRestaurantsAndBranches = async () => {
+      try {
+        // Load restaurants
+        const restaurantsResponse = await restaurantApi.getActiveRestaurants();
+        const restaurantsData = restaurantsResponse.data.data || [];
+        console.log('Loaded restaurants:', restaurantsData);
+        setRestaurants(restaurantsData);
+
+        // Load all branches for filtering
+        const branchesResponse = await branchApi.getActiveBranches();
+        const branchesData = branchesResponse.data.data || [];
+        console.log('Loaded branches:', branchesData);
+        setBranches(branchesData);
+        // Don't show all branches initially - wait for restaurant selection
+        setFilteredBranches([]);
+      } catch (error) {
+        console.error('Error loading restaurants and branches:', error);
+      }
+    };
+
+    loadRestaurantsAndBranches();
+  }, []);
+
+  // Filter branches when restaurant selection changes
+  useEffect(() => {
+    if (selectedRestaurantId) {
+      setIsLoadingBranches(true);
+
+      // Use client-side filtering as the primary method since the API endpoint might not exist
+      branchApi.getActiveBranches().then((allBranchesRes) => {
+        const allBranches = allBranchesRes.data.data || [];
+        // Filter branches that belong to the selected restaurant
+        const filtered = allBranches.filter(branch =>
+          branch.restaurantId === selectedRestaurantId ||
+          branch.restaurant?.id === selectedRestaurantId
+        );
+        setFilteredBranches(filtered);
+      }).catch((error) => {
+        console.error("Error fetching branches:", error);
+        setFilteredBranches([]);
+      }).finally(() => {
+        setIsLoadingBranches(false);
+      });
+    } else {
+      // No restaurant selected, show empty list
+      setFilteredBranches([]);
+      setIsLoadingBranches(false);
+    }
+  }, [selectedRestaurantId, branches, form]);
 
   // Reset form when editing
   useEffect(() => {
@@ -624,6 +680,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
       form.reset({
         ...defaultValues,
         ...initialData,
+        restaurantId: initialData.restaurantId || "",
         branch: displayBranch, // Use mapped branch name for display
         permissions: initialData.permissions || [],
         shiftSchedule,
@@ -642,13 +699,38 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
         isEditing: isEditing
       });
 
+      // Validate required fields
+      if (!data.restaurantId || data.restaurantId.trim() === "") {
+        toast({
+          title: "Error",
+          description: "Please select a restaurant.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!data.branch || data.branch.trim() === "") {
+        // Only require branch selection if restaurant is selected and branches are loaded
+        if (selectedRestaurantId && filteredBranches.length > 0) {
+          toast({
+            title: "Error",
+            description: "Please select a branch.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const managerData = {
         name: data.name,
         email: data.email,
         password: data.password,
         role: data.role,
         status: data.status,
-        branch: data.branch, // This will now be "Uptown Branch" instead of "branch3"
+        restaurantId: data.restaurantId,
+        ...(data.branch && data.branch.trim() !== "" && { branch: data.branch }),
         permissions: data.role === "KITCHEN_STAFF" ? KITCHEN_STAFF_PERMISSIONS : data.permissions,
         // Send the complete shift schedule for all days
         shiftSchedule: data.shiftSchedule,
@@ -784,6 +866,36 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
               )}
             />
 
+            {/* Restaurant */}
+            <FormField
+              control={form.control}
+              name="restaurantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Restaurant</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a restaurant" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {restaurants.map((restaurant) => (
+                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                          {restaurant.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {/* Branch */}
             <FormField
               control={form.control}
@@ -794,19 +906,41 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
-                    disabled={isLoading}
+                    disabled={isLoading || isLoadingBranches || !selectedRestaurantId}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a branch" />
+                        <SelectValue placeholder={
+                          isLoadingBranches
+                            ? "Loading branches..."
+                            : !selectedRestaurantId
+                              ? "Select restaurant first"
+                              : filteredBranches.length === 0
+                                ? "No branches available"
+                                : "Select a branch"
+                        } />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {branches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </SelectItem>
-                      ))}
+                      {isLoadingBranches ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          Loading branches...
+                        </div>
+                      ) : !selectedRestaurantId ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          Select restaurant first
+                        </div>
+                      ) : filteredBranches.length > 0 ? (
+                        filteredBranches.map((branch) => (
+                          <SelectItem key={branch.id} value={branch.id}>
+                            {branch.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          No branches available
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />

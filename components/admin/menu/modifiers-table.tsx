@@ -41,11 +41,20 @@ export function ModifiersTable({
       ),
     },
     {
-      accessorKey: "type",
-      header: "Type",
+      accessorKey: "restaurant",
+      header: "Restaurant",
       cell: ({ row }) => (
         <Badge variant="outline">
-          {row.original.type}
+          {row.original.restaurant?.name || 'Global'}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "branch",
+      header: "Branch",
+      cell: ({ row }) => (
+        <Badge variant="secondary">
+          {row.original.branch?.name || 'Global'}
         </Badge>
       ),
     },
@@ -56,15 +65,6 @@ export function ModifiersTable({
         <Badge variant={row.original.isRequired ? "default" : "outline"}>
           {row.original.isRequired ? "Yes" : "No"}
         </Badge>
-      ),
-    },
-    {
-      accessorKey: "options",
-      header: "Options",
-      cell: ({ row }) => (
-        <div className="text-sm text-muted-foreground">
-          {row.original.options?.length || 0} options
-        </div>
       ),
     },
     {

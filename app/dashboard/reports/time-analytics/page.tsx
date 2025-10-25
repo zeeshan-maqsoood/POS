@@ -33,6 +33,7 @@ import {
   Line
 } from 'recharts';
 import { reportApi, ReportParams, TimeAnalyticsData } from '@/lib/report-api';
+import { useBranches } from '@/hooks/use-branches';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -46,6 +47,9 @@ export default function TimeAnalyticsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeData, setTimeData] = useState<TimeAnalyticsData | null>(null);
+
+  // Get dynamic branches
+  const { branches, loading: branchesLoading } = useBranches();
 
   const fetchTimeAnalytics = async () => {
     setLoading(true);
@@ -149,14 +153,17 @@ export default function TimeAnalyticsPage() {
             </div>
             <div className="w-full sm:w-48">
               <label className="text-sm font-medium mb-2 block">Branch</label>
-              <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <Select value={branchFilter} onValueChange={setBranchFilter} disabled={branchesLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Branches" />
+                  <SelectValue placeholder={branchesLoading ? "Loading branches..." : "All Branches"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Branches</SelectItem>
-                  <SelectItem value="Bradford">Bradford</SelectItem>
-                  <SelectItem value="Leeds">Leeds</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.value}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

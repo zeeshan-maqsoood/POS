@@ -20,6 +20,8 @@ import {
   User,
   Sparkles,
   Warehouse,
+  Building,
+  Building2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -81,6 +83,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       { name: "Menu", href: "/dashboard/menu", icon: Sparkles },
       { name: "POS", href: "/pos", icon: ShoppingCart },
       { name: "Managers", href: "/dashboard/managers", icon: Users },
+      { name: "Branches", href: "/dashboard/branches", icon: Building },
+      { name: "Restaurants", href: "/dashboard/restaurants", icon: Building2 },
       { name: "Orders", href: "/dashboard/orders", icon: Package },
       // { name: "Customers", href: "/dashboard/customers", icon: User },
       { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
@@ -264,7 +268,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <div className="flex h-16 items-center px-6">
                     <span className="text-lg font-semibold">Admin Panel</span>
                   </div>
-                  <div className="flex-1 overflow-y-auto py-4">
+                  <div className="flex-1 overflow-y-auto py-4 pr-2 custom-scrollbar">
                     {renderNavItems()}
                   </div>
                 </div>
@@ -372,7 +376,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               <h2 className="text-lg font-bold text-sidebar-menu">Admin Panel</h2>
             </div>
           </div>
-          <div className="flex-1 p-4">{renderNavItems()}</div>
+          <div className="flex-1 p-4 overflow-y-auto max-h-[calc(100vh-4rem)] custom-scrollbar">{renderNavItems()}</div>
         </div>
       </div>
 

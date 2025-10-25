@@ -14,7 +14,7 @@ export interface InventoryCategory {
   name: string;
   description?: string;
   color: string;
-  branchName?: string;
+  restaurantId: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -27,7 +27,7 @@ export interface InventorySubcategory {
   name: string;
   description?: string;
   categoryId: string;
-  branchName?: string;
+  restaurantId: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -49,7 +49,7 @@ export interface InventoryItem {
   supplier: string;
   location: string;
   status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
-  branchName?: string;
+  restaurantId: string;
   expiryDate?: string;
   lastUpdated: string;
   createdAt: string;

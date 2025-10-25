@@ -12,7 +12,15 @@ export interface Manager {
   lastLogin?: string;
   createdAt: string;
   updatedAt: string;
-  branch?: string;
+  branch?: {
+    id: string;
+    name: string;
+    restaurant?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+  restaurantId?: string;
   permissions: any;
   // Updated shift management - now uses shiftSchedule JSON field
   shiftSchedule?: {
@@ -35,6 +43,7 @@ export interface CreateManagerData {
   status?: 'ACTIVE' | 'INACTIVE';
   permissions?: string[];
   branch?: string;
+  restaurantId?: string;
   // Updated shift management - now uses shiftSchedule JSON field
   shiftSchedule?: {
     MONDAY?: { startTime?: string; endTime?: string };
@@ -56,6 +65,7 @@ export interface UpdateManagerData {
   password?: string;
   permissions?: string[];
   branch?: string;
+  restaurantId?: string;
   // Updated shift management - now uses shiftSchedule JSON field
   shiftSchedule?: {
     MONDAY?: { startTime?: string; endTime?: string };

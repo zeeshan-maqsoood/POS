@@ -23,6 +23,7 @@ export default function EditCategoryPage() {
       try {
         setIsLoading(true)
         const response = await categoryApi.getCategory(categoryId)
+        console.log(response.data,"editData")
         if (response.data?.data) {
           // Map the API response to match the Category type
           const categoryData = response.data.data
@@ -32,8 +33,14 @@ export default function EditCategoryPage() {
             description: categoryData.description || '',
             isActive: categoryData.isActive,
             imageUrl: categoryData.imageUrl || '',
+            displayOrder: categoryData.displayOrder || 0,
             createdAt: categoryData.createdAt,
-            updatedAt: categoryData.updatedAt
+            updatedAt: categoryData.updatedAt,
+            branch:categoryData.branch,
+            // Include branch and restaurant information for form pre-selection
+            branchId: categoryData.branchId,
+            restaurantId: categoryData.restaurantId,
+            branchName: categoryData.branch?.name
           })
         }
         setError(null)
@@ -66,6 +73,7 @@ export default function EditCategoryPage() {
   const handleCancel = () => {
     router.back()
   }
+  console.log(category,"category")
 
   if (isLoading) {
     return (
@@ -133,6 +141,7 @@ export default function EditCategoryPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {(() => { console.log('Passing category data to form:', category); return null; })()}
           <CategoryForm 
             initialData={category}
             onSuccess={handleSuccess} 

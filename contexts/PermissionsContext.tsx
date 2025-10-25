@@ -21,7 +21,15 @@ export type Permission =
   | 'MENU_DELETE'
   | 'MANAGER_CREATE'
   | 'MANAGER_READ'
-  | 'MANAGER_UPDATE';
+  | 'MANAGER_UPDATE'
+  | 'BRANCH_CREATE'
+  | 'BRANCH_READ'
+  | 'BRANCH_UPDATE'
+  | 'BRANCH_DELETE'
+  | 'RESTAURANT_CREATE'
+  | 'RESTAURANT_READ'
+  | 'RESTAURANT_UPDATE'
+  | 'RESTAURANT_DELETE';
 
 type PermissionString = Permission | string;
 

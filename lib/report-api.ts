@@ -251,6 +251,8 @@ export interface ReportParams {
   startDate?: string;
   endDate?: string;
   branchName?: string;
+  restaurantId?: string;
+  restaurantName?: string;
   status?: string;
   paymentMethod?: string;
   categoryId?: string;

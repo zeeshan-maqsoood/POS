@@ -30,6 +30,7 @@ import {
 import { reportApi, ReportParams } from '@/lib/report-api';
 import { categoryApi, Category } from '@/lib/menu-api';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { useBranches } from '@/hooks/use-branches';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 interface MenuItemPerformance {
@@ -83,6 +84,9 @@ export default function MenuReportsPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Get dynamic branches
+  const { branches, loading: branchesLoading } = useBranches();
 
   // Build API params
   const buildParams = (): ReportParams => {
@@ -234,16 +238,17 @@ export default function MenuReportsPage() {
             </div>
             <div className="w-full sm:w-48">
               <label className="text-sm font-medium mb-2 block">Branch</label>
-              <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <Select value={branchFilter} onValueChange={setBranchFilter} disabled={branchesLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Branches" />
+                  <SelectValue placeholder={branchesLoading ? "Loading branches..." : "All Branches"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Branches</SelectItem>
-                  <SelectItem value="Bradford">Bradford</SelectItem>
-                  <SelectItem value="Leeds">Leeds</SelectItem>
-                  <SelectItem value="Darley St Market">Darley St Market</SelectItem>
-                  <SelectItem value="Helifax">Helifax</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.value}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

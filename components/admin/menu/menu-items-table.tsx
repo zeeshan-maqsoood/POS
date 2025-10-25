@@ -11,7 +11,7 @@ import { CheckCircle2, XCircle, Pencil, Trash2, MoreHorizontal, Loader2 } from "
 import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
 interface MenuItemsTableProps {
-  data: Array<MenuItem & { cost?: number }>
+  data: Array<MenuItem & { cost?: number } & { branch?: { id: string; name: string; restaurantId?: string } | null }>
   onEdit?: (id: string) => void
   onDelete: (id: string) => void
   onToggleStatus: (id: string, isActive: boolean) => void
@@ -25,7 +25,7 @@ export function MenuItemsTable({
   onToggleStatus, 
   isLoading = false 
 }: MenuItemsTableProps) {
-  type MenuItemWithCost = MenuItem & { cost?: number };
+  type MenuItemWithCost = MenuItem & { cost?: number } & { branch?: { id: string; name: string; restaurantId?: string } | null };
   const columns: ColumnDef<MenuItemWithCost>[] = [
     {
       accessorKey: "name",
@@ -49,7 +49,7 @@ export function MenuItemsTable({
       header: "Branch",
       cell: ({ row }) => (
         <div className="text-sm">
-          {row.original.branchName || 'All Branches'}
+          {row.original.branch?.name || row.original.branchName || 'All Branches'}
         </div>
       ),
     },

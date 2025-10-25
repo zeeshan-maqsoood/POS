@@ -42,12 +42,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import reportApi, { SalesOverview, OrderReport, PaymentReport, ReportParams, EnhancedSalesOverview } from '@/lib/report-api';
+import { useBranches } from '@/hooks/use-branches';
+import { useRestaurants } from '@/hooks/use-restaurants';
+import { branchApi } from '@/lib/branch-api';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#8dd1e1'];
 
 export default function SalesReportsPage() {
   const [reportType, setReportType] = useState<'overview' | 'orders' | 'payments' | 'detailed'>('overview');
   const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [restaurantFilter, setRestaurantFilter] = useState<string>('all');
+  const [filteredBranches, setFilteredBranches] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>({});
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('week');
   const [loading, setLoading] = useState(false);
@@ -59,12 +64,20 @@ export default function SalesReportsPage() {
   const [ordersData, setOrdersData] = useState<OrderReport | null>(null);
   const [paymentsData, setPaymentsData] = useState<PaymentReport | null>(null);
 
+  // Get dynamic branches and restaurants
+  const { branches, loading: branchesLoading } = useBranches();
+  const { restaurants, loading: restaurantsLoading } = useRestaurants();
+
   // Build report parameters
   const buildReportParams = (): ReportParams => {
     const params: ReportParams = {};
 
     if (branchFilter !== 'all') {
       params.branchName = branchFilter;
+    }
+
+    if (restaurantFilter !== 'all') {
+      params.restaurantId = restaurantFilter;
     }
 
     if (dateRange.startDate) {
@@ -123,10 +136,59 @@ export default function SalesReportsPage() {
     }
   };
 
+  // Fetch branches for selected restaurant
+  const fetchBranchesForRestaurant = async (restaurantId: string) => {
+    try {
+      if (restaurantId === 'all') {
+        // When "All Restaurants" is selected, show all branches from the hook
+        // The branches from useBranches are already properly formatted
+        setFilteredBranches(branches);
+      } else {
+        // Load branches specific to the selected restaurant
+        const branchesResponse = await branchApi.getBranchesByRestaurant(restaurantId);
+        const branchesData = branchesResponse.data.data || [];
+        const formattedBranches = branchesData.map((branch: any) => ({
+          id: branch.id,
+          name: branch.name,
+          value: branch.name, // Use branch name as value for consistency
+          restaurantName: branch.restaurant?.name || 'No Restaurant'
+        }));
+        setFilteredBranches(formattedBranches);
+      }
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+      setFilteredBranches([]);
+    }
+  };
+
+  // Fetch branches when restaurant selection changes
+  useEffect(() => {
+    if (branches.length > 0) {
+      fetchBranchesForRestaurant(restaurantFilter);
+    }
+  }, [restaurantFilter, branches]);
+
+  // Reset branch selection when restaurant changes or filtered branches change
+  useEffect(() => {
+    if (branchFilter !== 'all') {
+      const currentBranchExists = filteredBranches.some(branch => branch.value === branchFilter);
+      if (!currentBranchExists) {
+        setBranchFilter('all');
+      }
+    }
+  }, [filteredBranches]); // Remove branchFilter from dependencies to avoid infinite loop
+
+  // Initial setup - load all branches when available and restaurantFilter is 'all'
+  useEffect(() => {
+    if (branches.length > 0 && restaurantFilter === 'all' && filteredBranches.length === 0) {
+      setFilteredBranches(branches);
+    }
+  }, [branches, restaurantFilter]); // Removed filteredBranches.length from dependencies
+
   // Fetch data when filters change
   useEffect(() => {
     fetchReportData();
-  }, [reportType, branchFilter, dateRange]);
+  }, [reportType, branchFilter, restaurantFilter, dateRange]);
 
   // Handle export functionality
   const handleExport = async () => {
@@ -196,17 +258,46 @@ export default function SalesReportsPage() {
               </Select>
             </div>
             <div className="w-full sm:w-48">
-              <label className="text-sm font-medium mb-2 block">Branch</label>
-              <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <label className="text-sm font-medium mb-2 block">Restaurant</label>
+              <Select value={restaurantFilter} onValueChange={setRestaurantFilter} disabled={restaurantsLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Branches" />
+                  <SelectValue placeholder={restaurantsLoading ? "Loading restaurants..." : "All Restaurants"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Restaurants</SelectItem>
+                  {restaurants.map((restaurant) => (
+                    <SelectItem key={restaurant.id} value={restaurant.value}>
+                      {restaurant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-full sm:w-48">
+              <label className="text-sm font-medium mb-2 block">Branch</label>
+              <Select
+                value={branchFilter}
+                onValueChange={setBranchFilter}
+                disabled={restaurantsLoading || branchesLoading || filteredBranches.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    restaurantsLoading || branchesLoading
+                      ? "Loading..."
+                      : filteredBranches.length === 0
+                        ? "Select a restaurant first"
+                        : restaurantFilter === 'all'
+                          ? "All Branches"
+                          : "Select a branch"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Branches</SelectItem>
-                  <SelectItem value="Bradford">Bradford</SelectItem>
-                  <SelectItem value="Leeds">Leeds</SelectItem>
-                  <SelectItem value="Darley St Market">Darley St Market</SelectItem>
-                  <SelectItem value="Helifax">Helifax</SelectItem>
+                  {filteredBranches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.value}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

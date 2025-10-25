@@ -10,6 +10,15 @@ import { useRouter } from 'next/navigation';
 import PermissionGate from '@/components/auth/permission-gate';
 import { WithPermission } from '@/components/auth/with-permission';
 import { usePermissions } from '@/hooks/use-permissions';
+import { restaurantApi, Restaurant } from '@/lib/restaurant-api';
+import { branchApi, Branch } from '@/lib/branch-api';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // Define PaymentStatus enum to match the one in order-api.ts
 const PaymentStatus = {
@@ -25,17 +34,24 @@ interface OrderStats {
   totalOrders: number;
   totalRevenue: number;
   ordersByStatus: Record<OrderStatus, number>;
-  recentOrders: Order[];
   revenueByStatus: Record<OrderStatus, number>;
   paymentStatus: Record<string, number>;
+  recentOrders: Order[];
   completedOrders: number;
   pendingOrders: number;
+  processingOrders: number;
 }
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL'>('ALL');
+  const [selectedRestaurant, setSelectedRestaurant] = useState<string>('all');
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
+  const [restaurantsLoaded, setRestaurantsLoaded] = useState(false);
   const { hasRole, user } = usePermissions();
   const router = useRouter();
   const isKitchenStaff = hasRole('KITCHEN_STAFF');
@@ -46,6 +62,47 @@ export default function OrdersPage() {
     const timeStamp = Date.now()
     router.push(`/pos?editOrderId=${order.id}&t=${timeStamp}`);
   };
+
+  // Fetch restaurants and branches on component mount
+  useEffect(() => {
+    const loadRestaurantsAndBranches = async () => {
+      try {
+        // Load restaurants
+        const restaurantsResponse = await restaurantApi.getActiveRestaurants();
+        const restaurantsData = restaurantsResponse.data.data || [];
+        console.log('Loaded restaurants:', restaurantsData);
+        setRestaurants(restaurantsData);
+        setRestaurantsLoaded(true);
+
+        // Don't load branches initially - wait for restaurant selection
+        setFilteredBranches([]);
+      } catch (error) {
+        console.error('Error loading restaurants:', error);
+      }
+    };
+
+    loadRestaurantsAndBranches();
+  }, []);
+
+  // Fetch branches when restaurant selection changes
+  useEffect(() => {
+    if (restaurantsLoaded) {
+      console.log('Restaurant changed to:', selectedRestaurant);
+      fetchBranchesForRestaurant(selectedRestaurant);
+      // Reset branch selection when restaurant changes
+      if (selectedRestaurant === 'all') {
+        setSelectedBranch('all');
+      } else {
+        // If current branch doesn't belong to selected restaurant, reset to 'all'
+        if (selectedBranch !== 'all') {
+          const currentRestaurant = branches.find(branch => branch.id === selectedBranch)?.restaurantId;
+          if (currentRestaurant !== selectedRestaurant) {
+            setSelectedBranch('all');
+          }
+        }
+      }
+    }
+  }, [selectedRestaurant, restaurantsLoaded]); // Only depend on selectedRestaurant and restaurantsLoaded
 
   // const fetchOrders = async () => {
   //   try {
@@ -77,11 +134,19 @@ export default function OrdersPage() {
   // };
   const fetchOrders = async (status?: OrderStatus | 'ALL') => {
     try {
-      const branch = (isManager || isKitchenStaff) ? userBranch : undefined;
+      const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+
+      console.log('=== FETCH ORDERS DEBUG ===');
+      console.log('selectedRestaurant:', selectedRestaurant);
+      console.log('selectedBranch:', selectedBranch);
+      console.log('filteredBranches:', filteredBranches);
+      console.log('branchName to send:', branchName);
+      console.log('status:', status);
 
       const response = await orderApi.getOrders({
         status: status === 'ALL' ? undefined : status,
-        branchName: branch,
+        branchName: branchName,
+        restaurantId: selectedRestaurant === 'all' ? undefined : selectedRestaurant || undefined,
         page: 1,
         pageSize: 100,
         sortBy: 'createdAt',
@@ -94,6 +159,7 @@ export default function OrdersPage() {
         : Array.isArray(payload?.data?.data)
           ? payload.data.data
           : [];
+      console.log('Orders fetched:', list.length);
       setOrders(list);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -101,14 +167,66 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
-  const fetchStats = async () => {
+  // Fetch branches for selected restaurant
+  const fetchBranchesForRestaurant = async (restaurantId: string) => {
     try {
-      const response = await orderApi.getStats();
+      console.log('fetchBranchesForRestaurant called with:', restaurantId);
+      if (restaurantId === 'all') {
+        // When "All Restaurants" is selected, show no branches (empty state)
+        console.log('Setting empty branches for "all"');
+        setFilteredBranches([]);
+      } else {
+        // Load branches specific to the selected restaurant
+        console.log('Fetching branches for restaurant:', restaurantId);
+        try {
+          const branchesResponse = await branchApi.getBranchesByRestaurant(restaurantId);
+          console.log('Branch API response:', branchesResponse);
+          const branchesData = branchesResponse.data.data || [];
+          console.log('Received branches:', branchesData);
+          setFilteredBranches(branchesData);
+        } catch (apiError) {
+          console.error('API Error fetching branches:', apiError);
+          console.error('API Error response:', apiError.response?.data);
+          setFilteredBranches([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+      setFilteredBranches([]);
+    }
+  };
+  const fetchStats = async (restaurantId?: string, branchName?: string) => {
+    console.log('fetchStats called with restaurantId:', restaurantId, 'branchName:', branchName);
+    try {
+      const response = await orderApi.getStats({
+        branchName: branchName,
+        restaurantId: restaurantId,
+      });
+      console.log('Stats API response:', response);
       const payload: any = response.data;
       // Support both shapes: { data: Stats } and { data: { data: Stats } }
       const statsData = payload?.data?.data ?? payload?.data ?? null;
-      console.log('stats payload parsed', statsData);
-      setStats(statsData);
+      console.log('Stats data:', statsData);
+
+      // If stats data exists, calculate processingOrders from ordersByStatus
+      if (statsData && statsData.ordersByStatus) {
+        let processingOrders = 0;
+        if (Array.isArray(statsData.ordersByStatus)) {
+          // Backend returns array format
+          processingOrders = statsData.ordersByStatus.find((item: any) => item.status === OrderStatus.PROCESSING)?.count || 0;
+        } else {
+          // Fallback calculation returns object format
+          processingOrders = statsData.ordersByStatus[OrderStatus.PROCESSING] || 0;
+        }
+        setStats({
+          ...statsData,
+          processingOrders
+        });
+        console.log('Stats set successfully:', { ...statsData, processingOrders });
+      } else {
+        setStats(statsData);
+        console.log('Stats set (no ordersByStatus):', statsData);
+      }
     } catch (error) {
       console.error('Error fetching stats:', error);
 
@@ -118,7 +236,9 @@ export default function OrdersPage() {
           page: 1,
           pageSize: 1000, // Get enough data for stats
           sortBy: 'createdAt',
-          sortOrder: 'desc'
+          sortOrder: 'desc',
+          restaurantId: restaurantId,
+          branchName: branchName
         });
 
         // The response contains data and meta properties
@@ -129,9 +249,16 @@ export default function OrdersPage() {
             ? opayload.data.data
             : [];
 
+        // Apply additional filtering if specific restaurant/branch is selected
+        const filteredOrders = allOrders.filter((order: Order) => {
+          const restaurantMatch = !restaurantId || restaurantId === 'all' || order.restaurant?.id === restaurantId;
+          const branchMatch = !branchName || branchName === 'all' || order.branchName === branchName;
+          return restaurantMatch && branchMatch;
+        });
+
         // Calculate stats - only include paid orders in revenue
-        const totalOrders = allOrders.length;
-        const totalRevenue = allOrders
+        const totalOrders = filteredOrders.length;
+        const totalRevenue = filteredOrders
           .filter((order: Order) => order.paymentStatus === 'PAID')
           .reduce((sum: number, order: Order) => sum + order.total, 0);
         const ordersByStatus = {} as Record<OrderStatus, number>;
@@ -145,7 +272,7 @@ export default function OrdersPage() {
         });
 
         // Count orders and sum revenue by status
-        allOrders.forEach((order: Order) => {
+        filteredOrders.forEach((order: Order) => {
           // Count orders by status
           const status = order.status as OrderStatus;
           ordersByStatus[status] = (ordersByStatus[status] || 0) + 1;
@@ -162,24 +289,43 @@ export default function OrdersPage() {
         });
 
 
+        // Calculate completed and pending orders
+        const completedOrders = filteredOrders.filter((order: Order) => order.status === OrderStatus.COMPLETED).length;
+        const pendingOrders = filteredOrders.filter((order: Order) => order.status === OrderStatus.PENDING).length;
+        const processingOrders = filteredOrders.filter((order: Order) => order.status === OrderStatus.PROCESSING).length;
+
         setStats({
-          totalOrders: allOrders.length,
+          totalOrders: filteredOrders.length,
           totalRevenue,
           ordersByStatus,
           revenueByStatus,
           paymentStatus,
-          recentOrders: allOrders.slice(0, 5), // Get first 5 as recent
+          recentOrders: filteredOrders.slice(0, 5), // Get first 5 as recent
+          completedOrders,
+          pendingOrders,
+          processingOrders,
+        });
+        console.log('Stats calculated from orders:', {
+          totalOrders: filteredOrders.length,
+          totalRevenue,
+          ordersByStatus,
+          revenueByStatus,
+          paymentStatus,
+          recentOrders: filteredOrders.slice(0, 5),
+          completedOrders,
+          pendingOrders,
+          processingOrders,
         });
       } catch (err) {
         console.error('Error calculating stats from orders:', err);
       }
     }
   };
-  console.log(stats, "stats")
   const updateOrderStatus = async (orderId: string, status: OrderStatus, notes?: string) => {
     try {
       await orderApi.updateStatus(orderId, status, notes);
-      await Promise.all([fetchOrders(), fetchStats()]);
+      const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+      await Promise.all([fetchOrders(), fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)]);
     } catch (error) {
       console.error('Error updating order status:', error);
       throw error; // Re-throw to handle in the UI if needed
@@ -190,7 +336,8 @@ export default function OrdersPage() {
     const loadData = async () => {
       setLoading(true);
       try {
-        await Promise.all([fetchOrders(), fetchStats()]);
+        const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+        await Promise.all([fetchOrders(), fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)]);
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -200,6 +347,19 @@ export default function OrdersPage() {
 
     loadData();
   }, [activeTab]);
+
+  // Fetch orders when filters change
+  useEffect(() => {
+    fetchOrders(activeTab);
+  }, [selectedRestaurant, selectedBranch, filteredBranches, activeTab]);
+
+  // Refresh stats when filters change
+  useEffect(() => {
+    // Convert branch ID to branch name for API call
+    const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+    console.log('Stats useEffect - selectedBranch:', selectedBranch, 'branchName:', branchName, 'filteredBranches:', filteredBranches);
+    fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName);
+  }, [selectedRestaurant, selectedBranch, filteredBranches]);
 
   const filteredOrders = activeTab === 'ALL'
     ? orders
@@ -231,41 +391,128 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-bold">Orders Management</h1>
           <PermissionGate required="ORDER_READ">
             <Button onClick={() => {
+              const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
               fetchOrders();
-              fetchStats();
+              fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName);
             }} variant="outline">
               Refresh
             </Button>
           </PermissionGate>
         </div>
 
-        {/* Stats Cards */}
-        {stats && (
-          <div className={`grid gap-4 mb-6 ${isKitchenStaff ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-4'}`}>
-            <StatsCard
-              title="Total Orders"
-              value={String(stats.totalOrders ?? 0)}
-              description="All time orders"
-            />
-            {!isKitchenStaff && (
-              <StatsCard
-                title="Total Revenue"
-                value={`£${(stats.totalRevenue ?? 0)}`}
-                description="Total revenue from all orders"
-              />
-            )}
-            <StatsCard
-              title="Pending Orders"
-              value={String(stats.pendingOrders)}
-              description="Orders awaiting processing"
-            />
-            <StatsCard
-              title="Completed Orders"
-              value={String(stats.completedOrders)}
-              description="Successfully completed orders"
-            />
+        {/* Filters */}
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Restaurant</label>
+            <Select value={selectedRestaurant} onValueChange={setSelectedRestaurant} disabled={!restaurantsLoaded}>
+              <SelectTrigger>
+                <SelectValue placeholder={restaurantsLoaded ? "All Restaurants" : "Loading restaurants..."} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Restaurants</SelectItem>
+                {(() => {
+                  console.log('Rendering restaurant dropdown with restaurants:', restaurants);
+                  return restaurants.map((restaurant) => (
+                    <SelectItem key={restaurant.id} value={restaurant.id}>
+                      {restaurant.name}
+                    </SelectItem>
+                  ));
+                })()}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Branch</label>
+            <Select
+              value={selectedBranch}
+              onValueChange={setSelectedBranch}
+              disabled={!restaurantsLoaded || selectedRestaurant === 'all' || filteredBranches.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={
+                  !restaurantsLoaded
+                    ? "Loading restaurants..."
+                    : selectedRestaurant === 'all'
+                      ? "Select a restaurant first"
+                      : filteredBranches.length === 0
+                        ? "Loading branches..."
+                        : "All Branches"
+                } />
+              </SelectTrigger>
+              <SelectContent>
+                {(() => {
+                  console.log('Rendering branch dropdown with filteredBranches:', filteredBranches);
+                  return (
+                    <>
+                      {filteredBranches.length > 0 && (
+                        <SelectItem value="all">All Branches</SelectItem>
+                      )}
+                      {filteredBranches.map((branch) => (
+                        <SelectItem key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  );
+                })()}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Status</label>
+            <Select value={activeTab} onValueChange={(value) => setActiveTab(value as OrderStatus | 'ALL')}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Statuses</SelectItem>
+                {Object.values(OrderStatus).map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        {stats && (() => {
+          console.log('Rendering stats cards with stats:', stats);
+          return (
+            <div className={`grid gap-4 mb-6 ${isKitchenStaff ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-5'}`}>
+              <StatsCard
+                title="Total Orders"
+                value={String(stats.totalOrders ?? 0)}
+                description="All time orders"
+              />
+              {!isKitchenStaff && (
+                <StatsCard
+                  title="Total Revenue"
+                  value={`£${(stats.totalRevenue ?? 0)}`}
+                  description="Total revenue from all orders"
+                />
+              )}
+              <StatsCard
+                title="Processing Orders"
+                value={String(stats.processingOrders)}
+                description="Orders currently being processed"
+              />
+              <StatsCard
+                title="Pending Orders"
+                value={String(stats.pendingOrders)}
+                description="Orders awaiting processing"
+              />
+              <StatsCard
+                title="Completed Orders"
+                value={String(stats.completedOrders)}
+                description="Successfully completed orders"
+              />
+            </div>
+          );
+        })()}
 
         <Tabs value={activeTab === "ALL" ? "all" : activeTab.toLowerCase()} className="space-y-4">
           <div className="relative">
@@ -295,6 +542,7 @@ export default function OrdersPage() {
                     {value.replace(/_/g, " ")}
                   </TabsTrigger>
                 ))}
+
               </div>
             </TabsList>
           </div>
@@ -308,7 +556,8 @@ export default function OrdersPage() {
                 onPaymentStatusUpdate={async (orderId, paymentStatus, paymentMethod) => {
                   try {
                     await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
-                    await Promise.all([fetchOrders(activeTab), fetchStats()]);
+                    const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+                    await Promise.all([fetchOrders(activeTab), fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)]);
                   } catch (error) {
                     console.error("Error updating payment status:", error);
                   }
@@ -336,15 +585,17 @@ export default function OrdersPage() {
 
 function StatsCard({ title, value, description }: { title: string; value: string; description: string }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{value}</div>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </CardContent>
+      </Card>
+    </>
   );
 }
 
@@ -384,7 +635,6 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate, onEditOrder 
       case OrderStatus.COMPLETED:
         return 'bg-green-100 text-green-800';
       case OrderStatus.CANCELLED:
-      case OrderStatus.REFUNDED:
         return 'bg-red-100 text-red-800';
       case OrderStatus.PROCESSING:
         return 'bg-blue-100 text-blue-800';
@@ -508,10 +758,10 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate, onEditOrder 
                         title={order.status.charAt(0) + order.status.slice(1).toLowerCase().replace('_', ' ')}
                       >
                         {updatingOrderId === order.id ? (
-                          <option value="">Updating...</option>
+                          <option value="updating-status">Updating...</option>
                         ) : (
                           Object.values(OrderStatus)
-                            .filter(status => status !== order.status && status !== OrderStatus.REFUNDED)
+                            .filter(status => status !== order.status)
                             .map((status) => (
                               <option
                                 key={status}

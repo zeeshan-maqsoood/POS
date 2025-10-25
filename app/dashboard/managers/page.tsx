@@ -25,7 +25,6 @@ export default function ManagersPage() {
   const [managers, setManagers] = useState<Manager[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-console.log(managers,"managers")
   const columns: ColumnDef<Manager>[] = [
     {
       accessorKey: "name",
@@ -38,6 +37,28 @@ console.log(managers,"managers")
     {
       accessorKey: "role",
       header: "Role",
+    },
+    {
+      accessorKey: "restaurant",
+      header: "Restaurant",
+      cell: ({ row }) => {
+        const manager = row.original;
+        if (manager.branch?.restaurant?.name) {
+          return <span>{manager.branch.restaurant.name}</span>;
+        }
+        return <span className="text-muted-foreground">No restaurant</span>;
+      },
+    },
+    {
+      accessorKey: "branch",
+      header: "Branch",
+      cell: ({ row }) => {
+        const manager = row.original;
+        if (manager.branch?.name) {
+          return <Badge variant="outline">{manager.branch.name}</Badge>;
+        }
+        return <span className="text-muted-foreground">No branch</span>;
+      },
     },
     {
       accessorKey: "shiftInfo",
@@ -79,17 +100,25 @@ console.log(managers,"managers")
       header: "Permissions",
       cell: ({ row }) => {
         const permissions = row.original.permissions || [];
-        console.log(permissions, "permissions");
         if (permissions.length === 0) {
           return <span className="text-muted-foreground">No permissions</span>;
         }
+
+        // Handle both string array and object array formats
+        const permissionNames = permissions.map((perm: any) =>
+          typeof perm === 'string' ? perm : perm.permission || perm.name
+        );
+
         return (
           <div className="flex flex-wrap gap-1">
-            {permissions.map((perm) => (
-              <Badge key={perm.id} variant="secondary">
-                {perm.permission}
+            {permissionNames.slice(0, 3).map((perm: string, index: number) => (
+              <Badge key={index} variant="secondary">
+                {perm.replace(/_/g, ' ')}
               </Badge>
             ))}
+            {permissionNames.length > 3 && (
+              <Badge variant="outline">+{permissionNames.length - 3} more</Badge>
+            )}
           </div>
         );
       },
@@ -145,7 +174,6 @@ console.log(managers,"managers")
     const fetchManagers = async () => {
       try {
         const res = await managerApi.getManagers();
-        console.log(res.data.data,"res.data.data");
         setManagers(res.data.data); // ✅ API response shape: { success, message, data: [...] }
       } catch (err: any) {
         setError(err.message || "Failed to load managers");

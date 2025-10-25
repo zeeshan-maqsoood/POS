@@ -28,6 +28,8 @@ import {
 import reportApi, { InventoryStatusResponse, InventoryTransactionsResponse, LowStockAlertsResponse } from '@/lib/report-api';
 import { ReportParams } from '@/lib/report-api';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { useBranches } from '@/hooks/use-branches';
+
 export default function InventoryReportsPage() {
   const [reportType, setReportType] = useState<'status' | 'transactions' | 'alerts'>('status');
   const [branchFilter, setBranchFilter] = useState<string>('all');
@@ -44,6 +46,9 @@ export default function InventoryReportsPage() {
   const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransactionsResponse | null>(null);
   const [inventoryTransactionsLoading, setInventoryTransactionsLoading] = useState<boolean>(false);
   const [inventoryTransactionsError, setInventoryTransactionsError] = useState<string | null>(null);
+
+  // Get dynamic branches
+  const { branches, loading: branchesLoading } = useBranches();
   // Build params for API calls
   const params: ReportParams = {
     branchName: branchFilter === 'all' ? undefined : branchFilter,
@@ -220,16 +225,17 @@ export default function InventoryReportsPage() {
             </div>
             <div className="w-full sm:w-48">
               <label className="text-sm font-medium mb-2 block">Branch</label>
-              <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <Select value={branchFilter} onValueChange={setBranchFilter} disabled={branchesLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Branches" />
+                  <SelectValue placeholder={branchesLoading ? "Loading branches..." : "All Branches"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Branches</SelectItem>
-                  <SelectItem value="Bradford">Bradford</SelectItem>
-                  <SelectItem value="Leeds">Leeds</SelectItem>
-                  <SelectItem value="Darley St Market">Darley St Market</SelectItem>
-                  <SelectItem value="Helifax">Helifax</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.value}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

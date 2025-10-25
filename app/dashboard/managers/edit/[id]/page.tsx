@@ -40,8 +40,11 @@ export const managerFormSchema = z.object({
   email: z.string().email({
     message: "Please enter a valid email address.",
   }),
-  role: z.enum(["MANAGER", "KITCHEN_STAFF"]),
+  role: z.enum(["MANAGER", "KITCHEN_STAFF", "ADMIN", "CASHIER", "WAITER", "USER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
+  restaurantId: z.string().min(1, {
+    message: "Please select a restaurant.",
+  }),
   branch: z.string().min(1, {
     message: "Please select a branch.",
   }),
@@ -72,6 +75,7 @@ interface ManagerFormProps {
     status: Status;
     permissions?: string[];
     branch?: string;
+    restaurantId?: string;
     lastLogin?: string;
     createdAt?: string;
     updatedAt?: string;
@@ -146,6 +150,7 @@ export default function EditManagerPage({ params }: { params: { id: string } }) 
           email: managerData.email,
           role: managerData.role,
           status: managerData.status,
+          restaurantId: managerData.restaurantId || "",
           branch: managerData.branch || "",
           permissions: managerData.permissions?.map((p: any) => p.permission) || [],
           id: managerData.id,

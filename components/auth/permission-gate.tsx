@@ -40,7 +40,6 @@ export function PermissionGate({
 
   // While loading, allow ADMIN immediately; hide for others to avoid flashes
   if (isLoading && !isAdminFromStorage) return null;
-
   // Compute access
   let allowed = true;
 

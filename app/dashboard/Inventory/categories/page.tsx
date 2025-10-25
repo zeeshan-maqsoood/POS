@@ -31,28 +31,22 @@ import {
 import { useForm } from "react-hook-form"
 import { inventoryCategoryApi, inventorySubcategoryApi } from "../../../../lib/inventory-api"
 import { InventoryCategory, InventorySubcategory } from "@/types/inventory"
+import { restaurantApi } from "@/lib/restaurant-api"
+import { useUser } from "@/hooks/use-user"
 
 interface CategoryFormData {
   name: string
   description: string
   color: string
-  branch: string
+  restaurantId: string
 }
 
 interface SubcategoryFormData {
   name: string
   description: string
   categoryId: string
-  branch: string
+  restaurantId: string
 }
-
-// Define the branches array
-const branches = [
-  { id: "Bradford", name: "Bradford" },
-  { id: "Leeds", name: "Leeds" },
-  { id: "Helifax", name: "Helifax" },
-  { id: "Darley St Market", name: "Darley St Market" },
-]
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<InventoryCategory[]>([])
@@ -68,12 +62,12 @@ export default function CategoriesPage() {
   const [addSubcategoryOpen, setAddSubcategoryOpen] = useState<string | null>(null)
   const [editSubcategoryOpen, setEditSubcategoryOpen] = useState<string | null>(null)
 
+  // Restaurant state
+  const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([])
+
+  const { user, isAdmin } = useUser()
   const categoryForm = useForm<CategoryFormData>()
   const subcategoryForm = useForm<SubcategoryFormData>()
-
-  useEffect(() => {
-    fetchCategories()
-  }, [])
 
   const fetchCategories = async () => {
     try {
@@ -91,6 +85,29 @@ export default function CategoriesPage() {
     }
   }
 
+  useEffect(() => {
+    fetchCategories()
+  }, [])
+
+  // Fetch restaurants on component mount
+  useEffect(() => {
+    const fetchRestaurants = async () => {
+      try {
+        const response = await restaurantApi.getRestaurantsForDropdown()
+        if (response?.data?.data) {
+          setRestaurants(response.data.data)
+        }
+      } catch (err) {
+        console.error('Error fetching restaurants:', err)
+      }
+    }
+    fetchRestaurants()
+  }, [])
+
+  // Watch form values for restaurant selection
+  const selectedRestaurantId = categoryForm.watch("restaurantId")
+  const selectedSubcategoryRestaurantId = subcategoryForm.watch("restaurantId")
+
   console.log(categories,"categories")
 
   const toggleCategory = (categoryId: string) => {
@@ -106,7 +123,14 @@ export default function CategoriesPage() {
   const handleAddCategory = async (data: CategoryFormData) => {
     try {
       console.log('Creating category with data:', data)
-      const response = await inventoryCategoryApi.createCategory(data)
+      const submitData = {
+        name: data.name,
+        description: data.description,
+        color: data.color,
+        restaurantId: data.restaurantId,
+        isActive: true
+      }
+      const response = await inventoryCategoryApi.createCategory(submitData)
       if (response.data.success) {
         await fetchCategories()
         categoryForm.reset()
@@ -123,7 +147,14 @@ export default function CategoriesPage() {
 
     try {
       console.log('Updating category with data:', data)
-      const response = await inventoryCategoryApi.updateCategory(editingCategory.id, data)
+      const submitData = {
+        name: data.name,
+        description: data.description,
+        color: data.color,
+        restaurantId: data.restaurantId,
+        isActive: true
+      }
+      const response = await inventoryCategoryApi.updateCategory(editingCategory.id, submitData)
       if (response.data.success) {
         await fetchCategories()
         setEditingCategory(null)
@@ -151,10 +182,14 @@ export default function CategoriesPage() {
   const handleAddSubcategory = async (categoryId: string, data: SubcategoryFormData) => {
     try {
       console.log('Creating subcategory with data:', data)
-      const response = await inventorySubcategoryApi.createSubcategory({
-        ...data,
-        categoryId
-      })
+      const submitData = {
+        name: data.name,
+        description: data.description,
+        categoryId: categoryId,
+        restaurantId: data.restaurantId,
+        isActive: true
+      }
+      const response = await inventorySubcategoryApi.createSubcategory(submitData)
       if (response.data.success) {
         await fetchCategories()
         subcategoryForm.reset()
@@ -171,7 +206,14 @@ export default function CategoriesPage() {
 
     try {
       console.log('Updating subcategory with data:', data)
-      const response = await inventorySubcategoryApi.updateSubcategory(editingSubcategory.subcategory.id, data)
+      const submitData = {
+        name: data.name,
+        description: data.description,
+        categoryId: data.categoryId,
+        restaurantId: data.restaurantId,
+        isActive: true
+      }
+      const response = await inventorySubcategoryApi.updateSubcategory(editingSubcategory.subcategory.id, submitData)
       if (response.data.success) {
         await fetchCategories()
         setEditingSubcategory(null)
@@ -277,25 +319,27 @@ export default function CategoriesPage() {
                   )}
                 />
 
-                {/* Branch Dropdown for Category */}
+                {/* Restaurant Dropdown */}
                 <FormField
                   control={categoryForm.control}
-                  name="branch"
+                  name="restaurantId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Branch</FormLabel>
+                      <FormLabel>Restaurant *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select a branch" />
+                            <SelectValue placeholder="Select restaurant" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {branches.map((branch) => (
-                            <SelectItem key={branch.id} value={branch.id}>
-                              {branch.name}
-                            </SelectItem>
-                          ))}
+                          {restaurants
+                            .filter(restaurant => restaurant && restaurant.id && typeof restaurant.id === 'string' && restaurant.id.trim() !== "")
+                            .map((restaurant) => (
+                              <SelectItem key={restaurant.id} value={restaurant.id}>
+                                {restaurant.name}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -353,11 +397,6 @@ export default function CategoriesPage() {
                   <div className={`w-4 h-4 rounded-full ${category.color}`} />
                   <CardTitle className="text-lg">{category.name}</CardTitle>
                   <Badge variant="secondary">{category.itemCount} items</Badge>
-                  {category.branchName && (
-                    <Badge variant="outline" className="ml-2">
-                      {category.branchName}
-                    </Badge>
-                  )}
                 </div>
                 <div className="flex items-center space-x-2">
                   
@@ -372,7 +411,7 @@ export default function CategoriesPage() {
                           categoryForm.setValue("name", category.name)
                           categoryForm.setValue("description", category.description || "")
                           categoryForm.setValue("color", category.color)
-                          categoryForm.setValue("branch", category.branchName || "")
+                          categoryForm.setValue("restaurantId", category.restaurantId || "")
                         }}
                       >
                         <Edit2 className="w-4 h-4" />
@@ -411,25 +450,26 @@ export default function CategoriesPage() {
                             )}
                           />
 
-                          {/* Branch Dropdown for Edit Category */}
                           <FormField
                             control={categoryForm.control}
-                            name="branch"
+                            name="restaurantId"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Branch</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormLabel>Restaurant *</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl>
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Select a branch" />
+                                      <SelectValue placeholder="Select restaurant" />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {branches.map((branch) => (
-                                      <SelectItem key={branch.id} value={branch.id}>
-                                        {branch.name}
-                                      </SelectItem>
-                                    ))}
+                                    {restaurants
+                                      .filter(restaurant => restaurant && restaurant.id && typeof restaurant.id === 'string' && restaurant.id.trim() !== "")
+                                      .map((restaurant) => (
+                                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                                          {restaurant.name}
+                                        </SelectItem>
+                                      ))}
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -508,25 +548,26 @@ export default function CategoriesPage() {
                             )}
                           />
 
-                          {/* Branch Dropdown for Subcategory */}
                           <FormField
                             control={subcategoryForm.control}
-                            name="branch"
+                            name="restaurantId"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Branch</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormLabel>Restaurant *</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl>
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Select a branch" />
+                                      <SelectValue placeholder="Select restaurant" />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {branches.map((branch) => (
-                                      <SelectItem key={branch.id} value={branch.id}>
-                                        {branch.name}
-                                      </SelectItem>
-                                    ))}
+                                    {restaurants
+                                      .filter(restaurant => restaurant && restaurant.id && typeof restaurant.id === 'string' && restaurant.id.trim() !== "")
+                                      .map((restaurant) => (
+                                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                                          {restaurant.name}
+                                        </SelectItem>
+                                      ))}
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -570,11 +611,6 @@ export default function CategoriesPage() {
                           <Badge variant="outline">
                             {subcategory.itemCount} items
                           </Badge>
-                          {subcategory.branchName && (
-                            <Badge variant="secondary">
-                              {subcategory.branchName}
-                            </Badge>
-                          )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -590,7 +626,7 @@ export default function CategoriesPage() {
                                 subcategoryForm.setValue("name", subcategory.name)
                                 subcategoryForm.setValue("description", subcategory.description || "")
                                 subcategoryForm.setValue("categoryId", category.id)
-                                subcategoryForm.setValue("branch", subcategory.branchName || "")
+                                subcategoryForm.setValue("restaurantId", subcategory.restaurantId || "")
                               }}
                             >
                               <Edit2 className="w-4 h-4" />
@@ -629,25 +665,26 @@ export default function CategoriesPage() {
                                   )}
                                 />
 
-                                {/* Branch Dropdown for Edit Subcategory */}
                                 <FormField
                                   control={subcategoryForm.control}
-                                  name="branch"
+                                  name="restaurantId"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>Branch</FormLabel>
-                                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                      <FormLabel>Restaurant *</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl>
                                           <SelectTrigger>
-                                            <SelectValue placeholder="Select a branch" />
+                                            <SelectValue placeholder="Select restaurant" />
                                           </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                          {branches.map((branch) => (
-                                            <SelectItem key={branch.id} value={branch.id}>
-                                              {branch.name}
-                                            </SelectItem>
-                                          ))}
+                                          {restaurants
+                                            .filter(restaurant => restaurant && restaurant.id && typeof restaurant.id === 'string' && restaurant.id.trim() !== "")
+                                            .map((restaurant) => (
+                                              <SelectItem key={restaurant.id} value={restaurant.id}>
+                                                {restaurant.name}
+                                              </SelectItem>
+                                            ))}
                                         </SelectContent>
                                       </Select>
                                       <FormMessage />

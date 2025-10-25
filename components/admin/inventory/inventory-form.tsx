@@ -21,17 +21,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { inventoryItemApi, inventoryCategoryApi, inventorySubcategoryApi, supplierApi } from "@/lib/inventory-api"
-import { InventoryItem, InventoryCategory, InventorySubcategory, Supplier } from "@/types/inventory"
+import { toast } from "@/components/ui/use-toast"
+import { InventoryCategory, InventoryItem, InventorySubcategory, Supplier } from "@/types/inventory"
+import { useUser } from "@/hooks/use-user"
+import { inventoryCategoryApi, inventorySubcategoryApi, inventoryItemApi } from "@/lib/inventory-api"
+import restaurantApi from "@/lib/restaurant-api"
+
 
 const units = ["kg", "g", "lb", "oz", "L", "ml", "pieces", "bunch", "pack", "case"]
 const locations = ["Walk-in Fridge", "Freezer", "Dry Storage", "Pantry", "Wine Cellar", "Prep Station"]
-const branches = [
-  { id: "Bradford", name: "Bradford" },
-  { id: "Leeds", name: "Leeds" },
-  { id: "Helifax", name: "Helifax" },
-  { id: "Darley St Market", name: "Darley St Market" },
-]
 
 interface InventoryFormData {
     name: string
@@ -47,7 +45,7 @@ interface InventoryFormData {
     location: string
     status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK"
     expiryDate?: string
-    branch: string
+    restaurantId: string
 }
 
 interface InventoryFormProps {
@@ -61,7 +59,9 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
     const [categories, setCategories] = useState<InventoryCategory[]>([])
     const [subcategories, setSubcategories] = useState<InventorySubcategory[]>([])
     const [suppliers, setSuppliers] = useState<Supplier[]>([])
+    const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([])
     const [loading, setLoading] = useState(false)
+    const { user, isAdmin } = useUser()
 
     const form = useForm<InventoryFormData>({
         defaultValues: initialData ? {
@@ -78,7 +78,7 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
             location: initialData.location,
             status: initialData.status,
             expiryDate: initialData.expiryDate?.split('T')[0] || "",
-            branch: initialData.branch || initialData.branchName || "",
+            restaurantId: initialData.restaurantId || "",
         } : {
             name: "",
             description: "",
@@ -93,27 +93,47 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
             location: "Dry Storage",
             status: "IN_STOCK",
             expiryDate: "",
-            branch: "",
+            restaurantId: "",
         }
     })
 
-    // Fetch suppliers on component mount
+    // Watch form values
+    const selectedRestaurantId = form.watch("restaurantId")
+    const selectedCategoryId = form.watch("categoryId")
+
+    // Fetch categories on component mount
     useEffect(() => {
-        const fetchSuppliers = async () => {
+        const fetchCategories = async () => {
             try {
-                const response = await supplierApi.getSuppliers()
+                const response = await inventoryCategoryApi.getCategories({
+                    ...(isAdmin && selectedRestaurantId ? { restaurantId: selectedRestaurantId } : {})
+                })
                 if (response.data.success) {
-                    setSuppliers(response.data.data)
+                    setCategories(response.data.data)
                 }
             } catch (err) {
-                console.error('Error fetching suppliers:', err)
+                console.error('Error fetching categories:', err)
             }
         }
-        fetchSuppliers()
+        fetchCategories()
+    }, [selectedRestaurantId, isAdmin])
+
+    // Fetch restaurants on component mount
+    useEffect(() => {
+        const fetchRestaurants = async () => {
+            try {
+                const response = await restaurantApi.getRestaurantsForDropdown()
+                if (response?.data?.data) {
+                    setRestaurants(response.data.data)
+                }
+            } catch (err) {
+                console.error('Error fetching restaurants:', err)
+            }
+        }
+        fetchRestaurants()
     }, [])
 
     // Fetch subcategories when category changes
-    const selectedCategoryId = form.watch("categoryId")
     useEffect(() => {
         const fetchSubcategories = async () => {
             if (!selectedCategoryId) {
@@ -139,25 +159,50 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
 
     const onSubmit = async (data: InventoryFormData) => {
         setLoading(true)
-        try {
-            console.log('Creating inventory item with data:', data)
-            
-            // Prepare the data for API - fix the issues
-            const submitData: any = {
-                name: data.name,
-                description: data.description,
-                categoryId: data.categoryId,
-                quantity: data.quantity,
-                unit: data.unit,
-                cost: data.cost,
-                minStock: data.minStock,
-                maxStock: data.maxStock,
-                supplier: data.supplier,
-                location: data.location,
-                status: data.status,
-                // Only send branch OR branchName, not both
-                branchName: data.branch, // Use the correct field name based on your Prisma schema
-            }
+      // Validate required fields
+      if (!data.name || data.name.trim().length < 2) {
+        toast({
+          title: "Error",
+          description: "Item name must be at least 2 characters long.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // For admins, validate restaurant selection
+      if (isAdmin) {
+        if (!data.restaurantId || data.restaurantId.trim() === "") {
+          toast({
+            title: "Error",
+            description: "Please select a restaurant.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      console.log('Form validation passed, proceeding with submission');
+
+      try {
+        console.log('Creating inventory item with data:', data)
+
+        // Prepare the data for API - fix the issues
+        const submitData: any = {
+          name: data.name,
+          description: data.description,
+          categoryId: data.categoryId,
+          quantity: data.quantity,
+          unit: data.unit,
+          cost: data.cost,
+          minStock: data.minStock,
+          maxStock: data.maxStock,
+          supplier: data.supplier,
+          location: data.location,
+          status: data.status,
+          restaurantId: data.restaurantId,
+        }
 
             // Handle subcategoryId - only include if it exists and is not "no-subcategory"
             if (data.subcategoryId && data.subcategoryId !== "no-subcategory") {
@@ -224,26 +269,26 @@ export function InventoryForm({ initialData, isEdit = false, onSuccess }: Invent
                                     )}
                                 />
 
-                                {/* Branch Dropdown */}
+                                {/* Restaurant Dropdown */}
                                 <FormField
                                     control={form.control}
-                                    name="branch"
+                                    name="restaurantId"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel className="text-gray-700 font-medium">Branch *</FormLabel>
+                                            <FormLabel className="text-gray-700 font-medium">Restaurant *</FormLabel>
                                             <Select
                                                 onValueChange={field.onChange}
                                                 value={field.value}
                                             >
                                                 <FormControl>
                                                     <SelectTrigger className="border-gray-300 focus:border-blue-500">
-                                                        <SelectValue placeholder="Select branch" />
+                                                        <SelectValue placeholder="Select restaurant" />
                                                     </SelectTrigger>
                                                 </FormControl>
                                                 <SelectContent>
-                                                    {branches.map((branch) => (
-                                                        <SelectItem key={branch.id} value={branch.id}>
-                                                            {branch.name}
+                                                    {restaurants.map((restaurant) => (
+                                                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                                                            {restaurant.name}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>

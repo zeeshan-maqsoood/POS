@@ -7,8 +7,11 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { inventoryItemApi, inventoryCategoryApi } from "../../../lib/inventory-api"
+import { restaurantApi } from "../../../lib/restaurant-api"
 import { InventoryItem } from "@/types/inventory"
+import type { Restaurant } from "../../../lib/restaurant-api"
 
 // Summary card component
 function SummaryCard({ title, value, description, icon, color }: {
@@ -260,6 +263,8 @@ export const columns: ColumnDef<InventoryItem>[] = [
 export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [categories, setCategories] = useState<any[]>([])
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>("all-restaurants")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -268,7 +273,7 @@ export default function InventoryPage() {
   const lowStockItems = inventoryItems.filter(item => item.status === "LOW_STOCK").length
   const outOfStockItems = inventoryItems.filter(item => item.status === "OUT_OF_STOCK").length
   const totalValue = inventoryItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
-  
+
   const formattedTotalValue = new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: 'GBP',
@@ -278,9 +283,10 @@ export default function InventoryPage() {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const [itemsResponse, categoriesResponse] = await Promise.all([
-          inventoryItemApi.getItems(),
-          inventoryCategoryApi.getCategories()
+        const [itemsResponse, categoriesResponse, restaurantsResponse] = await Promise.all([
+          inventoryItemApi.getItems(selectedRestaurantId && selectedRestaurantId !== "all-restaurants" ? { restaurantId: selectedRestaurantId } : {}),
+          inventoryCategoryApi.getCategories(),
+          restaurantApi.getRestaurantsForDropdown()
         ])
 
         if (itemsResponse.data.success) {
@@ -289,6 +295,10 @@ export default function InventoryPage() {
 
         if (categoriesResponse.data.success) {
           setCategories(categoriesResponse.data.data)
+        }
+
+        if (restaurantsResponse?.data?.data) {
+          setRestaurants(restaurantsResponse.data.data)
         }
       } catch (err) {
         setError('Failed to fetch inventory data')
@@ -299,7 +309,23 @@ export default function InventoryPage() {
     }
 
     fetchData()
-  }, [])
+  }, [selectedRestaurantId])
+
+  // Filter inventory items by selected restaurant
+  const filteredInventoryItems = selectedRestaurantId && selectedRestaurantId !== "all-restaurants"
+    ? inventoryItems.filter(item => item.restaurantId === selectedRestaurantId)
+    : inventoryItems
+
+  // Calculate summary statistics for filtered items
+  const filteredTotalItems = filteredInventoryItems.length
+  const filteredLowStockItems = filteredInventoryItems.filter(item => item.status === "LOW_STOCK").length
+  const filteredOutOfStockItems = filteredInventoryItems.filter(item => item.status === "OUT_OF_STOCK").length
+  const filteredTotalValue = filteredInventoryItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+
+  const filteredFormattedTotalValue = new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+  }).format(filteredTotalValue)
 
   if (loading) {
     return (
@@ -322,10 +348,20 @@ export default function InventoryPage() {
   }
 
   // Prepare category filter options
-  const categoryFilterOptions = categories.map(category => ({
-    label: category.name,
-    value: category.id
-  }))
+  const categoryFilterOptions = categories
+    .filter(category => category.id && category.id.trim() !== "")
+    .map(category => ({
+      label: category.name,
+      value: category.id
+    }))
+
+  // Prepare restaurant filter options
+  const restaurantFilterOptions = restaurants
+    .filter(restaurant => restaurant.id && restaurant.id.trim() !== "")
+    .map(restaurant => ({
+      label: restaurant.name,
+      value: restaurant.id
+    }))
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -334,54 +370,84 @@ export default function InventoryPage() {
           <h1 className="text-3xl font-bold text-gray-900">Restaurant Inventory</h1>
           <p className="text-gray-600 mt-2">Manage your kitchen inventory and track stock levels</p>
         </div>
-        <Link href="/dashboard/Inventory/add">
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            Add New Item
-          </Button>
-        </Link>
+        <div className="flex items-center space-x-4">
+          {/* Restaurant Filter Dropdown */}
+          <div className="flex items-center space-x-2">
+            <label htmlFor="restaurant-filter" className="text-sm font-medium text-gray-700">
+              Restaurant:
+            </label>
+            <Select value={selectedRestaurantId} onValueChange={setSelectedRestaurantId}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All Restaurants" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-restaurants">All Restaurants</SelectItem>
+                {restaurants
+                  .filter(restaurant => restaurant.id && restaurant.id.trim() !== "")
+                  .map((restaurant) => (
+                    <SelectItem key={restaurant.id} value={restaurant.id}>
+                      {restaurant.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Link href="/dashboard/Inventory/add">
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              Add New Item
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard
           title="Total Items"
-          value={totalItems}
-          description="All inventory items"
+          value={filteredTotalItems}
+          description={selectedRestaurantId && selectedRestaurantId !== "all-restaurants" ? "Items in selected restaurant" : "All inventory items"}
           icon={<PackageIcon />}
           color="bg-blue-500"
         />
         <SummaryCard
           title="Low Stock"
-          value={lowStockItems}
+          value={filteredLowStockItems}
           description="Items needing restock"
           icon={<AlertIcon />}
           color="bg-yellow-500"
         />
         <SummaryCard
           title="Out of Stock"
-          value={outOfStockItems}
+          value={filteredOutOfStockItems}
           description="Urgent restock needed"
           icon={<XIcon />}
           color="bg-red-500"
         />
         <SummaryCard
           title="Total Value"
-          value={formattedTotalValue}
-          description="Current inventory worth"
+          value={filteredFormattedTotalValue}
+          description={selectedRestaurantId && selectedRestaurantId !== "all-restaurants" ? "Selected restaurant inventory worth" : "Current inventory worth"}
           icon={<DollarIcon />}
           color="bg-green-500"
         />
       </div>
-      
+
       {/* Inventory Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Inventory Items</CardTitle>
+          <CardTitle>
+            Inventory Items
+            {selectedRestaurantId && selectedRestaurantId !== "all-restaurants" && (
+              <span className="text-sm font-normal text-gray-600 ml-2">
+                - {restaurants.find(r => r.id === selectedRestaurantId)?.name || "Unknown Restaurant"}
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <DataTable
             columns={columns}
-            data={inventoryItems}
+            data={filteredInventoryItems}
             searchKey="name"
             filterOptions={[
               {
@@ -397,6 +463,11 @@ export default function InventoryPage() {
                 label: "Category",
                 value: "categoryId",
                 options: categoryFilterOptions
+              },
+              {
+                label: "Restaurant",
+                value: "restaurantId",
+                options: restaurantFilterOptions
               }
             ]}
           />

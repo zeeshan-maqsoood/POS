@@ -41,6 +41,8 @@ import {
 } from "lucide-react";
 import { MenuItem, categoryApi, modifierApi, menuItemApi } from "@/lib/menu-api";
 import  { inventoryItemApi } from "@/lib/inventory-api";
+import { restaurantApi } from "@/lib/restaurant-api";
+import { branchApi } from "@/lib/branch-api";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,6 +60,7 @@ const menuItemFormSchema = z.object({
   cost: z.coerce.number().min(0, { message: "Cost cannot be negative." }),
   categoryId: z.string().optional(),
   branchName: z.string().min(1, { message: "Branch is required." }),
+  restaurantId: z.string().min(1, { message: "Restaurant is required." }),
   isActive: z.boolean().default(true),
   taxRate: z.number().min(0).default(0),
   taxExempt: z.boolean().default(false),
@@ -110,6 +113,8 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
     price: number; 
     isActive?: boolean 
   }[]>([]);
+  const [restaurants, setRestaurants] = React.useState<{ id: string; name: string }[]>([]);
+  const [filteredBranches, setFilteredBranches] = React.useState<{ id: string; name: string }[]>([]);
   const [inventoryItems, setInventoryItems] = React.useState<{
     id: string;
     name: string;
@@ -122,13 +127,13 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   const [searchTerm, setSearchTerm] = React.useState("");
   const [ingredientSearchTerm, setIngredientSearchTerm] = React.useState("");
   const [showCategoryHelp, setShowCategoryHelp] = React.useState(false);
-  
+  const [formInitialized, setFormInitialized] = React.useState(false);
+  console.log(initialData,"initialData")
   const router = useRouter();
   const { branches, loading: branchesLoading, error: branchesError } = useBranches();
   const { user, isAdmin } = useUser();
   
   const isEditMode = !!initialData;
-console.log(initialData,"initialData")
   const normalizeBranchName = (branch: string): string => {
     if (!branch) return "";
     if (branch.startsWith('branch')) {
@@ -149,6 +154,7 @@ console.log(initialData,"initialData")
       price: 0,
       cost: 0,
       branchName: normalizeBranchName(user?.branch || ""),
+      restaurantId: "",
       isActive: true,
       taxRate: 0,
       taxExempt: false,
@@ -159,6 +165,15 @@ console.log(initialData,"initialData")
     };
 
     if (!initialData) return baseValues;
+
+    // Extract restaurantId from initialData - it should be in branch.restaurantId or directly in restaurantId
+    const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "";
+
+    // Extract branch name from initialData
+    const branchName = initialData.branchName || initialData.branch?.name || "";
+
+    // Extract category ID from initialData
+    const categoryId = initialData.categoryId || initialData.category?.id || "";
 
     // Process modifiers from initialData
     let modifiers = [];
@@ -190,7 +205,7 @@ console.log(initialData,"initialData")
         inventoryItemId: ing.inventoryItemId,
         name: `Loading...`, // Placeholder - will be updated when inventory items are loaded
         quantity: ing.quantity || 0,
-        unit: ing.unit || "pieces",
+        unit: (ing.unit && ing.unit.trim() !== "") ? ing.unit : "pieces",
         currentStock: 0 // Placeholder
       }));
     
@@ -199,6 +214,9 @@ console.log(initialData,"initialData")
 
     return {
       ...initialData,
+      restaurantId,
+      branchName,
+      categoryId,
       modifiers,
       ingredients
     };
@@ -209,59 +227,134 @@ console.log(initialData,"initialData")
     defaultValues,
   });
 
-  // Reset form when initialData or allModifiers changes
+  // Debug defaultValues
   React.useEffect(() => {
-    if (initialData) {
-      const formattedModifiers = initialData.modifiers
-        ?.filter(mod => mod && mod.modifier)
-        .map(mod => {
-          const fullModifier = allModifiers.find(m => m.id === mod.modifier.id) || mod.modifier;
-          return {
-            id: fullModifier.id,
-            name: fullModifier.name || `Modifier ${fullModifier.id}`,
-            price: fullModifier.price || 0,
-            isActive: fullModifier.isActive !== false,
-            type: fullModifier.type || "SINGLE"
-          };
-        }) || [];
+    console.log('Form defaultValues:', defaultValues);
+  }, [defaultValues]);
 
-      const formattedIngredients = initialData.ingredients
-        ?.filter(ing => ing && ing.inventoryItem)
-        .map(ing => ({
-          inventoryItemId: ing.inventoryItem.id,
-          name: ing.inventoryItem.name,
-          quantity: ing.quantity || 0,
-          unit: ing.unit || "pieces",
-          currentStock: ing.inventoryItem.quantity
-        })) || [];
+  // Reset form when initialData, allModifiers, or restaurants change (for edit mode)
+  React.useEffect(() => {
+    if (initialData && isEditMode) {
+      // For edit mode, we need either restaurants to be loaded OR the form to be initialized with correct values
+      const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId;
+      const hasRestaurant = restaurants.length > 0 || restaurantId;
+      const hasModifiers = allModifiers.length > 0;
 
-      form.reset({
-        ...initialData,
-        modifiers: formattedModifiers,
-        ingredients: formattedIngredients
+      console.log('Form reset check:', {
+        hasRestaurant,
+        hasModifiers,
+        restaurantsLength: restaurants.length,
+        allModifiersLength: allModifiers.length,
+        restaurantId,
+        initialDataRestaurantId: initialData.restaurantId,
+        branchRestaurantId: initialData.branch?.restaurantId,
+        formInitialized
       });
+
+      // Early reset with basic data if we have the essential information and form isn't initialized yet
+      if (!formInitialized && initialData.name) {
+        console.log('Early form reset with basic data');
+        const branchName = initialData.branchName || initialData.branch?.name || "";
+        const categoryId = initialData.categoryId || initialData.category?.id || "";
+
+        form.reset({
+          ...initialData,
+          restaurantId: initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "",
+          branchName: branchName,
+          categoryId: categoryId
+        });
+        setFormInitialized(true);
+
+        console.log('Early form reset completed with:', {
+          restaurantId: initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "",
+          branchName: branchName,
+          categoryId: categoryId
+        });
+      }
+
+      // Full reset with formatted data when we have restaurants and modifiers loaded
+      if (hasRestaurant && hasModifiers && formInitialized) {
+        console.log('Full form reset with formatted data');
+        const formattedModifiers = initialData.modifiers
+          ?.filter(mod => mod && mod.modifier)
+          .map(mod => {
+            const fullModifier = allModifiers.find(m => m.id === mod.modifier.id) || mod.modifier;
+            return {
+              id: fullModifier.id,
+              name: fullModifier.name || `Modifier ${fullModifier.id}`,
+              price: fullModifier.price || 0,
+              isActive: fullModifier.isActive !== false,
+              type: fullModifier.type || "SINGLE"
+            };
+          }) || [];
+
+        const formattedIngredients = initialData.ingredients
+          ?.filter(ing => ing && ing.inventoryItem)
+          .map(ing => ({
+            inventoryItemId: ing.inventoryItem.id,
+            name: ing.inventoryItem.name,
+            quantity: ing.quantity || 0,
+            unit: ing.unit || "pieces",
+            currentStock: ing.inventoryItem.quantity
+          })) || [];
+
+        // Extract branch name and category ID for reset
+        const branchName = initialData.branchName || initialData.branch?.name || "";
+        const categoryId = initialData.categoryId || initialData.category?.id || "";
+
+        form.reset({
+          ...initialData,
+          restaurantId: initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "",
+          branchName: branchName,
+          categoryId: categoryId,
+          modifiers: formattedModifiers,
+          ingredients: formattedIngredients
+        });
+
+        console.log('Full form reset completed with:', {
+          restaurantId: initialData.restaurantId,
+          branchName: branchName,
+          categoryId: categoryId,
+          modifiersCount: formattedModifiers.length,
+          ingredientsCount: formattedIngredients.length
+        });
+      }
     }
-  }, [initialData, allModifiers, form]);
+  }, [initialData, allModifiers, restaurants, form, isEditMode, formInitialized]);
 
   // Fetch categories, modifiers, and inventory items
   React.useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const categoriesParams = isAdmin ? {} : { 
-          branchName: normalizeBranchName(user?.branch || "") 
-        };
+        // Get current branch selection for modifier filtering
+        const selectedBranchName = form.watch("branchName");
+        const selectedRestaurantId = form.watch("restaurantId");
 
-        const [categoriesRes, modifiersRes, inventoryRes] = await Promise.all([
-          categoryApi.getCategories(categoriesParams),
-          modifierApi.getModifiers(),
+        // Prepare modifier API parameters
+        const modifierParams: any = {};
+        if (selectedBranchName && selectedBranchName !== "" && selectedBranchName !== "global") {
+          // Find the branch ID from the selected branch name
+          const selectedBranch = filteredBranches.find(branch => branch.name === selectedBranchName);
+          if (selectedBranch) {
+            modifierParams.branchId = selectedBranch.id;
+          }
+        } else if (selectedBranchName === "global") {
+          // For global selection, don't filter by branch - load all modifiers
+          // modifierParams will be empty, so all modifiers will be loaded
+        }
+
+        const [modifiersRes, inventoryRes] = await Promise.all([
+          // categoryApi.getCategories(categoriesParams), // Don't load categories initially
+          modifierApi.getModifiers(modifierParams), // Pass branch filtering
           inventoryItemApi.getItems(),
         ]);
 console.log(inventoryRes,"inventryRes")
-        setCategories(Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : []);
+        // setCategories(Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : []); // Don't set categories initially
         
         const allModifiersData = Array.isArray(modifiersRes?.data?.data) 
           ? modifiersRes.data.data.map((m: any) => ({
+              type: m.type || "SINGLE",
               id: m.id,
               name: m.name,
               price: m.price || 0,
@@ -272,13 +365,22 @@ console.log(inventoryRes,"inventryRes")
         setAllModifiers(allModifiersData);
 
         // Filter inventory items by branch for managers
-        let inventoryData = Array.isArray(inventoryRes?.data?.data) ? inventoryRes.data.data : [];
+        let inventoryData: any[] = [];
+        if (inventoryRes?.data?.data && Array.isArray(inventoryRes.data.data)) {
+          inventoryData = inventoryRes.data.data;
+        } else if (Array.isArray(inventoryRes?.data)) {
+          inventoryData = inventoryRes.data;
+        } else {
+          inventoryData = [];
+        }
         console.log(inventoryData,"inventryData")
         if (!isAdmin && user?.branch) {
           const userBranch = normalizeBranchName(user.branch);
-          inventoryData = inventoryData.filter((item: any) => 
-            item.branch === userBranch || item.branchName === userBranch
-          );
+          if (Array.isArray(inventoryData)) {
+            inventoryData = inventoryData.filter((item: any) => 
+              item.branch === userBranch || item.branchName === userBranch
+            );
+          }
         }
 
         setInventoryItems(inventoryData.map((item: any) => ({
@@ -288,6 +390,12 @@ console.log(inventoryRes,"inventryRes")
           unit: item.unit || "pieces",
           branchName: item.branch || item.branchName
         })));
+
+        // Only load restaurants if not in edit mode (for create mode)
+        if (!isEditMode) {
+          const restaurantsRes = await restaurantApi.getRestaurantsForDropdown();
+          setRestaurants(Array.isArray(restaurantsRes?.data?.data) ? restaurantsRes.data.data : []);
+        }
 
       } catch (error) {
         console.error("Error loading data:", error);
@@ -302,29 +410,280 @@ console.log(inventoryRes,"inventryRes")
     };
 
     fetchData();
-  }, [user, isAdmin]);
-// Update ingredient names and stock after inventory items are loaded
-React.useEffect(() => {
-  if (!initialData || inventoryItems.length === 0) return;
+  }, [user, isAdmin, isEditMode, form.watch("branchName"), filteredBranches]);
 
-  const updatedIngredients = (initialData.menuItemIngredients || [])
-    .filter((ing) => ing && ing.inventoryItemId)
-    .map((ing) => {
-      const inventory = inventoryItems.find(
-        (item) => item.id === ing.inventoryItemId
-      );
-      return {
-        inventoryItemId: ing.inventoryItemId,
-        name: inventory?.name || ing.inventoryItem?.name || "Unknown",
-        quantity: ing.quantity || 0,
-        unit: ing.unit || inventory?.unit || "pieces",
-        currentStock: inventory?.quantity || 0,
+  // Fetch branches when restaurant is selected
+  React.useEffect(() => {
+    const selectedRestaurantId = form.watch("restaurantId");
+    
+    if (selectedRestaurantId) {
+      branchApi.getBranchesByRestaurant(selectedRestaurantId).then((res) => {
+        const restaurantBranches = Array.isArray(res?.data?.data) ? res.data.data : [];
+        setFilteredBranches(restaurantBranches.map(branch => ({
+          id: branch.id,
+          name: branch.name
+        })));
+      }).catch((error) => {
+        console.error("Error fetching branches for restaurant:", error);
+        setFilteredBranches([]);
+      });
+    } else {
+      setFilteredBranches([]);
+    }
+  }, [form.watch("restaurantId")]);
+
+  // Fetch categories when branch is selected
+  React.useEffect(() => {
+    const selectedBranchName = form.watch("branchName");
+    if (selectedBranchName) {
+      const fetchCategoriesForBranch = async () => {
+        try {
+          if (selectedBranchName === "global") {
+            // For global selection, load all categories from all branches
+            const categoriesRes = await categoryApi.getCategories({});
+            const categoriesData = Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : [];
+            setCategories(categoriesData);
+
+            // Only reset category selection when branch changes in create mode, not edit mode
+            if (!isEditMode) {
+              form.setValue("categoryId", "");
+            }
+          } else {
+            // Find the branch ID from the selected branch name
+            const selectedBranch = filteredBranches.find(branch => branch.name === selectedBranchName);
+            if (selectedBranch) {
+              const categoriesRes = await categoryApi.getCategories({ branchId: selectedBranch.id });
+              const categoriesData = Array.isArray(categoriesRes?.data?.data) ? categoriesRes.data.data : [];
+              setCategories(categoriesData);
+
+              // Only reset category selection when branch changes in create mode, not edit mode
+              if (!isEditMode) {
+                form.setValue("categoryId", "");
+              }
+            } else {
+              setCategories([]);
+              if (!isEditMode) {
+                form.setValue("categoryId", "");
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching categories for branch:", error);
+          setCategories([]);
+          if (!isEditMode) {
+            form.setValue("categoryId", "");
+          }
+        }
       };
-    });
 
-  // Reset form with updated ingredient names
-  form.setValue("ingredients", updatedIngredients);
-}, [inventoryItems, initialData, form]);
+      fetchCategoriesForBranch();
+    } else {
+      // No branch selected, clear categories
+      setCategories([]);
+      if (!isEditMode) {
+        form.setValue("categoryId", "");
+      }
+    }
+  }, [form.watch("branchName"), filteredBranches, form, isEditMode]);
+
+  // Also load restaurants when editing with initial data
+  React.useEffect(() => {
+    if (initialData && isEditMode) {
+      const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId;
+
+      if (restaurantId) {
+        // Check if the current restaurants array already contains the restaurant we need
+        const restaurantExists = restaurants.some(r => r.id === restaurantId);
+        
+        if (!restaurantExists) {
+          console.log('Restaurant not found in current restaurants array, loading specific restaurant:', restaurantId);
+
+          // Load only the specific restaurant for this menu item
+          restaurantApi.getRestaurantById(restaurantId).then((res) => {
+            if (res?.data?.data) {
+              console.log('Loaded specific restaurant for editing:', res.data.data);
+              setRestaurants([res.data.data]); // Set as array with single restaurant
+            } else {
+              console.log('Restaurant not found with ID:', restaurantId);
+              // Fallback: load all restaurants and filter for the specific one
+              console.log('Falling back to loading all restaurants');
+              restaurantApi.getRestaurantsForDropdown().then((fallbackRes) => {
+                const allRestaurants = Array.isArray(fallbackRes?.data?.data) ? fallbackRes.data.data : [];
+                const specificRestaurant = allRestaurants.find(r => r.id === restaurantId);
+                if (specificRestaurant) {
+                  console.log('Found restaurant in fallback:', specificRestaurant);
+                  setRestaurants([specificRestaurant]);
+                } else {
+                  console.log('Restaurant not found even in fallback, setting empty array');
+                  setRestaurants([]);
+                }
+              }).catch((fallbackError) => {
+                console.error("Error in fallback restaurant loading:", fallbackError);
+                setRestaurants([]);
+              });
+            }
+          }).catch((error) => {
+            console.error("Error loading specific restaurant for editing:", error);
+            // Fallback: load allrestaurants  and filter for the specific one
+            console.log('Error loading specific restaurant, falling back to all restaurants');
+            restaurantApi.getRestaurantsForDropdown().then((fallbackRes) => {
+              const allRestaurants = Array.isArray(fallbackRes?.data?.data) ? fallbackRes.data.data : [];
+              const specificRestaurant = allRestaurants.find(r => r.id === restaurantId);
+              if (specificRestaurant) {
+                console.log('Found restaurant in fallback after error:', specificRestaurant);
+                setRestaurants([specificRestaurant]);
+              } else {
+                console.log('Restaurant not found even in fallback after error, setting empty array');
+                setRestaurants([]);
+              }
+            }).catch((fallbackError) => {
+              console.error("Error in fallback restaurant loading:", fallbackError);
+              setRestaurants([]);
+            });
+          });
+        } else {
+          console.log('Restaurant already exists in restaurants array, no need to reload');
+        }
+      } else {
+        console.log('No restaurantId found in initialData');
+      }
+    }
+  }, [initialData?.restaurantId, initialData?.branch?.restaurantId, isEditMode]);
+  // Also load branches when editing with initial data
+  React.useEffect(() => {
+    if (initialData && isEditMode) {
+      const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id;
+      console.log('Branch loading check:', {
+        initialDataRestaurantId: initialData.restaurantId,
+        branchRestaurantId: initialData.branch?.restaurantId,
+        restaurantIdFromRelation: initialData.restaurant?.id,
+        extractedRestaurantId: restaurantId,
+        isEditMode,
+        shouldLoad: !!restaurantId
+      });
+
+      if (restaurantId) {
+        console.log('Loading branches for editing with restaurantId:', restaurantId);
+        branchApi.getBranchesByRestaurant(restaurantId).then((res) => {
+          const branchesData = Array.isArray(res?.data?.data) ? res.data.data : [];
+          console.log('Loaded branches for editing:', branchesData);
+          setFilteredBranches(branchesData.map(branch => ({
+            id: branch.id,
+            name: branch.name
+          })));
+        }).catch((error) => {
+          console.error("Error loading branches for editing:", error);
+          setFilteredBranches([]);
+        });
+      } else {
+        console.log('No restaurantId found for branch loading');
+      }
+    }
+  }, [initialData?.restaurantId, initialData?.branch?.restaurantId, initialData?.restaurant?.id, isEditMode]);
+
+  // Also load categories when editing with initial data
+  React.useEffect(() => {
+    if (initialData && initialData.categoryId && isEditMode) {
+      console.log('Loading categories for editing with categoryId:', initialData.categoryId);
+
+      // Get the branch ID from the menu item's branch information
+      const branchId = initialData.branchId || initialData.branch?.id;
+
+      if (branchId) {
+        // Load categories for the specific branch that the menu item belongs to
+        console.log('Loading categories for branch ID:', branchId);
+        categoryApi.getCategories({ branchId: branchId }).then((res) => {
+          const branchCategories = Array.isArray(res?.data?.data) ? res.data.data : [];
+          console.log('Loaded categories for menu item branch:', branchCategories);
+          setCategories(branchCategories);
+        }).catch((error) => {
+          console.error("Error loading categories for menu item branch:", error);
+          setCategories([]);
+        });
+      } else if (!isAdmin && user?.branch) {
+        // For managers without branch info in the menu item, load categories for their branch
+        const normalizedUserBranch = normalizeBranchName(user.branch);
+        console.log('Loading categories for manager branch:', normalizedUserBranch);
+
+        branchApi.getBranchesByRestaurant(initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "").then((branchesRes) => {
+          const allBranches = Array.isArray(branchesRes?.data?.data) ? branchesRes.data.data : [];
+          const userBranch = allBranches.find((b: any) => b.name === normalizedUserBranch);
+
+          if (userBranch) {
+            categoryApi.getCategories({ branchId: userBranch.id }).then((res) => {
+              const branchCategories = Array.isArray(res?.data?.data) ? res.data.data : [];
+              console.log('Loaded categories for manager branch:', branchCategories);
+              setCategories(branchCategories);
+            }).catch((error) => {
+              console.error("Error loading categories for manager branch:", error);
+              setCategories([]);
+            });
+          } else {
+            console.log('User branch not found, loading all categories');
+            categoryApi.getCategories({}).then((res) => {
+              const allCategories = Array.isArray(res?.data?.data) ? res.data.data : [];
+              setCategories(allCategories);
+            }).catch((error) => {
+              console.error("Error loading all categories:", error);
+              setCategories([]);
+            });
+          }
+        }).catch((error) => {
+          console.error("Error loading branches:", error);
+          setCategories([]);
+        });
+      } else {
+        // For admins, load all categories
+        console.log('Loading all categories for admin');
+        categoryApi.getCategories({}).then((res) => {
+          const allCategories = Array.isArray(res?.data?.data) ? res.data.data : [];
+          console.log('Loaded all categories for admin:', allCategories);
+          setCategories(allCategories);
+        }).catch((error) => {
+          console.error("Error loading categories for admin:", error);
+          setCategories([]);
+        });
+      }
+    }
+  }, [initialData?.categoryId, isEditMode, isAdmin, user?.branch, initialData?.restaurantId, initialData?.branch?.restaurantId, initialData?.restaurant?.id, initialData?.branchId, initialData?.branch?.id]);
+
+  // Debug initialData structure
+  React.useEffect(() => {
+    if (initialData) {
+      console.log('MenuItemForm initialData:', {
+        id: initialData.id,
+        name: initialData.name,
+        restaurantId: initialData.restaurantId,
+        branchId: initialData.branchId,
+        branchName: initialData.branchName,
+        branch: initialData.branch,
+        categoryId: initialData.categoryId
+      });
+    }
+  }, [initialData]);
+
+  // Update ingredient names and stock after inventory items are loaded
+  React.useEffect(() => {
+    if (!initialData || inventoryItems.length === 0) return;
+
+    const updatedIngredients = (initialData.menuItemIngredients || [])
+      .filter((ing) => ing && ing.inventoryItemId)
+      .map((ing) => {
+        const inventory = inventoryItems.find(
+          (item) => item.id === ing.inventoryItemId
+        );
+        return {
+          inventoryItemId: ing.inventoryItemId,
+          name: inventory?.name || ing.inventoryItem?.name || "Unknown",
+          quantity: ing.quantity || 0,
+          unit: (ing.unit && ing.unit.trim() !== "") ? ing.unit : (inventory?.unit || "pieces"),
+          currentStock: inventory?.quantity || 0,
+        };
+      });
+
+    // Reset form with updated ingredient names
+    form.setValue("ingredients", updatedIngredients);
+  }, [inventoryItems, initialData, form]);
   const selectedModifiers = React.useMemo(() => {
     try {
       const formModifiers = form.getValues("modifiers");
@@ -444,17 +803,25 @@ React.useEffect(() => {
   const onSubmit = async (data: MenuItemFormValues) => {
     setIsSubmitting(true);
     try {
+      const { restaurantId, branchName, modifiers, ingredients, ...dataWithoutRestaurantBranchModifiersIngredients } = data;
+
+      // Find the selected branch to get its ID
+      const selectedBranch = filteredBranches.find(branch => branch.name === branchName);
+
       const formattedData = {
-        ...data,
-        price: Number(data.price),
-        cost: Number(data.cost) || 0,
-        taxRate: Number(data.taxRate) || 0,
-        branchName: isAdmin ? data.branchName : normalizeBranchName(user?.branch || ""),
-        modifiers: {
-          connect: data.modifiers.map(({ id }) => ({ id }))
-        },
+        ...dataWithoutRestaurantBranchModifiersIngredients,
+        price: Number(dataWithoutRestaurantBranchModifiersIngredients.price),
+        cost: Number(dataWithoutRestaurantBranchModifiersIngredients.cost) || 0,
+        taxRate: Number(dataWithoutRestaurantBranchModifiersIngredients.taxRate) || 0,
+        branchId: branchName === "global" ? null : (selectedBranch?.id || ""),
+        // Handle modifiers properly
+        ...(modifiers && modifiers.length > 0 && {
+          modifiers: {
+            connect: modifiers.map(({ id }) => ({ id }))
+          }
+        }),
         ingredients: {
-          create: data.ingredients.map(ing => ({
+          create: ingredients.map(ing => ({
             inventoryItemId: ing.inventoryItemId,
             quantity: ing.quantity,
             unit: ing.unit
@@ -463,13 +830,13 @@ React.useEffect(() => {
       };
 
       if (isEditMode && initialData?.id) {
-        await menuItemApi.updateItem(initialData.id, formattedData);
+        await menuItemApi.updateItem(initialData.id, formattedData as any);
         toast({
           title: "Success",
           description: "Menu item updated successfully.",
         });
       } else {
-        await menuItemApi.createItem(formattedData);
+        await menuItemApi.createItem(formattedData as any);
         toast({
           title: "Success",
           description: "Menu item created successfully.",
@@ -596,29 +963,68 @@ React.useEffect(() => {
 
           <FormField
             control={form.control}
+            name="taxRate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tax Rate</FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(Number(value))}
+                  value={field.value?.toString()}
+                  disabled={isSubmitting}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select tax rate">
+                        {field.value === 0 ? "0% (No Tax)" : field.value === 20 ? "20% (VAT)" : "Select tax rate"}
+                      </SelectValue>
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="0">0% (No Tax)</SelectItem>
+                    <SelectItem value="20">20% (VAT)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Select the tax rate for this menu item.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="categoryId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Category</FormLabel>
                 <Select
+                  key={`category-${formInitialized}-${categories.length}`}
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={isSubmitting}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a category" />
+                      <SelectValue placeholder="Select a category">
+                        {field.value ? categories.find(c => c.id === field.value)?.name || field.value : "Select a category"}
+                      </SelectValue>
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
+                    {categories
+                      .filter((category) => category.id && category.id.trim() !== "")
+                      .map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
                     {categories.length === 0 && (
                       <div className="p-2 text-sm text-muted-foreground">
-                        No categories found. Please create a category first.
+                        {form.watch("branchName")
+                          ? "No categories found for selected branch. Please create a category first."
+                          : "Please select a branch first to see available categories."
+                        }
                       </div>
                     )}
                   </SelectContent>
@@ -628,36 +1034,88 @@ React.useEffect(() => {
             )}
           />
 
-          {isAdmin && (
-            <FormField
-              control={form.control}
-              name="branchName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Branch</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={isSubmitting}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a branch" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {branches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.name}>
-                          {branch.name}
+          <FormField
+            control={form.control}
+            name="restaurantId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Restaurant</FormLabel>
+                <Select
+                  key={`restaurant-${formInitialized}-${restaurants.length}`}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isSubmitting}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a restaurant">
+                        {field.value ? restaurants.find(r => r.id === field.value)?.name || field.value : "Select a restaurant"}
+                      </SelectValue>
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {restaurants
+                      .filter((restaurant) => restaurant.id && restaurant.id.trim() !== "")
+                      .map((restaurant) => (
+                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                          {restaurant.name}
                         </SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="branchName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Branch</FormLabel>
+                <Select
+                  key={`branch-${formInitialized}-${filteredBranches.length}`}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isSubmitting || !form.watch("restaurantId")}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a branch">
+                        {field.value === "global"
+                          ? "🌐 Global (All Branches)"
+                          : field.value
+                            ? filteredBranches.find(b => b.name === field.value)?.name || field.value
+                            : "Select a branch"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {/* Global option for all branches */}
+                    <SelectItem key="global" value="global">
+                      🌐 Global (All Branches)
+                    </SelectItem>
+                    {filteredBranches.length > 0 ? (
+                      filteredBranches
+                        .filter((branch) => branch.id && branch.id.trim() !== "")
+                        .map((branch) => (
+                          <SelectItem key={branch.id} value={branch.name}>
+                            {branch.name}
+                          </SelectItem>
+                        ))
+                    ) : (
+                      <div className="p-2 text-sm text-muted-foreground">
+                        {restaurants.length > 0 ? "Select a restaurant first" : "No branches available"}
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {/* Ingredients Section */}
           <div className="space-y-4">
@@ -697,11 +1155,13 @@ React.useEffect(() => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {units.map((unit) => (
-                            <SelectItem key={unit} value={unit}>
-                              {unit}
-                            </SelectItem>
-                          ))}
+                          {units
+                            .filter((unit) => unit && unit.trim() !== "")
+                            .map((unit) => (
+                              <SelectItem key={unit} value={unit}>
+                                {unit}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                       <span className="text-sm text-muted-foreground">
@@ -738,7 +1198,7 @@ React.useEffect(() => {
                 {isIngredientDropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
                     <div className="p-2 border-b">
-                      <Input
+                      <Input 
                         placeholder="Search ingredients..."
                         value={ingredientSearchTerm}
                         onChange={(e) => setIngredientSearchTerm(e.target.value)}
@@ -777,7 +1237,19 @@ React.useEffect(() => {
 
           {/* Modifiers Section */}
           <div className="space-y-4">
-            <FormLabel>Modifiers</FormLabel>
+            <div className="flex items-center justify-between">
+              <FormLabel>Modifiers</FormLabel>
+              {(form.watch("restaurantId") || form.watch("branchName")) && (
+                <div className="text-sm text-muted-foreground">
+                  {form.watch("branchName")
+                    ? `Branch: ${form.watch("branchName")}`
+                    : form.watch("restaurantId")
+                    ? `Restaurant: ${restaurants.find(r => r.id === form.watch("restaurantId"))?.name || "Selected"}`
+                    : ""
+                  }
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               {selectedModifiers.map((modifier) => (
                 <div
@@ -804,9 +1276,11 @@ React.useEffect(() => {
               <div className="relative">
                 <Button
                   type="button"
+                  
                   variant="outline"
                   className="w-full justify-between"
                   onClick={() => setIsModifierDropdownOpen(!isModifierDropdownOpen)}
+                  disabled={!form.watch("branchName")}
                 >
                   Add Modifier
                   <ChevronDown
@@ -842,6 +1316,8 @@ React.useEffect(() => {
                         <div className="p-4 text-center text-sm text-muted-foreground">
                           {searchTerm
                             ? "No modifiers found."
+                            : !form.watch("branchName")
+                            ? "Please select a branch first to see available modifiers."
                             : "No available modifiers."}
                         </div>
                       )}

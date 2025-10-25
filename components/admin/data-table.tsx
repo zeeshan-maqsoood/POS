@@ -27,6 +27,16 @@ export function DataTable({ columns, data, onEdit, onDelete, onView }: DataTable
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
+  const getNestedValue = (obj: any, path: string) => {
+    // Handle special case for restaurantName -> restaurant.name
+    if (path === 'restaurantName' && obj.restaurant) {
+      return obj.restaurant.name || 'No Restaurant'
+    }
+
+    // For other nested paths, you can extend this logic
+    return obj[path]
+  }
+
   const filteredData = data.filter((item) =>
     Object.values(item).some((value) => String(value).toLowerCase().includes(searchTerm.toLowerCase())),
   )
@@ -34,8 +44,8 @@ export function DataTable({ columns, data, onEdit, onDelete, onView }: DataTable
   const sortedData = [...filteredData].sort((a, b) => {
     if (!sortColumn) return 0
 
-    const aValue = a[sortColumn]
-    const bValue = b[sortColumn]
+    const aValue = getNestedValue(a, sortColumn)
+    const bValue = getNestedValue(b, sortColumn)
 
     if (aValue < bValue) return sortDirection === "asc" ? -1 : 1
     if (aValue > bValue) return sortDirection === "asc" ? 1 : -1
@@ -57,6 +67,14 @@ export function DataTable({ columns, data, onEdit, onDelete, onView }: DataTable
     }
     if (value instanceof Date) {
       return value.toLocaleDateString()
+    }
+    if (typeof value === "object" && value !== null) {
+      // Handle nested objects like restaurant.name
+      if (value.name) {
+        return String(value.name)
+      }
+      // Handle other nested objects
+      return JSON.stringify(value)
     }
     return String(value)
   }
@@ -104,7 +122,9 @@ export function DataTable({ columns, data, onEdit, onDelete, onView }: DataTable
             {sortedData.map((item, index) => (
               <TableRow key={index} className="hover:bg-white/70 hover:shadow-sm transition-all duration-200">
                 {columns.map((column) => (
-                  <TableCell key={column.key}>{renderCellValue(item[column.key])}</TableCell>
+                  <TableCell key={column.key}>
+                    {renderCellValue(getNestedValue(item, column.key))}
+                  </TableCell>
                 ))}
                 <TableCell>
                   <DropdownMenu>

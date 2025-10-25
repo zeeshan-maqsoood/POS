@@ -19,9 +19,9 @@ export default function ModifiersPage() {
   const fetchModifiers = async () => {
     try {
       setIsLoading(true)
-      const response = await modifierApi.getModifiers({
-        status: 'all'
-      })
+      // TODO: Get current user's branch context and pass it to the API
+      // For now, pass empty params to get all modifiers (admin view)
+      const response = await modifierApi.getModifiers()
       setModifiers(response.data.data)
       setError(null)
     } catch (err) {

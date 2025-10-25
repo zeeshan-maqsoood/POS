@@ -14,11 +14,17 @@ export interface Category {
   description?: string;
   isActive: boolean;
   imageUrl?: string;
-  displayOrder: number;
-  branchName: string;
+  branchName: string | null;
+  branchId: string | null;  // Allow null for global categories
+  restaurantId?: string;
   createdAt: string;
   updatedAt: string;
   menuItems?: MenuItem[];
+  // Optional branch info for display
+  branch?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface Modifier {
@@ -34,11 +40,24 @@ export interface Modifier {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  restaurantId?: string | null;
+  restaurantName?: string;
+  branchId?: string | null;  // Allow null for global modifiers
+  branchName?: string;
+  // Restaurant and Branch information for display
+  restaurant?: {
+    id: string;
+    name: string;
+  } | null;
+  branch?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 export interface MenuItem {
   menuItemIngredients: boolean;
-  ingredients: boolean;
+  ingredients: any;
   id: string
   name: string
   description?: string
@@ -50,41 +69,31 @@ export interface MenuItem {
   categoryId: string
   tags?: string[]
   branchName?: string
+  branchId?: string | null  // Allow null for global items
+  restaurantId?: string
   createdAt: string
   updatedAt: string
   category?: { id: string; name: string }
   modifiers?: {
-  modifier: {
-    type: string; id: string; name: string; price: number; isActive: boolean; 
+    modifier: {
+      type: string; id: string; name: string; price: number; isActive: boolean; 
 };
-  id: string;
-  name: string;
-  price: number;
-  isActive: boolean;
-}[]
-}
-  
-export interface MenuItem {
-  id: string
-  name: string
-  description?: string
-  imageUrl?: string
-  price: number
-  taxRate: number
-  taxExempt: boolean
-  isActive: boolean
-  categoryId: string
-  tags?: string[]
-  branchName?: string
-  createdAt: string
-  updatedAt: string
-  category?: { id: string; name: string }
-  modifiers?: {
-  id: string;
-  name: string;
-  price: number;
-  isActive: boolean;
-}[]
+    id: string;
+    name: string;
+    price: number;
+    isActive: boolean;
+  }[]
+  // Branch information for display - this is what the backend now provides
+  branch?: {
+    id: string;
+    name: string;
+    restaurantId?: string;
+  } | null
+  // Restaurant information for display - newly added
+  restaurant?: {
+    id: string;
+    name: string;
+  } | null
 }
 
 // Add Prisma nested operations types
