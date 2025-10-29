@@ -20,6 +20,7 @@ type BasePermission =
   | 'PRODUCT_READ' | 'PRODUCT_CREATE' | 'PRODUCT_UPDATE' | 'PRODUCT_DELETE'
   | 'MENU_READ' | 'MENU_CREATE' | 'MENU_UPDATE' | 'MENU_DELETE'
   | 'MANAGER_READ' | 'MANAGER_CREATE' | 'MANAGER_UPDATE'
+  | 'DASHBOARD_READ'
   | DynamicPermission<Resource>;
 
 // Export the base permission type
@@ -109,6 +110,8 @@ export const usePermissions = (): UsePermissionsReturn => {
         const stored = localStorage.getItem('user');
         if (stored) {
           const parsed = JSON.parse(stored);
+          console.log('Loaded user from localStorage:', parsed);
+          console.log('Loaded permissions from localStorage:', parsed.permissions);
           return {
             user: parsed,
             permissions: Array.isArray(parsed?.permissions) ? parsed.permissions : DEFAULT_PERMISSIONS,
@@ -136,88 +139,69 @@ export const usePermissions = (): UsePermissionsReturn => {
     }));
   };
 
-  const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
+  const fetchProfile = useCallback(async (forceRefresh = false): Promise<UserProfile | null> => {
     // Don't fetch on server during build
     if (!isBrowser) {
       return null;
     }
-    
+
     // Set loading state
     updateState({ isLoading: true, error: null });
 
     try {
+      // Always fetch fresh data from server when forceRefresh is true
       const response = await profileApi.getProfile();
+      
       const profileData = response.data?.data; // Extract the actual profile data
-      console.log(profileData,"profileData")
+      console.log('Fetched profile data:', profileData);
+      
       if (!profileData) {
         throw new Error('No profile data received');
       }
-      
+
       const role = (profileData.role || 'CUSTOMER') as UserRoleType;
-      
-      // Use permissions from profile if they exist, otherwise use role-based defaults
+
+      // Always use permissions from profile if they exist, never fall back to defaults
       let permissions: Permission[] = [];
-      
+
       if (profileData.permissions && Array.isArray(profileData.permissions)) {
         // Use permissions from profile
-        permissions = profileData.permissions.filter((p): p is Permission => 
+        console.log('Raw permissions from profile:', profileData.permissions);
+        permissions = profileData.permissions.filter((p): p is Permission =>
           typeof p === 'string' && p.includes('_')
         );
+        console.log('Filtered permissions:', permissions);
       } else {
-        // Fall back to role-based permissions
-        switch (role) {
-          case 'ADMIN':
-            permissions = [
-              'USER_READ', 'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
-              'ORDER_READ', 'ORDER_CREATE', 'ORDER_UPDATE', 'ORDER_DELETE',
-              'PRODUCT_READ', 'PRODUCT_CREATE', 'PRODUCT_UPDATE', 'PRODUCT_DELETE',
-              'MENU_READ', 'MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE',
-              'MANAGER_READ', 'MANAGER_CREATE', 'MANAGER_UPDATE'
-            ];
-            break;
-          case 'MANAGER':
-            permissions = [
-              'ORDER_READ', 'ORDER_UPDATE',
-              'MENU_READ', 'MENU_CREATE', 'MENU_UPDATE',
-              'POS_READ', 'POS_UPDATE',
-              'MANAGER_READ', 'MANAGER_CREATE', 'MANAGER_UPDATE',
-              'USER_READ'
-            ];
-            break;
-          case 'KITCHEN_STAFF':
-            permissions = [
-              'ORDER_READ', 'ORDER_CREATE',
-              'PRODUCT_READ', 'MENU_READ'
-            ];
-            break;
-          default:
-            permissions = [];
-        }
+        console.warn('No permissions found in profile data');
+        // Don't set default permissions here to avoid overriding server permissions
       }
-      
+
       // Create user profile with permissions
       const userProfile: UserProfile = {
         ...profileData,
         role,
         permissions
       };
-      
-      updateState({ user: userProfile, permissions, isLoading: false });
-      
-      // Store minimal user data in localStorage for initial load
-      localStorage.setItem('user', JSON.stringify({
-        id: profileData.id,
-        email: profileData.email,
-        name: profileData.name,
-        role,
-        permissions
-      }));
-      
+
+      // Update state with the new user data
+      updateState({
+        user: userProfile,
+        permissions,
+        isLoading: false,
+        error: null,
+      });
+
+      // Store in localStorage for persistence
+      localStorage.setItem('user', JSON.stringify(userProfile));
+
       return userProfile;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to fetch permissions');
-      updateState({ error, isLoading: false });
-      throw error;
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      updateState({
+        error: error instanceof Error ? error : new Error('Failed to fetch profile'),
+        isLoading: false,
+      });
+      return null;
     }
   }, []);
 
@@ -227,25 +211,17 @@ export const usePermissions = (): UsePermissionsReturn => {
       updateState({ isLoading: false });
       return;
     }
-    // Fetch fresh data from the server to refresh permissions
-    const loadProfile = async () => {
-      try {
-        await fetchProfile();
-      } catch (err) {
-        console.error('Failed to load profile:', err);
-        updateState({ error: err instanceof Error ? err : new Error('Failed to load profile'), isLoading: false });
-      }
-    };
-    
-    loadProfile();
-  }, [fetchProfile, isBrowser]);
+
+    // Fetch profile to ensure we have the latest permissions
+    fetchProfile();
+  }, [isBrowser, fetchProfile]);
 
   const hasPermission = useCallback((requiredPermission: Permission | Permission[]): boolean => {
     // On server, default to most restrictive permissions
     if (!isBrowser || state.isLoading) {
       return false;
     }
-    
+
     // If no permissions are required, grant access
     if (!requiredPermission) {
       return true;
@@ -256,22 +232,39 @@ export const usePermissions = (): UsePermissionsReturn => {
       return false;
     }
 
+    // ADMIN users have access to everything
+    if (state.user?.role === 'ADMIN') {
+      console.log('Admin user detected, granting all permissions');
+      return true;
+    }
+
     // Handle array of required permissions (OR condition)
     if (Array.isArray(requiredPermission)) {
-      return requiredPermission.some(p => state.permissions.includes(p));
+      const result = requiredPermission.some(p => state.permissions.includes(p));
+      console.log(`Checking permissions [${requiredPermission.join(', ')}]:`, result, 'Current permissions:', state.permissions);
+      return result;
     }
-    
+
     // Handle single permission
-    return state.permissions.includes(requiredPermission);
-  }, [state.permissions, state.isLoading]);
+    const result = state.permissions.includes(requiredPermission);
+    console.log(`Checking permission ${requiredPermission}:`, result, 'Current permissions:', state.permissions);
+    return result;
+  }, [state.permissions, state.isLoading, state.user]);
 
   const hasAnyPermission = useCallback((requiredPermissions: Permission[]): boolean => {
     // On server, default to most restrictive permissions
     if (!isBrowser || state.isLoading) {
       return false;
     }
+
+    // ADMIN users have access to everything
+    if (state.user?.role === 'ADMIN') {
+      console.log('Admin user detected, granting all permissions');
+      return true;
+    }
+
     return requiredPermissions.some(p => state.permissions.includes(p));
-  }, [state.permissions, state.isLoading]);
+  }, [state.permissions, state.isLoading, state.user]);
 
   const hasRole = useCallback((role: UserRoleType | UserRoleType[]): boolean => {
     // On server, default to most restrictive permissions
@@ -318,7 +311,23 @@ export const usePermissions = (): UsePermissionsReturn => {
         canManageMenu: false,
       };
     }
-    
+
+    // ADMIN users have access to everything
+    if (state.user?.role === 'ADMIN') {
+      return {
+        canViewUsers: true,
+        canManageUsers: true,
+        canViewManagers: true,
+        canManageManagers: true,
+        canViewProducts: true,
+        canManageProducts: true,
+        canViewOrders: true,
+        canManageOrders: true,
+        canViewMenu: true,
+        canManageMenu: true,
+      };
+    }
+
     return {
       canViewUsers: hasPermission(['USER_READ', 'USER_UPDATE', 'USER_DELETE']),
       canManageUsers: hasPermission(['USER_CREATE', 'USER_UPDATE', 'USER_DELETE']),
@@ -331,7 +340,7 @@ export const usePermissions = (): UsePermissionsReturn => {
       canViewMenu: hasPermission('MENU_READ'),
       canManageMenu: hasPermission(['MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE']),
     };
-  }, [state.isLoading, hasPermission]);
+  }, [state.isLoading, hasPermission, state.user]);
 
   const isAdmin = hasRole('ADMIN');
   const isManager = hasRole('MANAGER');
@@ -349,34 +358,58 @@ export const usePermissions = (): UsePermissionsReturn => {
   const canManageMenu = hasAnyPermission(['MENU_CREATE', 'MENU_UPDATE', 'MENU_DELETE']);
 
   const canAccessPage = (page: string): boolean => {
-    type PagePermissions = Record<string, Permission | Permission[]>;
-    const pagePermissions: PagePermissions = {
-      'dashboard': ['ORDER_READ', 'ORDER_CREATE'],
-      'orders': 'ORDER_READ',
-      'pos': 'ORDER_CREATE',
-      'orders/new': 'ORDER_CREATE',
-      'orders/[id]': 'ORDER_READ',
-      'orders/[id]/edit': 'ORDER_UPDATE',
-      'menu': 'MENU_READ',
-      'menu/items': 'MENU_READ',
-      'menu/items/new': 'MENU_CREATE',
-      'menu/items/[id]': 'MENU_READ',
-      'menu/items/[id]/edit': 'MENU_UPDATE',
-      'users': 'USER_READ',
-      'users/new': 'USER_CREATE',
-      'users/[id]': 'USER_READ',
-      'users/[id]/edit': 'USER_UPDATE',
-      'managers': 'MANAGER_READ',
-      'managers/new': 'MANAGER_CREATE',
-      'managers/[id]': 'MANAGER_READ',
-      'managers/[id]/edit': 'MANAGER_UPDATE',
-    };
-
-    const requiredPermission = pagePermissions[page];
-    if (!requiredPermission) return false; // Default deny if page not in the list
-    
-    return hasAnyPermission(Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission]);
+  // Define page permissions with more specific paths
+  const pagePermissions: Record<string, Permission | Permission[]> = {
+    'dashboard': 'DASHBOARD_READ',
+    'orders': ['ORDER_READ', 'ORDER_CREATE'],
+    'pos': 'ORDER_CREATE',
+    'orders/new': 'ORDER_CREATE',
+    'orders/[id]': 'ORDER_READ',
+    'orders/[id]/edit': 'ORDER_UPDATE',
+    'menu': 'MENU_READ',
+    'menu/items': 'MENU_READ',
+    'menu/items/new': 'MENU_CREATE',
+    'menu/items/[id]': 'MENU_READ',
+    'menu/items/[id]/edit': 'MENU_UPDATE',
+    'menu/categories': 'MENU_READ',
+    'menu/categories/new': 'MENU_CREATE',
+    'menu/categories/[id]': 'MENU_READ',
+    'menu/categories/[id]/edit': 'MENU_UPDATE',
+    'users': 'USER_READ',
+    'users/new': 'USER_CREATE',
+    'users/[id]': 'USER_READ',
+    'users/[id]/edit': 'USER_UPDATE',
+    'managers': 'MANAGER_READ',
+    'managers/new': 'MANAGER_CREATE',
+    'managers/[id]': 'MANAGER_READ',
+    'managers/[id]/edit': 'MANAGER_UPDATE',
   };
+
+  // Admin has access to everything
+  if (state.user?.role === 'ADMIN') {
+    console.log('Admin access granted to:', page);
+    return true;
+  }
+
+  const requiredPermission = pagePermissions[page];
+  
+  // Debug log
+  console.log('Permission check:', {
+    page,
+    requiredPermission,
+    userPermissions: state.user?.permissions,
+    hasAccess: requiredPermission 
+      ? hasAnyPermission(Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission])
+      : false
+  });
+
+  if (!requiredPermission) {
+    console.warn(`No permission defined for page: ${page}. Access denied by default.`);
+    return false; // Default deny if page not in the list
+  }
+
+  return hasAnyPermission(Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission]);
+};
 
   const getFilteredMenuItems = () => {
     type MenuItem = {
@@ -396,7 +429,7 @@ export const usePermissions = (): UsePermissionsReturn => {
         title: 'Dashboard',
         path: '/dashboard',
         icon: 'LayoutDashboard',
-        requiredPermission: 'ORDER_READ'
+        requiredPermission: 'DASHBOARD_READ'
       },
       {
         title: 'Orders',

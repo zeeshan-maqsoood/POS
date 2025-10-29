@@ -96,31 +96,46 @@ export function OrderSummary({
   const [isMounted, setIsMounted] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
   const { socket } = useSocket();
+  const { printReceipt } = usePrintReceipt();
+
+  // Ensure occupiedTables is always a Set
+  const safeOccupiedTables = useMemo(() => {
+    if (occupiedTables instanceof Set) {
+      return occupiedTables;
+    }
+    // If it's not a Set (e.g., undefined, null, or wrong type), return empty Set
+    return new Set<string>();
+  }, [occupiedTables]);
+
   const userRole =
     typeof window !== 'undefined' ? localStorage.getItem('userRole') || 'CASHIER' : 'CASHIER';
-  const { printReceipt } = usePrintReceipt();
 
   // Initialize form when editing order
   useEffect(() => {
     if (isEditMode && editOrderData) {
-      const orderType = editOrderData.data.orderType || 'DINE_IN';
-      onOrderTypeChange(orderType);
+      const orderData = editOrderData.data;
+      onOrderTypeChange(orderData.orderType || 'DINE_IN');
 
       const branchToSelect =
-        editOrderData.data.branchName || userBranch || (branches.length > 0 ? branches[0].id : null);
-      if (branchToSelect) {
-        onBranchChange(branchToSelect);
+        orderData.branchName || userBranch || (branches.length > 0 ? branches[0].id : null);
+
+      // Find branch by name and get its ID
+      const branchByName = branches.find(branch => branch.name === branchToSelect);
+      const branchId = branchByName?.id || branchToSelect;
+
+      if (branchId) {
+        onBranchChange(branchId);
       }
 
-      onCustomerNameChange(editOrderData.data.customerName || '');
+      onCustomerNameChange(orderData.customerName || '');
 
-      if (orderType === 'DINE_IN' && editOrderData.data.tableNumber) {
-        onTableNumberChange(editOrderData.data.tableNumber.toString());
+      if (orderData.orderType === 'DINE_IN' && orderData.tableNumber) {
+        onTableNumberChange(orderData.tableNumber.toString());
       }
-      console.log(editOrderData, 'editOrderData');
+      console.log(orderData, 'editOrderData');
 
-      if (editOrderData.data.items && editOrderData.data.items.length > 0) {
-        const updatedCart = editOrderData.data.items.map((item: any) => {
+      if (orderData.items && orderData.items.length > 0) {
+        const updatedCart = orderData.items.map((item: any) => {
           const matchedItem = menuItems?.find((menuItem: MenuItem) => menuItem.id === item.menuItemId);
           const modifiersTotal = (item.modifiers || []).reduce(
             (sum: number, mod: any) => sum + (Number(mod.price) || 0),
@@ -161,6 +176,9 @@ export function OrderSummary({
             quantity: item.quantity || 1,
             selectedModifiers,
             totalPrice: (basePrice + modifiersTotal) * (item.quantity || 1), // Include modifiers only if selected
+            basePrice: basePrice,
+            price: basePrice,
+            taxRate: Number(item.taxRate) || 0,
           };
         });
 
@@ -290,13 +308,51 @@ export function OrderSummary({
           tableNumber: orderType === 'DINE_IN' ? tableNumber : null,
           customerName: customerName || null,
           items,
-          branchName: selectedBranch ? filteredBranches.find(branch => branch.id === selectedBranch)?.name : undefined,
+          branchName: (() => {
+            // For edit mode, try to get branch name from various sources
+            if (isEditMode) {
+              // First try to get from editOrderData
+              const editBranchName = editOrderData?.data?.branchName || editOrderData?.branchName;
+              if (editBranchName) return editBranchName;
+
+              // If we have selectedBranch, get name from filteredBranches or branches
+              if (selectedBranch) {
+                const branchFromFiltered = filteredBranches?.find(branch => branch.id === selectedBranch);
+                if (branchFromFiltered) return branchFromFiltered.name;
+
+                const branchFromAll = branches?.find(branch => branch.id === selectedBranch);
+                if (branchFromAll) return branchFromAll.name;
+              }
+
+              // If we have branches data, use the first available branch
+              if (filteredBranches && filteredBranches.length > 0) {
+                return filteredBranches[0].name;
+              }
+              if (branches && branches.length > 0) {
+                return branches[0].name;
+              }
+            } else {
+              // For create mode, get from selected branch
+              if (selectedBranch) {
+                const branchFromFiltered = filteredBranches?.find(branch => branch.id === selectedBranch);
+                if (branchFromFiltered) return branchFromFiltered.name;
+
+                const branchFromAll = branches?.find(branch => branch.id === selectedBranch);
+                if (branchFromAll) return branchFromAll.name;
+              }
+            }
+
+            // Final fallback - should not reach here in normal operation
+            return 'Bradford';
+          })(),
           restaurantId: selectedRestaurant, // Add restaurantId to the update payload
           subtotal: cartTotal, // Subtotal includes item prices (with tax) and modifiers
           total: cartTotal, // No separate tax
           orderType,
           status: OrderStatus.PENDING,
         };
+
+        console.log('Update order payload:', payload);
 
         const res = await orderApi.updateOrder(editOrderData.id, payload);
         if (res?.data?.data) {
@@ -339,7 +395,26 @@ export function OrderSummary({
         customerName: customerName || undefined,
         items,
         paymentMethod: PaymentMethod.CASH,
-        branchName: selectedBranch ? filteredBranches.find(branch => branch.id === selectedBranch)?.name : undefined,
+        branchName: (() => {
+          // Get branch name from selected branch
+          if (selectedBranch) {
+            const branchFromFiltered = filteredBranches?.find(branch => branch.id === selectedBranch);
+            if (branchFromFiltered) return branchFromFiltered.name;
+
+            const branchFromAll = branches?.find(branch => branch.id === selectedBranch);
+            if (branchFromAll) return branchFromAll.name;
+          }
+
+          // Fallback to first available branch
+          if (filteredBranches && filteredBranches.length > 0) {
+            return filteredBranches[0].name;
+          }
+          if (branches && branches.length > 0) {
+            return branches[0].name;
+          }
+
+          return 'Bradford';
+        })(),
         restaurantId: selectedRestaurant || undefined, // Add restaurantId to the payload
         subtotal: cartTotal, // Subtotal includes item prices (with tax) and modifiers
         total: cartTotal, // No separate tax
@@ -347,6 +422,8 @@ export function OrderSummary({
         orderType,
         notes: '',
       } as const;
+
+      console.log('Create order payload:', payload);
 
       const res = await orderApi.createOrder(payload as any);
       if (res?.data?.data) {
@@ -550,7 +627,7 @@ export function OrderSummary({
             <label className="block text-sm font-medium text-gray-700">Restaurant</label>
             {isEditMode ? (
               <Input
-                value={restaurants.find((r) => r.id === selectedRestaurant)?.name || ''}
+                value={restaurants?.find((r) => r.id === selectedRestaurant)?.name || ''}
                 disabled
                 className="bg-gray-100"
               />
@@ -560,7 +637,7 @@ export function OrderSummary({
                   <SelectValue placeholder="Select restaurant" />
                 </SelectTrigger>
                 <SelectContent>
-                  {restaurants.map((restaurant) => (
+                  {(restaurants || []).map((restaurant) => (
                     <SelectItem key={restaurant.id} value={restaurant.id}>
                       {restaurant.name}
                     </SelectItem>
@@ -574,7 +651,7 @@ export function OrderSummary({
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">Branch</label>
             {isEditMode ? (
-              <Input value={editOrderData?.data?.branchName || ''} disabled className="bg-gray-100" />
+              <Input value={editOrderData?.branchName || editOrderData?.data?.branchName || ''} disabled className="bg-gray-100" />
             ) : filteredBranches.length === 0 ? (
               <div className="w-full p-2 border rounded-md bg-gray-50 text-gray-500 text-sm">
                 No branch assigned
@@ -585,7 +662,7 @@ export function OrderSummary({
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredBranches.map((branch) => (
+                  {(filteredBranches || []).map((branch) => (
                     <SelectItem key={branch.id} value={branch.id}>
                       {branch.name}
                     </SelectItem>
@@ -617,7 +694,7 @@ export function OrderSummary({
                   </SelectTrigger>
                   <SelectContent>
                     {tableNumbers.map((num) => {
-                      const isOccupied = (occupiedTables as Set<string>).has(num) && num !== tableNumber;
+                      const isOccupied = safeOccupiedTables.has(num) && num !== tableNumber;
                       return (
                         <SelectItem
                           key={num}
@@ -626,7 +703,7 @@ export function OrderSummary({
                           className={isOccupied ? 'opacity-50 cursor-not-allowed' : ''}
                         >
                           {isOccupied
-                            ? `Table ${num} (Occupied - ${occupiedTables.has(num) ? 'Payment Pending' : 'Available'})`
+                            ? `Table ${num} (Occupied - ${safeOccupiedTables.has(num) ? 'Payment Pending' : 'Available'})`
                             : `Table ${num}`}
                         </SelectItem>
                       );
@@ -664,7 +741,7 @@ export function OrderSummary({
                 <SelectValue placeholder="Select order type" />
               </SelectTrigger>
               <SelectContent>
-                {allowedOrderTypes.map((type) => (
+                {(allowedOrderTypes || []).map((type) => (
                   <SelectItem key={type} value={type}>
                     {type === 'DINE_IN' ? 'Dine In' : 'Take Away'}
                   </SelectItem>

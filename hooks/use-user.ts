@@ -31,17 +31,51 @@ export function useUser() {
 
         // Fetch user profile from backend
         const response = await profileApi.getProfile();
+        
+        // Type assertion to handle the API response
+        type ApiResponse = {
+          id: string;
+          email: string;
+          name: string;
+          role: string;
+          branch?: any; // We'll handle this carefully
+          permissions?: string[];
+        };
 
-        if (response.data?.data) {
-          const userData = response.data.data;
+        const responseData = response as unknown as { data: ApiResponse };
+        
+        if (responseData?.data) {
+          const userData = responseData.data?.data;
+          console.log(userData,"userData")
+          // Debug log the raw user data
+          console.log('Raw user data from API:', userData);
+          
+          // Safely extract branch information
+          let branchValue: string | undefined;
+          if (userData.branch) {
+            if (typeof userData.branch === 'string') {
+              branchValue = userData.branch;
+            } else if (userData.branch.name) {
+              branchValue = userData.branch.name;
+            } else if (userData.branch.id) {
+              branchValue = userData.branch.id;
+            }
+          }
+          
           const userInfo: User = {
             userId: userData.id,
             email: userData.email,
             name: userData.name,
-            role: userData.role as User['role'],
-            branch: userData.branch || undefined,
+            role: (userData.role || 'CUSTOMER') as User['role'],
+            branch: branchValue,
             permissions: userData.permissions || []
           };
+console.log(userInfo,"userInfo")
+          console.log('Processed user info:', {
+            ...userInfo,
+            branchType: typeof userInfo.branch,
+            branchValue: userInfo.branch
+          });
 
           setUser(userInfo);
 
@@ -70,9 +104,10 @@ export function useUser() {
   return {
     user,
     loading,
-    isAdmin,
-    isManager,
+    isLoading: loading, // For backward compatibility
+    isAdmin: user?.role === 'ADMIN',
+    isManager: user?.role === 'MANAGER',
     hasRole: (role: string) => user?.role === role,
-    hasAnyRole: (roles: string[]) => roles.includes(user?.role || '')
+    hasAnyRole: (roles: string[]) => roles.some(role => user?.role === role)
   };
 }

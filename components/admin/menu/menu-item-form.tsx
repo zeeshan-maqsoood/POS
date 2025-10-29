@@ -98,12 +98,14 @@ type MenuItemFormValues = z.infer<typeof menuItemFormSchema>;
 
 interface MenuItemFormProps {
   initialData?: MenuItem;
+  managerBranchId?: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormProps) {
+export function MenuItemForm({ initialData, onSuccess, onCancel, managerBranchId }: MenuItemFormProps) {
   const [isLoading, setIsLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [categories, setCategories] = React.useState<{ id: string; name: string }[]>([]);
   const [allModifiers, setAllModifiers] = React.useState<{
@@ -128,6 +130,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   const [ingredientSearchTerm, setIngredientSearchTerm] = React.useState("");
   const [showCategoryHelp, setShowCategoryHelp] = React.useState(false);
   const [formInitialized, setFormInitialized] = React.useState(false);
+  const [managerRestaurant, setManagerRestaurant] = React.useState<{ id: string; name: string } | null>(null); 
   console.log(initialData,"initialData")
   const router = useRouter();
   const { branches, loading: branchesLoading, error: branchesError } = useBranches();
@@ -164,7 +167,25 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
       categoryId: ""
     };
 
-    if (!initialData) return baseValues;
+    if (initialData) {
+      // If we have initial data, use it
+      const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "";
+      const branchName = initialData.branchName || initialData.branch?.name || "";
+      const categoryId = initialData.categoryId || initialData.category?.id || "";
+
+      return {
+        ...baseValues,
+        ...initialData,
+        restaurantId,
+        branchName,
+        categoryId,
+        price: initialData.price || 0,
+        cost: initialData.cost || 0,
+        isActive: initialData.isActive !== false,
+      };
+    }
+
+    return baseValues;
 
     // Extract restaurantId from initialData - it should be in branch.restaurantId or directly in restaurantId
     const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "";
@@ -225,6 +246,8 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
   const form = useForm<MenuItemFormValues>({
     resolver: zodResolver(menuItemFormSchema),
     defaultValues,
+    mode: "onChange",
+    shouldUnregister: false,
   });
 
   // Debug defaultValues
@@ -549,6 +572,7 @@ console.log(inventoryRes,"inventryRes")
       }
     }
   }, [initialData?.restaurantId, initialData?.branch?.restaurantId, isEditMode]);
+
   // Also load branches when editing with initial data
   React.useEffect(() => {
     if (initialData && isEditMode) {
@@ -684,6 +708,74 @@ console.log(inventoryRes,"inventryRes")
     // Reset form with updated ingredient names
     form.setValue("ingredients", updatedIngredients);
   }, [inventoryItems, initialData, form]);
+
+  // Fetch data for manager's branch and initialize form
+  React.useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      
+      try {
+        if (managerBranchId) {
+          // If managerBranchId is provided, fetch the branch details to get the restaurant
+          const branchRes = await branchApi.getBranch(managerBranchId);
+          const branch = branchRes.data;
+          
+          if (branch && branch.restaurant) {
+            const managerRestaurantData = {
+              id: branch.restaurant.id,
+              name: branch.restaurant.name
+            };
+            
+            setManagerRestaurant(managerRestaurantData);
+            
+            // Set the form value for restaurant
+            form.setValue('restaurantId', managerRestaurantData.id, { shouldValidate: true });
+            
+            // Fetch categories for this restaurant only
+            const categoriesRes = await categoryApi.getCategories(managerRestaurantData.id);
+            setCategories(categoriesRes.data || []);
+            
+            // Set the restaurants array to only include the manager's restaurant
+            setRestaurants([managerRestaurantData]);
+            
+            // Also set the branch name if not already set
+            if (!form.getValues('branchName') && branch.name) {
+              form.setValue('branchName', normalizeBranchName(branch.name), { shouldValidate: true });
+            }
+          }
+        } else {
+          // For admin users, fetch all restaurants and categories
+          const [categoriesRes, restaurantsRes] = await Promise.all([
+            categoryApi.getCategories(),
+            restaurantApi.getRestaurants(),
+          ]);
+          
+          setCategories(categoriesRes.data || []);
+          setRestaurants(restaurantsRes.data || []);
+          
+          // If we have initial data but no restaurant ID, try to set it from the data
+          if (initialData) {
+            const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId;
+            if (restaurantId) {
+              form.setValue('restaurantId', restaurantId, { shouldValidate: true });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing form data:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to initialize form data. Please try again.',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [managerBranchId, form, initialData]);
+
   const selectedModifiers = React.useMemo(() => {
     try {
       const formModifiers = form.getValues("modifiers");
@@ -801,6 +893,9 @@ console.log(inventoryRes,"inventryRes")
   };
 
   const onSubmit = async (data: MenuItemFormValues) => {
+    // Prevent default form submission
+    event?.preventDefault();
+    
     setIsSubmitting(true);
     try {
       const { restaurantId, branchName, modifiers, ingredients, ...dataWithoutRestaurantBranchModifiersIngredients } = data;
@@ -836,14 +931,21 @@ console.log(inventoryRes,"inventryRes")
           description: "Menu item updated successfully.",
         });
       } else {
-        await menuItemApi.createItem(formattedData as any);
+        const response = await menuItemApi.createItem(formattedData as any);
         toast({
           title: "Success",
           description: "Menu item created successfully.",
         });
+        // If creating a new item, update the URL to the edit page
+        if (response?.data?.id) {
+          window.history.pushState({}, '', `/dashboard/menu/items/edit/${response.data.id}`);
+        }
       }
 
-      onSuccess?.();
+      // Call onSuccess after a short delay to allow the toast to show
+      setTimeout(() => {
+        onSuccess?.();
+      }, 500);
     } catch (error) {
       console.error("Error saving menu item:", error);
       toast({
@@ -1041,28 +1143,48 @@ console.log(inventoryRes,"inventryRes")
               <FormItem>
                 <FormLabel>Restaurant</FormLabel>
                 <Select
-                  key={`restaurant-${formInitialized}-${restaurants.length}`}
+                  disabled={loading || !!managerRestaurant}
                   onValueChange={field.onChange}
                   value={field.value}
-                  disabled={isSubmitting}
+                  defaultValue={field.value}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a restaurant">
-                        {field.value ? restaurants.find(r => r.id === field.value)?.name || field.value : "Select a restaurant"}
-                      </SelectValue>
+                      <SelectValue
+                        defaultValue={field.value}
+                        placeholder={
+                          managerRestaurant 
+                            ? managerRestaurant.name 
+                            : 'Select a restaurant'
+                        }
+                      />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {restaurants
-                      .filter((restaurant) => restaurant.id && restaurant.id.trim() !== "")
-                      .map((restaurant) => (
-                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                    {managerRestaurant ? (
+                      <SelectItem
+                        key={managerRestaurant.id}
+                        value={managerRestaurant.id}
+                      >
+                        {managerRestaurant.name}
+                      </SelectItem>
+                    ) : (
+                      restaurants.map((restaurant) => (
+                        <SelectItem
+                          key={restaurant.id}
+                          value={restaurant.id}
+                        >
                           {restaurant.name}
                         </SelectItem>
-                      ))}
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+                {managerRestaurant && (
+                  <FormDescription>
+                    Restaurant is automatically set based on your branch
+                  </FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}

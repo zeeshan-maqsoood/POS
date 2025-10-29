@@ -45,6 +45,12 @@ function LoginFormContent() {
         ...response.data.user,
         token: response.data.token
       }))
+
+      console.log('Login successful - storing user data:', {
+        ...response.data.user,
+        token: response.data.token
+      });
+      console.log('User permissions:', response.data.user.permissions);
   
       // Set auth header for future requests
       const api = (await import('@/utils/api')).default
@@ -58,31 +64,15 @@ function LoginFormContent() {
         console.log('Kitchen staff detected, redirecting to orders page');
         redirectPath = '/dashboard/orders';
       }
-      // Redirect managers with POS_READ permission to POS page
-      else if (response.data.user.role === 'MANAGER' && response.data.user.permissions?.includes('POS_READ')) {
-        console.log('Manager with POS_READ permission detected, redirecting to POS page');
-        redirectPath = '/pos';
-      }
       // Redirect admins to dashboard (admins have access to everything)
       else if (response.data.user.role === 'ADMIN') {
         console.log('Admin detected, redirecting to dashboard');
         redirectPath = '/dashboard';
       }
-      // For other roles, use the original redirect logic
+      // For managers and other roles, go to dashboard by default
       else {
-        redirectPath = redirectTo.startsWith('/') ? redirectTo : `/${redirectTo}`;
-        // If trying to access dashboard root, find first accessible page
-        if (redirectPath === '/dashboard' || redirectPath.startsWith('/dashboard?')) {
-          // Check if user has any permissions that would allow access to the orders page
-          const userPermissions = response.data.user.permissions || [];
-          if (userPermissions.includes('ORDER_READ')) {
-            redirectPath = '/dashboard/orders';
-          }
-          // Otherwise, let the middleware handle the redirection
-          else {
-            redirectPath = '/dashboard';
-          }
-        }
+        console.log('Manager or other role detected, redirecting to dashboard');
+        redirectPath = '/dashboard';
       }
       
       console.log('Redirecting to:', redirectPath);

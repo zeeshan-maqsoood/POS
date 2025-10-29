@@ -557,7 +557,11 @@ export default function OrdersPage() {
                   try {
                     await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
                     const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-                    await Promise.all([fetchOrders(activeTab), fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)]);
+                    // Refresh both orders and stats when payment status or method changes
+                    await Promise.all([
+                      fetchOrders(activeTab), 
+                      fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
+                    ]);
                   } catch (error) {
                     console.error("Error updating payment status:", error);
                   }

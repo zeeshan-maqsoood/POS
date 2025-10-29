@@ -12,7 +12,7 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
       <SocketProvider>
-        <PermissionsProvider permissions={[]}>
+        <PermissionsProvider>
           {children}
           <OrderNotifications />
           <Toaster position="top-center" />

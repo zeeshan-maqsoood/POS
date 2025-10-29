@@ -169,13 +169,7 @@ export const orderApi = {
     }
   },
   // Get a single order by ID
-  getOrder: (id: string) => api.get<{
-    items: any;
-    orderType: string;
-    branchId: null;
-    tableNumber: string;
-    customerName: string; data: Order 
-}>(`/orders/${id}`),
+  getOrder: (id: string) => api.get<{ data: Order }>(`/orders/${id}`),
 
   // Create a new order
   createOrder: (data: CreateOrderInput) => api.post<{ data: Order }>('/orders', data),

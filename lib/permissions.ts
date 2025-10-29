@@ -5,7 +5,7 @@ export type Permission =
   | 'MENU_CREATE' | 'MENU_READ' | 'MENU_UPDATE' | 'MENU_DELETE'
   | 'POS_CREATE' | 'POS_READ' | 'POS_UPDATE' | 'POS_DELETE'
   | 'MANAGER_CREATE' | 'MANAGER_READ' | 'MANAGER_UPDATE'
-  | 'PRODUCT_CREATE' | 'PRODUCT_READ' | 'PRODUCT_UPDATE' | 'PRODUCT_DELETE';
+  | 'DASHBOARD_READ'
 
 // Permission groups for easier management
 export const PermissionGroups = {
@@ -31,10 +31,10 @@ export const PermissionGroups = {
     DELETE: 'MENU_DELETE' as const,
   },
   POS: {
-    
+    CREATE: 'POS_CREATE' as const,
     READ: 'POS_READ' as const,
     UPDATE: 'POS_UPDATE' as const,
-   
+    DELETE: 'POS_DELETE' as const,
   },
   manager:{
     READ: 'MANAGER_READ' as const,
@@ -46,6 +46,9 @@ export const PermissionGroups = {
     CREATE:"PRODUCT_CREATE" as const,
     UPDATE:"PRODUCT_UPDATE" as const,
     DELETE:"PRODUCT_DELETE" as const,
+  },
+  DASHBOARD: {
+    READ: 'DASHBOARD_READ' as const,
   }
 } as const;
 
@@ -78,7 +81,8 @@ export const DefaultRolePermissions = {
     PermissionGroups.inventory.CREATE,
     PermissionGroups.inventory.UPDATE,
     PermissionGroups.inventory.READ,
-    PermissionGroups.inventory.DELETE
+    PermissionGroups.inventory.DELETE,
+    PermissionGroups.DASHBOARD.READ
   ],
   CASHIER: [
     PermissionGroups.ORDER.READ,

@@ -174,7 +174,7 @@ export default function ManagersPage() {
     const fetchManagers = async () => {
       try {
         const res = await managerApi.getManagers();
-        setManagers(res.data.data); // ✅ API response shape: { success, message, data: [...] }
+        setManagers(res.data.data); // API response shape: { success, message, data: [...] }
       } catch (err: any) {
         setError(err.message || "Failed to load managers");
         toast({
@@ -195,24 +195,24 @@ export default function ManagersPage() {
     try {
       setIsLoading(true);
       await managerApi.deleteManager(id);
-      
+
       // Optimistically update the UI
       setManagers(prevManagers => prevManagers.filter(manager => manager.id !== id));
-      
+
       toast({
         title: "Success",
         description: "Manager has been deleted successfully.",
       });
     } catch (error: any) {
       console.error("Error deleting manager:", error);
-      
+
       let errorMessage = "Failed to delete manager";
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       toast({
         title: "Error",
         description: errorMessage,
@@ -242,7 +242,7 @@ export default function ManagersPage() {
         </Button>
         </PermissionGate>
       </div>
-    
+
       <Card>
         <CardHeader>
           <CardTitle>Manager List</CardTitle>

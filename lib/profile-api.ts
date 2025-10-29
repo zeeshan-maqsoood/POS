@@ -30,12 +30,12 @@ export interface UpdateProfileData {
 export const profileApi = {
   // 👤 Get current logged-in user profile
   getProfile: () => {
-    return api.get<{ data: Profile }>('/auth/profile')
+    return api.get<Profile>('/auth/profile')
   },
 
   // ✏️ Update profile of current user
   updateProfile: (data: UpdateProfileData) => {
-    return api.put<{ data: Profile }>('/auth/profile', data)
+    return api.put<Profile>('/auth/profile', data)
   },
 
   // 🔑 Change password
@@ -51,7 +51,7 @@ export const profileApi = {
     const formData = new FormData()
     formData.append('avatar', file)
 
-    return api.post<{ data: { avatarUrl: string } }>('/profile/avatar', formData, {
+    return api.post<{ avatarUrl: string }>('/profile/avatar', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },

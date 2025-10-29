@@ -96,6 +96,9 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           selected: true,
         })),
         totalPrice: (Number(item.price) + Number(item.taxRate) / 100 + (item.modifiers || []).reduce((sum: number, mod: any) => sum + Number(mod.price || 0), 0)) * (item.quantity || 1),
+        basePrice: Number(item.price) + Number(item.taxRate) / 100,
+        price: Number(item.price) + Number(item.taxRate) / 100,
+        taxRate: Number(item.taxRate) || 0,
       }));
     }
     return [];
@@ -113,12 +116,15 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
   const [isLoadingTables, setIsLoadingTables] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(editOrderData?.branchId || null);
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string>(editOrderData?.tableNumber || '');
   const [customerName, setCustomerName] = useState<string>(editOrderData?.customerName || '');
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<string>('');
+  const [selectedRestaurant, setSelectedRestaurant] = useState<string>(() => {
+    // If we have editOrderData, set the restaurant ID
+    return editOrderData?.restaurantId || editOrderData?.restaurant?.id || '';
+  });
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
   const [isLoadingRestaurants, setIsLoadingRestaurants] = useState(false);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
@@ -130,7 +136,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
       setIsLoadingOrder(true);
       try {
         const response = await orderApi.getOrder(editOrderId);
-        const orderData = response.data;
+        const orderData = response.data.data;
 
         // Update cart with order items
         if (orderData.items) {
@@ -168,6 +174,9 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
                 selected: true,
               })),
               totalPrice: (basePrice + modifiersTotal) * (item.quantity || 1),
+              basePrice: basePrice,
+              price: basePrice,
+              taxRate: Number(item.taxRate) || 0,
             };
           });
           console.log(updatedCart, "updatedCart");
@@ -176,9 +185,34 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
 
         // Update form fields
         setOrderType(orderData.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN');
-        setSelectedBranch(orderData.branchId || null);
+
+        // Find branch by name and set its ID
+        const branchByName = branches.find(branch => branch.name === orderData.branchName);
+        const branchById = branchByName?.id || null;
+
+        // If branch lookup by name fails, try to find by other methods
+        let finalBranchId = branchById;
+        if (!finalBranchId && orderData.branchName) {
+          // Try case-insensitive match
+          const caseInsensitiveMatch = branches.find(branch =>
+            branch.name.toLowerCase() === orderData.branchName.toLowerCase()
+          );
+          finalBranchId = caseInsensitiveMatch?.id || null;
+
+          // If still not found, try partial match
+          if (!finalBranchId) {
+            const partialMatch = branches.find(branch =>
+              branch.name.toLowerCase().includes(orderData.branchName.toLowerCase()) ||
+              orderData.branchName.toLowerCase().includes(branch.name.toLowerCase())
+            );
+            finalBranchId = partialMatch?.id || null;
+          }
+        }
+
+        setSelectedBranch(finalBranchId);
         setTableNumber(orderData.tableNumber || '');
         setCustomerName(orderData.customerName || '');
+        setSelectedRestaurant(orderData.restaurantId || orderData.restaurant?.id || '');
 
         hasProcessedEditOrder.current = true;
       } catch (error) {
@@ -190,7 +224,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
     };
 
     fetchOrderData();
-  }, [editOrderId, menuItems]);
+  }, [editOrderId, menuItems, branches]);
 
   const handleClearCart = useCallback(() => {
     setCart([]);
@@ -216,6 +250,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
   }, []);
 
   const handleRestaurantChange = useCallback((restaurantId: string) => {
+    console.log('Restaurant changed:', restaurantId);
     setSelectedRestaurant(restaurantId);
     setSelectedBranch(null); // Reset branch when restaurant changes
     setFilteredBranches(branches.filter(branch => branch.restaurantId === restaurantId));
@@ -241,11 +276,55 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
         setIsLoadingBranches(true);
 
         const restaurantsResponse = await restaurantApi.getActiveRestaurants();
-        const restaurantsData = restaurantsResponse.data.data || [];
+        console.log('Restaurants API response:', restaurantsResponse);
+        console.log('Restaurants response data:', restaurantsResponse.data);
+        console.log('Restaurants data type:', typeof restaurantsResponse.data);
+        console.log('Restaurants data is array:', Array.isArray(restaurantsResponse.data));
+
+        // Handle different response structures
+        let restaurantsData;
+        if (Array.isArray(restaurantsResponse.data)) {
+          restaurantsData = restaurantsResponse.data;
+        } else if (restaurantsResponse.data && Array.isArray(restaurantsResponse.data.data)) {
+          restaurantsData = restaurantsResponse.data.data;
+        } else if (restaurantsResponse.data && typeof restaurantsResponse.data === 'object' && restaurantsResponse.data.data) {
+          restaurantsData = Array.isArray(restaurantsResponse.data.data) ? restaurantsResponse.data.data : [restaurantsResponse.data.data];
+        } else {
+          restaurantsData = [];
+        }
+
+        console.log('Final restaurants data:', restaurantsData);
         setRestaurants(restaurantsData);
 
         const branchesResponse = await branchApi.getActiveBranches();
-        const branchesData = branchesResponse.data.data || [];
+        console.log('Branches API response:', branchesResponse);
+        console.log('Branches response data:', branchesResponse.data);
+        console.log('Branches data type:', typeof branchesResponse.data);
+        console.log('Branches data is array:', Array.isArray(branchesResponse.data));
+
+        // Handle different response structures
+        let branchesData: Branch[] = [];
+        const branchesResponseData = (branchesResponse as any).data;
+
+        if (Array.isArray(branchesResponseData)) {
+          branchesData = branchesResponseData;
+        } else if (branchesResponseData && typeof branchesResponseData === 'object') {
+          if (Array.isArray(branchesResponseData.data)) {
+            branchesData = branchesResponseData.data;
+          } else if (branchesResponseData.data) {
+            branchesData = Array.isArray(branchesResponseData.data) ? branchesResponseData.data : [branchesResponseData.data];
+          }
+        }
+
+        // If no branches from API, use fallback data
+        if (branchesData.length === 0) {
+          console.warn('No branches received from API, using fallback data');
+          branchesData = [
+            { id: '1', name: 'Main Branch', restaurantId: '1', isActive: true, serviceType: 'BOTH', country: 'UK', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+          ];
+        }
+
+        console.log('Final branches data:', branchesData);
         setBranches(branchesData);
 
         if (!isAdmin && user?.branch) {
@@ -272,51 +351,129 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
 
   // Filter branches when restaurant selection changes
   useEffect(() => {
+    console.log('Branch filtering triggered:', { selectedRestaurant, branches: branches.length });
     if (selectedRestaurant) {
-      const filtered = branches.filter(branch => branch.restaurantId === selectedRestaurant);
+      const filtered = (branches || []).filter(branch => branch.restaurantId === selectedRestaurant);
+      console.log('Filtered branches:', filtered);
       setFilteredBranches(filtered);
       if (selectedBranch && !filtered.find(branch => branch.id === selectedBranch)) {
+        console.log('Clearing selected branch because it\'s not in filtered list');
         setSelectedBranch(null);
       }
     } else {
+      console.log('No restaurant selected, clearing filtered branches');
       setFilteredBranches([]);
       setSelectedBranch(null);
     }
   }, [selectedRestaurant, branches, selectedBranch]);
 
+  // Fetch occupied tables when branch changes
+  useEffect(() => {
+    fetchOccupiedTables();
+  }, [selectedBranch, filteredBranches]);
+
+  const fetchOccupiedTables = async () => {
+    if (!selectedBranch) {
+      setOccupiedTables(new Set());
+      return;
+    }
+
+    try {
+      setIsLoadingTables(true);
+      const branchName = filteredBranches.find(branch => branch.id === selectedBranch)?.name;
+      if (!branchName) {
+        setOccupiedTables(new Set());
+        return;
+      }
+
+      const response = await orderApi.getOrdersByBranch(branchName);
+      const orders = response.data || [];
+
+      // Filter for occupied tables (orders that are not completed, cancelled, or paid)
+      const occupiedTableNumbers = new Set(
+        orders
+          .filter(order =>
+            order.tableNumber &&
+            !['COMPLETED', 'CANCELLED'].includes(order.status || '') &&
+            order.paymentStatus !== 'PAID'
+          )
+          .map(order => order.tableNumber)
+      );
+
+      setOccupiedTables(occupiedTableNumbers);
+    } catch (error) {
+      console.error('Error fetching occupied tables:', error);
+      setOccupiedTables(new Set());
+      setTableError('Failed to load table occupancy data');
+    } finally {
+      setIsLoadingTables(false);
+    }
+  };
+
   // Set up WebSocket listener for order updates
   useEffect(() => {
     const handleOrderUpdate = (data: any) => {
       if (['COMPLETED', 'CANCELLED', 'PAID'].includes(data.status) || data.paymentStatus === 'PAID') {
-        fetchOccupiedTables(selectedBranch);
+        // Refresh occupied tables when an order status changes
+        fetchOccupiedTables();
         if (data.tableNumber === tableNumber) {
           setTableNumber('');
         }
       }
     };
 
-    if (window.Echo) {
-      window.Echo.channel('orders')
-        .listen('OrderStatusUpdated', handleOrderUpdate)
-        .listen('PaymentStatusUpdated', (data: any) => {
-          if (data.paymentStatus === 'PAID') {
-            fetchOccupiedTables(selectedBranch);
-            if (data.tableNumber === tableNumber) {
-              setTableNumber('');
+    if (window.Echo && typeof window.Echo.channel === 'function') {
+      const channel = window.Echo.channel('orders') as any;
+      if (channel) {
+        channel
+          .listen('OrderStatusUpdated', handleOrderUpdate)
+          .listen('PaymentStatusUpdated', (data: any) => {
+            if (data.paymentStatus === 'PAID') {
+              // Refresh occupied tables when payment status changes
+              fetchOccupiedTables();
+              if (data.tableNumber === tableNumber) {
+                setTableNumber('');
+              }
             }
-          }
-        });
+          });
+      }
     }
 
     return () => {
-      if (window.Echo) {
+      if (window.Echo && typeof window.Echo.leaveChannel === 'function') {
         window.Echo.leaveChannel('orders');
       }
     };
-  }, [selectedBranch, tableNumber]);
+  }, [selectedBranch, tableNumber, filteredBranches]);
 
   const { hasPermission } = usePermissions();
   const canCreateMenuItems = hasPermission('MENU_CREATE');
+
+  // Determine back button destination based on permissions
+  const getBackButtonDestination = () => {
+    // Priority 1: If manager has DASHBOARD_READ permission, go to dashboard
+    if (hasPermission('DASHBOARD_READ')) {
+      return '/dashboard';
+    }
+
+    // Priority 2: If manager has ORDER_READ permission, go to orders
+    if (hasPermission('ORDER_READ')) {
+      return '/dashboard/orders';
+    }
+
+    // Priority 3: If manager has MENU_READ permission, go to menu
+    if (hasPermission('MENU_READ')) {
+      return '/dashboard/menu';
+    }
+
+    // Priority 4: If manager has USER_READ permission, go to users
+    if (hasPermission('USER_READ')) {
+      return '/dashboard/users';
+    }
+
+    // Fallback: Go to dashboard
+    return '/dashboard';
+  };
 
   // Fetch data on component mount
   useEffect(() => {
@@ -326,7 +483,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
         setError(null);
 
         const apiParams: any = {};
-        if (!isAdmin && user?.branch) {
+        if (!isAdmin && user?.branch && user.branch) {
           const normalizedBranch = user.branch.startsWith('branch')
             ? user.branch.replace('branch1', 'Bradford')
                 .replace('branch2', 'Leeds')
@@ -340,7 +497,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           categoryApi.getCategories(apiParams),
           menuItemApi.getItems(apiParams),
         ]);
-
+        
         const categoriesResponseData = categoriesResponse.status === 'fulfilled'
           ? (categoriesResponse.value?.data as any)?.data || []
           : [];
@@ -460,6 +617,8 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           selectedModifiers,
           totalPrice: itemTotal,
           basePrice: menuItemWithTax.price,
+          price: menuItemWithTax.price,
+          taxRate: Number(menuItem.taxRate) || 0,
         } as CartItem,
       ];
     });
@@ -513,7 +672,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
     }
 
     setCart([]);
-    await fetchOccupiedTables(selectedBranch);
+    await fetchOccupiedTables(); // Fetch updated occupied tables after order is placed
 
     toast.success(editOrderData?.data?.id ? 'Order updated successfully!' : 'Order placed successfully!');
   };
@@ -583,7 +742,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           <div className="flex items-center justify-between w-full sm:w-auto">
             <div className="flex items-center space-x-2 sm:space-x-4">
               <Button asChild variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
-                <Link href="/dashboard" className="flex items-center">
+                <Link href={getBackButtonDestination()} className="flex items-center">
                   <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Link>
               </Button>
@@ -642,7 +801,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           <div className="mb-4 sm:mb-6">
             <div className="overflow-x-auto pb-2">
               <MenuCategories
-                categories={['All', ...categories.map(cat => cat.name)]}
+                categories={['All', ...(categories || []).map(cat => cat.name)]}
                 selectedCategory={selectedCategory}
                 onSelectCategory={setSelectedCategory}
               />

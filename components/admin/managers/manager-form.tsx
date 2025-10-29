@@ -186,6 +186,24 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
 
   console.log('Current form permissions:', watchedPermissions);
 
+  const refreshUserSession = async (userId: string) => {
+    try {
+      // Call the refresh endpoint to update the user's session
+      const response = await fetch(`/api/auth/refresh-user-session/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to refresh user session, but manager was updated successfully');
+      }
+    } catch (error) {
+      console.error('Error refreshing user session:', error);
+    }
+  };
+
   const onSubmit = async (data: ManagerFormValues) => {
     try {
       setIsLoading(true);
@@ -209,7 +227,12 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
         throw new Error('Failed to save manager');
       }
       
-      await response.json();
+      const result = await response.json();
+      
+      // If this is an update and the manager is not the current user, refresh their session
+      if (isEditing && initialData?.id && result.data?.id) {
+        await refreshUserSession(result.data.id);
+      }
       
       toast({
         title: isEditing ? 'Manager updated' : 'Manager created',

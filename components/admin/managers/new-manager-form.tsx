@@ -480,7 +480,7 @@ export const managerFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional(),
-  role: z.enum(["MANAGER", "KITCHEN_STAFF","WAITER"]),
+  role: z.enum(["ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN_STAFF", "USER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   restaurantId: z.string().min(1, { message: "Please select a restaurant." }),
   branch: z.string().min(1, { message: "Please select a branch." }),
@@ -491,7 +491,7 @@ export const managerFormSchema = z.object({
 });
 
 // Define types
-type Role = "MANAGER" | "KITCHEN_STAFF" | "WAITER";
+type Role = "ADMIN" | "MANAGER" | "CASHIER" | "WAITER" | "KITCHEN_STAFF" | "USER";
 type Status = "ACTIVE" | "INACTIVE";
 
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
@@ -518,6 +518,8 @@ interface ManagerFormProps {
     isShiftActive?: boolean;
   };
   isEditing?: boolean;
+  onSubmit?: (data: any) => void;
+  onCancel?: () => void;
 }
 
 // Group permissions by category for better UI organization
@@ -542,6 +544,7 @@ const getDefaultManagerPermissions = (): string[] => [
   "ORDER_UPDATE",
   "USER_READ",
   "POS_READ",
+  "DASHBOARD_READ"
 ];
 
 // Fixed permissions for kitchen staff
@@ -555,7 +558,7 @@ const LEGACY_BRANCH_MAPPING: Record<string, string> = {
   "Darley St Market": "Westside Branch",
 };
 
-export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
+export function ManagerForm({ initialData, isEditing = false, onSubmit, onCancel }: ManagerFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [permissionGroups, setPermissionGroups] = useState<{ [key: string]: string[] }>({});
@@ -563,6 +566,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
   const [branches, setBranches] = useState<Branch[]>([]);
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
+  const [restaurantsLoaded, setRestaurantsLoaded] = useState(false);
 
   // Initialize form with default values
   const defaultValues: ManagerFormValues = {
@@ -594,6 +598,28 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
   // Watch form values
   const selectedRestaurantId = form.watch("restaurantId");
 
+  // Debug form value changes
+  useEffect(() => {
+    console.log('📊 Form restaurantId changed:', selectedRestaurantId);
+  }, [selectedRestaurantId]);
+
+  // Debug initial data
+  useEffect(() => {
+    if (initialData) {
+      console.log('📋 Initial data received:', initialData);
+      console.log('🔍 Manager restaurantId:', initialData.restaurantId);
+      console.log('🔍 Manager branch:', initialData.branch);
+
+      // Check if the manager data has the expected structure
+      if (initialData.branch && typeof initialData.branch === 'object') {
+        console.log('🏪 Manager branch object:', initialData.branch);
+        if (initialData.branch.restaurant) {
+          console.log('🏪 Manager branch restaurant:', initialData.branch.restaurant);
+        }
+      }
+    }
+  }, [initialData]);
+
   // Load permission groups on mount
   useEffect(() => {
     setPermissionGroups(groupPermissionsByCategory());
@@ -603,26 +629,71 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
   useEffect(() => {
     const loadRestaurantsAndBranches = async () => {
       try {
-        // Load restaurants
-        const restaurantsResponse = await restaurantApi.getActiveRestaurants();
-        const restaurantsData = restaurantsResponse.data.data || [];
-        console.log('Loaded restaurants:', restaurantsData);
-        setRestaurants(restaurantsData);
+        console.log('🔄 Starting to load restaurants and branches...');
 
-        // Load all branches for filtering
-        const branchesResponse = await branchApi.getActiveBranches();
-        const branchesData = branchesResponse.data.data || [];
-        console.log('Loaded branches:', branchesData);
-        setBranches(branchesData);
-        // Don't show all branches initially - wait for restaurant selection
+        // Try multiple API endpoints for restaurants
+        let restaurantsData: any[] = [];
+
+        try {
+          console.log('📡 Trying restaurants/active endpoint...');
+          const restaurantsResponse = await restaurantApi.getActiveRestaurants();
+          restaurantsData = (restaurantsResponse as any)?.data?.data || (restaurantsResponse as any)?.data || restaurantsResponse || [];
+        } catch (error) {
+          console.error('❌ restaurants/active failed:', error);
+          try {
+            console.log('📡 Trying restaurants/dropdown endpoint...');
+            const dropdownResponse = await restaurantApi.getRestaurantsForDropdown();
+            restaurantsData = (dropdownResponse as any)?.data?.data || (dropdownResponse as any)?.data || dropdownResponse || [];
+          } catch (error2) {
+            console.error('❌ restaurants/dropdown also failed:', error2);
+            try {
+              console.log('📡 Trying restaurants endpoint...');
+              const allResponse = await restaurantApi.getAllRestaurants();
+              restaurantsData = (allResponse as any)?.data?.data || (allResponse as any)?.data || allResponse || [];
+            } catch (error3) {
+              console.error('❌ All restaurant endpoints failed:', error3);
+            }
+          }
+        }
+
+        // Ensure restaurantsData is an array
+        const finalRestaurants = Array.isArray(restaurantsData) ? restaurantsData : [];
+        console.log('✅ Loaded restaurants:', finalRestaurants);
+        console.log('🏪 Setting restaurants state with', finalRestaurants.length, 'restaurants');
+        setRestaurants(finalRestaurants);
+        setRestaurantsLoaded(true);
+
+        // Load branches with same fallback logic
+        let branchesData: any[] = [];
+        try {
+          console.log('📡 Loading branches...');
+          const branchesResponse = await branchApi.getActiveBranches();
+          branchesData = (branchesResponse as any)?.data?.data || (branchesResponse as any)?.data || branchesResponse || [];
+        } catch (error) {
+          console.error('❌ Branches API failed:', error);
+        }
+
+        const finalBranches = Array.isArray(branchesData) ? branchesData : [];
+        console.log('✅ Loaded branches:', finalBranches);
+        setBranches(finalBranches);
         setFilteredBranches([]);
+
       } catch (error) {
-        console.error('Error loading restaurants and branches:', error);
+        console.error('❌ Error in loadRestaurantsAndBranches:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load restaurants and branches. Please check if the backend server is running and you are logged in.',
+          variant: 'destructive',
+        });
+        setRestaurants([]);
+        setBranches([]);
+        setFilteredBranches([]);
+        setRestaurantsLoaded(true);
       }
     };
 
     loadRestaurantsAndBranches();
-  }, []);
+  }, [isEditing]); // Re-run when editing mode changes
 
   // Filter branches when restaurant selection changes
   useEffect(() => {
@@ -631,12 +702,16 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
 
       // Use client-side filtering as the primary method since the API endpoint might not exist
       branchApi.getActiveBranches().then((allBranchesRes) => {
-        const allBranches = allBranchesRes.data.data || [];
+        // Handle both axios response format and direct data format
+        const allBranches = (allBranchesRes as any)?.data?.data || (allBranchesRes as any)?.data || allBranchesRes || [];
+        const branchesArray = Array.isArray(allBranches) ? allBranches : [];
+
         // Filter branches that belong to the selected restaurant
-        const filtered = allBranches.filter(branch =>
+        const filtered = branchesArray.filter(branch =>
           branch.restaurantId === selectedRestaurantId ||
           branch.restaurant?.id === selectedRestaurantId
         );
+        console.log('Filtered branches for restaurant:', selectedRestaurantId, filtered);
         setFilteredBranches(filtered);
       }).catch((error) => {
         console.error("Error fetching branches:", error);
@@ -649,11 +724,24 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
       setFilteredBranches([]);
       setIsLoadingBranches(false);
     }
-  }, [selectedRestaurantId, branches, form]);
+  }, [selectedRestaurantId]); // Remove branches and form from dependencies to avoid unnecessary re-renders
 
-  // Reset form when editing
+  // Reset form when editing and trigger branch filtering
   useEffect(() => {
-    if (initialData) {
+    if (initialData && restaurantsLoaded) {
+      console.log('🔄 Resetting form with initialData:', initialData);
+      console.log('📋 Current restaurants state:', restaurants);
+
+      // Debug: Check what restaurantId is in initialData
+      console.log('🔍 initialData.restaurantId:', initialData.restaurantId);
+      console.log('🔍 initialData.branch:', initialData.branch);
+
+      // Check if restaurantId matches any loaded restaurant
+      if (initialData.restaurantId) {
+        const matchingRestaurant = restaurants.find(r => r.id === initialData.restaurantId);
+        console.log('🏪 Matching restaurant:', matchingRestaurant);
+      }
+
       // Convert legacy branch format to new format for display
       const displayBranch = initialData.branch && LEGACY_BRANCH_MAPPING[initialData.branch]
         ? LEGACY_BRANCH_MAPPING[initialData.branch]
@@ -677,18 +765,88 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
         };
       }
 
-      form.reset({
+      // If restaurantId is not valid, try to find it from branch data
+      let validRestaurantId = initialData.restaurantId;
+      if (initialData.restaurantId && !restaurants.some(r => r.id === initialData.restaurantId)) {
+        console.warn('⚠️ Manager restaurantId not found in loaded restaurants:', initialData.restaurantId);
+
+        // Try to find restaurant from branch data
+        if (initialData.branch && typeof initialData.branch === 'object' && initialData.branch.restaurant) {
+          validRestaurantId = initialData.branch.restaurant.id;
+          console.log('🔄 Found restaurantId from branch data:', validRestaurantId);
+        } else {
+          console.warn('⚠️ Could not find valid restaurantId');
+          validRestaurantId = "";
+        }
+      }
+
+      const formData = {
         ...defaultValues,
         ...initialData,
-        restaurantId: initialData.restaurantId || "",
+        restaurantId: validRestaurantId || "",
         branch: displayBranch, // Use mapped branch name for display
         permissions: initialData.permissions || [],
         shiftSchedule,
-      });
-    }
-  }, [initialData]);
+      };
 
-  const onSubmit = async (data: ManagerFormValues) => {
+      console.log('📝 Form reset data:', formData);
+      form.reset(formData);
+
+      // After form reset, trigger branch filtering for the selected restaurant
+      if (validRestaurantId) {
+        setIsLoadingBranches(true);
+        branchApi.getActiveBranches().then((allBranchesRes) => {
+          // Handle both axios response format and direct data format
+          const allBranches = (allBranchesRes as any)?.data?.data || (allBranchesRes as any)?.data || allBranchesRes || [];
+          const branchesArray = Array.isArray(allBranches) ? allBranches : [];
+
+          // Filter branches that belong to the selected restaurant
+          const filtered = branchesArray.filter(branch =>
+            branch.restaurantId === validRestaurantId ||
+            branch.restaurant?.id === validRestaurantId
+          );
+
+          // Validate that the manager's branch exists in the filtered branches
+          if (initialData.branch && !filtered.some(b => b.id === initialData.branch)) {
+            console.warn('⚠️ Manager branch not found in filtered branches:', initialData.branch);
+            console.log('Available filtered branch IDs:', filtered.map(b => b.id));
+            // Update the form to clear the branch since it doesn't exist for this restaurant
+            form.setValue('branch', '');
+          }
+
+          console.log('Filtered branches for editing restaurant:', validRestaurantId, filtered);
+          setFilteredBranches(filtered);
+        }).catch((error) => {
+          console.error("Error fetching branches for editing:", error);
+          setFilteredBranches([]);
+        }).finally(() => {
+          setIsLoadingBranches(false);
+        });
+      }
+    } else if (initialData && !restaurantsLoaded) {
+      console.log('⏳ Waiting for restaurants to load before form reset...');
+    }
+  }, [initialData, restaurantsLoaded, form]); // Wait for restaurants to load before resetting form
+
+  const handleSubmit = async (data: ManagerFormValues) => {
+    if (onSubmit) {
+      // Use external submit handler if provided
+      const managerData = {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        status: data.status,
+        restaurantId: data.restaurantId,
+        ...(data.branch && data.branch.trim() !== "" && { branchId: data.branch }),
+        permissions: data.role === "KITCHEN_STAFF" ? KITCHEN_STAFF_PERMISSIONS : data.permissions,
+        shiftSchedule: data.shiftSchedule,
+        isShiftActive: data.isShiftActive,
+      };
+      onSubmit(managerData);
+      return;
+    }
+
     try {
       setIsLoading(true);
 
@@ -730,7 +888,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
         role: data.role,
         status: data.status,
         restaurantId: data.restaurantId,
-        ...(data.branch && data.branch.trim() !== "" && { branch: data.branch }),
+        ...(data.branch && data.branch.trim() !== "" && { branchId: data.branch }),
         permissions: data.role === "KITCHEN_STAFF" ? KITCHEN_STAFF_PERMISSIONS : data.permissions,
         // Send the complete shift schedule for all days
         shiftSchedule: data.shiftSchedule,
@@ -776,10 +934,22 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
   // Determine if role is Kitchen Staff
   const isKitchenStaff = form.watch("role") === "KITCHEN_STAFF";
 
+  // Show loading state if restaurants aren't loaded yet when editing
+  if (isEditing && !restaurantsLoaded) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading restaurants...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Name */}
             <FormField
@@ -847,7 +1017,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                   <FormLabel>Role</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -856,9 +1026,12 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value="ADMIN">Admin</SelectItem>
                       <SelectItem value="MANAGER">Manager</SelectItem>
+                      <SelectItem value="CASHIER">Cashier</SelectItem>
+                      <SelectItem value="WAITER">Waiter</SelectItem>
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
-                   
+                      <SelectItem value="USER">User</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -870,82 +1043,127 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
             <FormField
               control={form.control}
               name="restaurantId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Restaurant</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    disabled={isLoading}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a restaurant" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {restaurants.map((restaurant) => (
-                        <SelectItem key={restaurant.id} value={restaurant.id}>
-                          {restaurant.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                console.log('🏪 Restaurant field render:', {
+                  fieldValue: field.value,
+                  restaurants: restaurants,
+                  isEditing,
+                  initialData: initialData,
+                  restaurantsLength: restaurants.length,
+                  restaurantsLoaded: restaurantsLoaded
+                });
+
+                // Debug: Check if the field value matches any restaurant
+                if (field.value && restaurants.length > 0) {
+                  const selectedRestaurant = restaurants.find(r => r.id === field.value);
+                  console.log('🏪 Selected restaurant:', selectedRestaurant);
+                }
+
+                return (
+                  <FormItem>
+                    <FormLabel>Restaurant</FormLabel>
+                    <Select
+                      key={`restaurant-${restaurants.length}-${field.value}-${isEditing ? 'edit' : 'create'}`}
+                      onValueChange={field.onChange}
+                      value={field.value || ""}
+                      disabled={isLoading}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={
+                            restaurants.length === 0
+                              ? "Loading restaurants..."
+                              : "Select a restaurant"
+                          }>
+                            {/* Explicitly show selected restaurant name */}
+                            {field.value && restaurants.length > 0
+                              ? restaurants.find(r => r.id === field.value)?.name || "Select a restaurant"
+                              : undefined
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {restaurants.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            No restaurants found - check console for errors
+                          </div>
+                        ) : (
+                          restaurants.map((restaurant) => (
+                            <SelectItem key={restaurant.id} value={restaurant.id}>
+                              {restaurant.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             {/* Branch */}
             <FormField
               control={form.control}
               name="branch"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Branch</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    disabled={isLoading || isLoadingBranches || !selectedRestaurantId}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={
-                          isLoadingBranches
-                            ? "Loading branches..."
-                            : !selectedRestaurantId
-                              ? "Select restaurant first"
-                              : filteredBranches.length === 0
-                                ? "No branches available"
-                                : "Select a branch"
-                        } />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {isLoadingBranches ? (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          Loading branches...
-                        </div>
-                      ) : !selectedRestaurantId ? (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          Select restaurant first
-                        </div>
-                      ) : filteredBranches.length > 0 ? (
-                        filteredBranches.map((branch) => (
-                          <SelectItem key={branch.id} value={branch.id}>
-                            {branch.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          No branches available
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                console.log('🏢 Branch field render:', {
+                  fieldValue: field.value,
+                  selectedRestaurantId: selectedRestaurantId,
+                  filteredBranches: filteredBranches,
+                  isEditing,
+                  initialData: initialData
+                });
+
+                return (
+                  <FormItem>
+                    <FormLabel>Branch</FormLabel>
+                    <Select
+                      key={`branch-${filteredBranches.length}-${selectedRestaurantId}-${isEditing ? 'edit' : 'create'}`}
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isLoading || isLoadingBranches || !selectedRestaurantId}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={
+                            isLoadingBranches
+                              ? "Loading branches..."
+                              : !selectedRestaurantId
+                                ? "Select restaurant first"
+                                : filteredBranches.length === 0
+                                  ? "No branches available"
+                                  : "Select a branch"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isLoadingBranches ? (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            Loading branches...
+                          </div>
+                        ) : !selectedRestaurantId ? (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            Select restaurant first
+                          </div>
+                        ) : filteredBranches.length > 0 ? (
+                          filteredBranches.map((branch) => (
+                            <SelectItem key={branch.id} value={branch.id}>
+                              {branch.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            No branches available
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             {/* Status */}
@@ -957,7 +1175,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                   <FormLabel>Status</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -980,7 +1198,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
           <div className="space-y-4 pt-6 border-t">
             <h3 className="text-lg font-medium">Permissions</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              {isKitchenStaff
+              {form.watch("role") === "KITCHEN_STAFF"
                 ? "Kitchen staff has fixed permissions and cannot be changed"
                 : "Select the permissions to grant to this user"}
             </p>
@@ -998,6 +1216,7 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
                         control={form.control}
                         name="permissions"
                         render={({ field }) => {
+                          const isKitchenStaff = form.watch("role") === "KITCHEN_STAFF";
                           const disabled =
                             isKitchenStaff &&
                             !KITCHEN_STAFF_PERMISSIONS.includes(permission);
@@ -1138,7 +1357,13 @@ export function ManagerForm({ initialData, isEditing = false }: ManagerFormProps
               type="button"
               variant="outline"
               className="mr-2"
-              onClick={() => router.push("/dashboard/managers")}
+              onClick={() => {
+                if (onCancel) {
+                  onCancel();
+                } else {
+                  router.push("/dashboard/managers");
+                }
+              }}
               disabled={isLoading}
             >
               Cancel

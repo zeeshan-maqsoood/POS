@@ -9,8 +9,9 @@ import { ChevronLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { MenuItem, menuItemApi } from "@/lib/menu-api"
 import { toast } from "@/components/ui/use-toast"
+import { WithPermission } from "@/components/auth/with-permission"
 
-export default function EditMenuItemPage() {
+function EditMenuItemPageContent() {
   const params = useParams()
   const router = useRouter()
   const [menuItem, setMenuItem] = useState<MenuItem | null>(null)
@@ -23,8 +24,8 @@ export default function EditMenuItemPage() {
     const fetchMenuItem = async () => {
       try {
         setIsLoading(true)
-        const response = await menuItemApi.getMenuItem(menuItemId)
-        setMenuItem(response.data)
+        const response = await menuItemApi.getItem(menuItemId)
+        setMenuItem(response.data.data)
         setError(null)
       } catch (err) {
         console.error("Failed to fetch menu item:", err)
@@ -94,7 +95,8 @@ export default function EditMenuItemPage() {
   }
 
   return (
-    <div className="container mx-auto py-6">
+    <WithPermission requiredPermission="MENU_UPDATE" redirectTo="/unauthorized">
+      <div className="container mx-auto py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <Button variant="ghost" size="sm" asChild>
@@ -125,6 +127,7 @@ export default function EditMenuItemPage() {
           />
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </WithPermission>
   )
 }

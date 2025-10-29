@@ -38,10 +38,15 @@ export interface DashboardData {
 }
 
 export const dashboardApi = {
-  getStats: (period: "day" | "week" | "month") =>
+  getStats: (period: "day" | "week" | "month", branchId?: string) =>
     api.get<{ success: boolean; data: DashboardData }>(
       `/dashboard/stats`,
-      { params: { period } }
+      { 
+        params: { 
+          period,
+          ...(branchId && { branchId })
+        } 
+      }
     ),
 }
 

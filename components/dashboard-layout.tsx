@@ -101,48 +101,48 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     { name: "Inventory", href: "/dashboard/products/inventory" },
   ]
 
-  const menuItems = [
+  const menuItemsData = [
     { name: "All Menu Items", href: "/dashboard/menu/items" },
     { name: "Categories", href: "/dashboard/menu/categories" },
     { name: "Modifiers", href: "/dashboard/menu/modifiers" },
   ]
- 
+
   const inventoryItems = [
     { name: "All Inventory Items", href: "/dashboard/Inventory" },
     { name: "Categories", href: "/dashboard/Inventory/categories" },
     {name:"Suppliers",href:"/dashboard/Inventory/suppliers"}
-  
+
   ]
 
   const handleLogout = async (router: any, setUserMenuOpen: any) => {
     try {
       // Call the logout API
       await authApi.logout();
-      
+
       // Clear client-side state
       if (typeof window !== 'undefined') {
         // Clear all cookies by setting them to expire in the past
         document.cookie = "token=; Max-Age=0; path=/";
         document.cookie = `token=; Max-Age=0; path=/; domain=${window.location.hostname}`;
-        
+
         // Clear local storage
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-        
+
         // Clear session storage
         sessionStorage.clear();
       }
-      
+
       // Close the user menu
       setUserMenuOpen(false);
-      
+
       // Redirect to login page after a short delay
       setTimeout(() => {
         router.push("/");
         // Force a full page reload to ensure all state is cleared
         window.location.href = "/";
       }, 100);
-      
+
     } catch (error) {
       console.error('Logout failed:', error);
       // Even if the API call fails, still clear local state and redirect
@@ -198,19 +198,19 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <ChevronDown
                     className={cn(
                       "h-4 w-4 transition-transform duration-200",
-                      (item.name === "Products" ? isProductsOpen : 
-                       item.name === "Menu" ? isMenuOpen : 
+                      (item.name === "Products" ? isProductsOpen :
+                       item.name === "Menu" ? isMenuOpen :
                        isInventoryOpen) && "rotate-180"
                     )}
                   />
                 </button>
 
-                {(item.name === "Products" ? isProductsOpen : 
-                  item.name === "Menu" ? isMenuOpen : 
+                {(item.name === "Products" ? isProductsOpen :
+                  item.name === "Menu" ? isMenuOpen :
                   isInventoryOpen) && (
                   <div className="ml-8 mt-1 space-y-1">
-                    {(item.name === "Products" ? productItems : 
-                      item.name === "Menu" ? menuItems : 
+                    {(item.name === "Products" ? productItems :
+                      item.name === "Menu" ? menuItemsData :
                       inventoryItems).map((subItem) => (
                       <Link
                         key={subItem.href}

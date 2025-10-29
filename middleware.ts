@@ -15,7 +15,8 @@ const protectedRoutes = [
   "/dashboard",
   "/admin",
   "/pos",
-  "/profile"
+  "/profile",
+  "/managers"
 ];
 
 // Map routes to required permissions
@@ -33,6 +34,7 @@ const routePermissions: Record<string, string[]> = {
   '/dashboard/users/new': ['USER_CREATE'],
   '/dashboard/users/edit/[id]': ['USER_UPDATE'],
   '/pos': ['POS_READ'],
+  '/managers': ['MANAGER_READ']
 };
 
 // Get required permissions for a route
@@ -60,8 +62,27 @@ function getFirstAccessibleDashboardPath(userPermissions: string[], userRole?: s
     return '/dashboard';
   }
 
+  // For managers, check if they have POS access first
+  if (userRole === 'MANAGER') {
+    // If manager has POS access, redirect to POS instead of dashboard
+    if (userPermissions.includes('POS_READ') || userPermissions.includes('POS_CREATE')) {
+      return '/pos';
+    }
+
+    // If they have dashboard access but no DASHBOARD_READ specifically,
+    // still allow them to access the dashboard root
+    if (userPermissions.includes('DASHBOARD_READ') ||
+        userPermissions.includes('ORDER_READ') ||
+        userPermissions.includes('MENU_READ') ||
+        userPermissions.includes('USER_READ')) {
+      return '/dashboard';
+    }
+  }
+  
+
   // Define dashboard candidates with their required permissions
   const dashboardCandidates = [
+    { path: '/dashboard', required: ['DASHBOARD_READ'] }, // Dashboard root requires DASHBOARD_READ
     { path: '/dashboard/orders', required: ['ORDER_READ'] },
     { path: '/dashboard/menu', required: ['MENU_READ'] },
     { path: '/dashboard/managers', required: ['MANAGER_READ'] },
@@ -80,12 +101,12 @@ function getFirstAccessibleDashboardPath(userPermissions: string[], userRole?: s
 
   // For other roles, find the first page they have access to
   for (const candidate of dashboardCandidates) {
-    if (candidate.required.length === 0 || 
+    if (candidate.required.length === 0 ||
         candidate.required.every(p => userPermissions.includes(p))) {
       return candidate.path;
     }
   }
-  
+
   return null;
 }
 
@@ -103,9 +124,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Get token from cookies
-  const token = request.cookies.get('token')?.value;
-  
+  // Get token from cookies or Authorization header
+  const cookieToken = request.cookies.get('token')?.value;
+  const authHeader = request.headers.get('authorization');
+  const headerToken = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : undefined;
+
+  const token = cookieToken || headerToken;
+
   // If no token and trying to access a protected route, redirect to login
   if (!token) {
     if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
@@ -160,6 +187,7 @@ export function middleware(request: NextRequest) {
       console.log('Has MANAGER_CREATE:', (decoded as any).permissions.includes('MANAGER_CREATE'));
       console.log('Has MANAGER_UPDATE:', (decoded as any).permissions.includes('MANAGER_UPDATE'));
       console.log('Has MANAGER_DELETE:', (decoded as any).permissions.includes('MANAGER_DELETE'));
+      console.log('Has DASHBOARD_READ:', (decoded as any).permissions.includes('DASHBOARD_READ'));
     }
     
     if (!userRole) {
@@ -201,6 +229,13 @@ export function middleware(request: NextRequest) {
 
     // Handle login page for non-admin users
     if (pathname === '/') {
+      const userPermissions = Array.isArray((decoded as any)?.permissions) ? (decoded as any).permissions : [];
+      // If manager has POS access, redirect to POS
+      if (userRole === 'MANAGER' && (userPermissions.includes('POS_READ') || userPermissions.includes('POS_CREATE'))) {
+        return NextResponse.redirect(new URL('/pos', request.url));
+      }
+
+      // Otherwise redirect to dashboard
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
@@ -209,36 +244,51 @@ export function middleware(request: NextRequest) {
       // Redirect dashboard root for non-admins to the first accessible dashboard page, else POS
       if (pathname === '/dashboard') {
         const userPermissions = Array.isArray((decoded as any)?.permissions) ? (decoded as any).permissions : [];
+
+        // If user has DASHBOARD_READ permission, allow direct access to dashboard
+        if (userPermissions.includes('DASHBOARD_READ')) {
+          console.log('User has DASHBOARD_READ, allowing direct access to dashboard');
+          return NextResponse.next();
+        }
+
+        // Otherwise, find the first accessible dashboard page or redirect to POS
         const firstAllowed = getFirstAccessibleDashboardPath(userPermissions, userRole);
-        console.log('Non-admin user, redirecting from /dashboard to:', firstAllowed);
-        return NextResponse.redirect(new URL(firstAllowed || '/pos', request.url));
+        console.log('Non-admin user without DASHBOARD_READ, redirecting from /dashboard to:', firstAllowed);
+
+        // Only redirect if the target path is different from current path
+        if (firstAllowed && firstAllowed !== '/dashboard') {
+          return NextResponse.redirect(new URL(firstAllowed, request.url));
+        } else {
+          // If target is dashboard itself, allow access
+          return NextResponse.next();
+        }
       }
-      
+
       // Get required permissions and user permissions
       const requiredPermissions = getRequiredPermissions(pathname);
-      const userPermissions = Array.isArray((decoded as any)?.permissions) ? 
+      const userPermissions = Array.isArray((decoded as any)?.permissions) ?
         (decoded as any).permissions : [];
-      
+
       console.log('=== PERMISSION CHECK ===');
       console.log('Current path:', pathname);
       console.log('Required permissions:', requiredPermissions);
       console.log('User permissions:', userPermissions);
-      console.log('User has all required permissions:', 
+      console.log('User has all required permissions:',
         requiredPermissions.every(p => userPermissions.includes(p)));
-      
+
       console.log('Permission check:', {
         path: pathname,
         requiredPermissions,
         userPermissions,
         hasRequiredPermissions: requiredPermissions.every(perm => userPermissions.includes(perm))
       });
-      
+
       // If no specific permissions are required, allow access
       if (requiredPermissions.length === 0) {
         console.log('No specific permissions required for route, access granted');
         return NextResponse.next();
       }
-      
+
       // Special case for kitchen staff on orders page
       if (userRole === 'KITCHEN_STAFF') {
         if (pathname === '/dashboard/orders' || pathname.startsWith('/dashboard/orders/')) {
@@ -254,12 +304,12 @@ export function middleware(request: NextRequest) {
           return NextResponse.redirect(new URL('/dashboard/orders', request.url));
         }
       }
-      
+
       // Check if user has ALL required permissions for the route
-      const hasAllRequiredPermissions = requiredPermissions.every(perm => 
+      const hasAllRequiredPermissions = requiredPermissions.every(perm =>
         userPermissions.includes(perm)
       );
-      
+
       if (!hasAllRequiredPermissions) {
         console.log('Access denied - Missing required permissions:', {
           path: pathname,
@@ -269,20 +319,47 @@ export function middleware(request: NextRequest) {
         });
         return NextResponse.redirect(new URL('/unauthorized', request.url));
       }
-      
+
       console.log('Access granted - User has all required permissions');
+    }
+
+    // Handle POS routes and back button navigation
+    if (pathname.startsWith('/pos')) {
+      const userPermissions = Array.isArray((decoded as any)?.permissions) ? (decoded as any).permissions : [];
+
+      // For normal POS access, check permissions and allow access
+      const requiredPermissions = getRequiredPermissions(pathname);
+
+      if (requiredPermissions.length > 0) {
+        const hasAllRequiredPermissions = requiredPermissions.every(perm =>
+          userPermissions.includes(perm)
+        );
+
+        if (!hasAllRequiredPermissions) {
+          console.log('Access denied to POS - Missing required permissions:', {
+            path: pathname,
+            requiredPermissions,
+            userPermissions,
+            missingPermissions: requiredPermissions.filter(perm => !userPermissions.includes(perm))
+          });
+          return NextResponse.redirect(new URL('/unauthorized', request.url));
+        }
+      }
+
+      console.log('POS access granted');
+      return NextResponse.next();
     }
   } catch (error) {
     console.error('Error decoding token:', error);
     // If there's an error decoding the token, redirect to login
     return NextResponse.redirect(loginUrl);
   }
-  
+
   // If we have a token and it's the login page, the redirection is already handled above
   if (pathname === '/') {
     return NextResponse.next();
   }
-  
+
   // For protected routes with a valid token, continue
   return NextResponse.next();
 }

@@ -93,47 +93,47 @@ export interface BranchStats {
 export const branchApi = {
   // 📋 Get all branches
   getAllBranches: () => {
-    return api.get<{ data: Branch[] }>('/branches');
+    return api.get<Branch[]>('/branches');
   },
 
   // ✅ Get all active branches
   getActiveBranches: () => {
-    return api.get<{ data: Branch[] }>('/branches/active');
+    return api.get<Branch[]>('/branches/active');
   },
 
   // 👤 Get branches for current user
   getUserBranches: () => {
-    return api.get<{ data: Branch[] }>('/branches/user');
+    return api.get<Branch[]>('/branches/user');
   },
 
   // 📋 Get branches for dropdown
   getBranchesForDropdown: () => {
-    return api.get<{ data: Array<{ id: string; name: string; value: string; restaurantName?: string }> }>('/branches/dropdown');
+    return api.get<Array<{ id: string; name: string; value: string; restaurantName?: string }>>('/branches/dropdown');
   },
 
   // 📋 Get branches for a specific restaurant
   getBranchesByRestaurant: (restaurantId: string) => {
-    return api.get<{ data: Branch[] }>(`/branches/restaurant/${restaurantId}`);
+    return api.get<Branch[]>(`/branches/restaurant/${restaurantId}`);
   },
 
   // 🔍 Get specific branch by ID
   getBranchById: (id: string) => {
-    return api.get<{ data: Branch }>(`/branches/${id}`);
+    return api.get<Branch>(`/branches/${id}`);
   },
 
   // 📊 Get branch statistics
   getBranchStats: (id: string) => {
-    return api.get<{ data: BranchStats }>(`/branches/${id}/stats`);
+    return api.get<BranchStats>(`/branches/${id}/stats`);
   },
 
   // ➕ Create new branch (admin only)
   createBranch: (data: CreateBranchData) => {
-    return api.post<{ data: Branch }>('/branches', data);
+    return api.post<Branch>('/branches', data);
   },
-  
+
   // ✏️ Update branch (admin only)
   updateBranch: (id: string, data: UpdateBranchData) => {
-    return api.put<{ data: Branch }>(`/branches/${id}`, data);
+    return api.put<Branch>(`/branches/${id}`, data);
   },
 
   // 🗑️ Delete/deactivate branch (admin only)

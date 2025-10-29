@@ -8,6 +8,7 @@ export default function DashboardLayoutPage({ children }: { children: React.Reac
   return (
     <ProtectedRouteWrapper
       requiredRole={[UserRole.ADMIN as UserRoleType, UserRole.MANAGER as UserRoleType]}
+      requiredPermission="DASHBOARD_READ"
     >
       <DashboardLayout>{children}</DashboardLayout>
     </ProtectedRouteWrapper>

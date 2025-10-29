@@ -100,23 +100,23 @@ export const managerApi = {
 
   // 👥 Get all managers (you can pass { role: 'MANAGER' } in params)
   getManagers: (params?: any) => {
-    return api.get<{ data: Manager[] }>('/auth', { params });
+    return api.get<Manager[]>('/auth', { params });
   },
 
   // 📌 Get a single manager
   getManager: (id: string) => {
-    return api.get<{ data: Manager }>(`/auth/${id}`);
+    return api.get<Manager>(`/auth/${id}`);
   },
 
   // ➕ Create a new manager
   createManager: (data: CreateManagerData) => {
     console.log("Creating manager:", data);
-    return api.post<{ data: Manager }>('/auth', data);
+    return api.post<Manager>('/auth', data);
   },
 
   // ✏️ Update manager
   updateManager: (id: string, data: UpdateManagerData) => {
-    return api.put<{ data: Manager }>(`/auth/${id}`, data);
+    return api.put<Manager>(`/auth/${id}`, data);
   },
 
   // 🗑️ Delete manager
@@ -126,7 +126,7 @@ export const managerApi = {
 
   // 🔄 Toggle manager status
   toggleManagerStatus: (id: string, status: 'ACTIVE' | 'INACTIVE') => {
-    return api.patch<{ data: Manager }>(`/auth/${id}/status`, { status });
+    return api.patch<Manager>(`/auth/${id}/status`, { status });
   },
 
   // 🔑 Reset password

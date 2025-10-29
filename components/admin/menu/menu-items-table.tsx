@@ -124,18 +124,23 @@ export function MenuItemsTable({
               <div className="py-1" role="none">
 
                 {/* Single Edit Button */}
-                <Link
-                  href={`/dashboard/menu/items/edit/${menuItem.id}`}
-                  className="text-blue-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-blue-50"
-                  role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                  }}
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit Item
-                </Link>
+                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                  <button
+                    className="text-blue-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-blue-50"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Close the dropdown
+                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
+                      // Navigate programmatically
+                      window.location.href = `/dashboard/menu/items/edit/${menuItem.id}`;
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit Item
+                  </button>
+                </PermissionGate>
 
                 {/* Single Delete Button */}
                 <PermissionGate required="MENU_DELETE" disableInsteadOfHide>

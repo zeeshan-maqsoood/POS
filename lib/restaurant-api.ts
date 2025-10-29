@@ -40,6 +40,13 @@ export interface Restaurant {
   };
 }
 
+// For dropdown usage
+export interface RestaurantDropdownOption {
+  id: string;
+  name: string;
+  value: string;
+}
+
 export interface CreateRestaurantData {
   name: string;
   description?: string;
@@ -97,32 +104,32 @@ export interface RestaurantStats {
 export const restaurantApi = {
   // 📋 Get all restaurants
   getAllRestaurants: () => {
-    return api.get<{ data: Restaurant[] }>('/restaurants');
+    return api.get<Restaurant[]>('/restaurants');
   },
 
   // ✅ Get all active restaurants
   getActiveRestaurants: () => {
-    return api.get<{ data: Restaurant[] }>('/restaurants/active');
+    return api.get<Restaurant[]>('/restaurants/active');
   },
 
   // 🔍 Get specific restaurant by ID
   getRestaurantById: (id: string) => {
-    return api.get<{ data: Restaurant }>(`/restaurants/${id}`);
+    return api.get<Restaurant>(`/restaurants/${id}`);
   },
 
   // 📊 Get restaurant statistics
   getRestaurantStats: (id: string) => {
-    return api.get<{ data: RestaurantStats }>(`/restaurants/${id}/stats`);
+    return api.get<RestaurantStats>(`/restaurants/${id}/stats`);
   },
 
   // ➕ Create new restaurant (admin only)
   createRestaurant: (data: CreateRestaurantData) => {
-    return api.post<{ data: Restaurant }>('/restaurants', data);
+    return api.post<Restaurant>('/restaurants', data);
   },
 
   // ✏️ Update restaurant (admin only)
   updateRestaurant: (id: string, data: UpdateRestaurantData) => {
-    return api.put<{ data: Restaurant }>(`/restaurants/${id}`, data);
+    return api.put<Restaurant>(`/restaurants/${id}`, data);
   },
 
   // 🗑️ Delete/deactivate restaurant (admin only)
@@ -132,7 +139,7 @@ export const restaurantApi = {
 
   // 📋 Get restaurants for dropdown
   getRestaurantsForDropdown: () => {
-    return api.get<{ data: Restaurant[] }>('/restaurants/dropdown');
+    return api.get<RestaurantDropdownOption[]>('/restaurants/dropdown');
   },
 };
 

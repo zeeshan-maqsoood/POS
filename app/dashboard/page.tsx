@@ -13,7 +13,8 @@ import {
   Plus,
   Package,
   UserPlus,
-  FileText
+  FileText,
+  Building2
 } from "lucide-react"
 import { formatEuro } from "@/lib/format-currency"
 import { dashboardApi } from "@/lib/dashbaord-api"
@@ -44,6 +45,8 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { SalesByCategoryChart } from '@/components/dashboard/sales-by-category-chart';
 import { SalesCategoryPieChart } from '@/components/dashboard/sales-category-pie-chart';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { Badge } from '@/components/ui/badge';
 
 type PieData = {
   name: string;
@@ -178,6 +181,7 @@ export default function DashboardPage() {
     avgShiftLength: 0,
   });
   const [shiftLoading, setShiftLoading] = useState(true);
+  const { currentUser, isLoading: isLoadingUser } = useCurrentUser();
 
   useEffect(() => {
     setMounted(true);
@@ -224,23 +228,41 @@ export default function DashboardPage() {
   // Initial load for default period
   useEffect(() => {
     let active = true;
-    const init = async () => {
+    const fetchData = async () => {
+      if (isLoadingUser) return;
+      
       try {
         setLoading(true);
-        const res = await dashboardApi.getStats(period);
-        if (!active) return;
-        setStats(res.data.data);
-        setCache(prev => ({ ...prev, [period]: res.data.data }));
-      } catch (e) {
-        console.error('Error loading dashboard data:', e);
+        // For managers, always use their assigned branch ID
+        // For admins, don't filter by branch (will show all branches)
+        const branchId = currentUser?.role === 'MANAGER' ? currentUser.branchId : undefined;
+        
+        console.log('Fetching dashboard data with:', { 
+          role: currentUser?.role, 
+          branchId,
+          period 
+        });
+        
+        const response = await dashboardApi.getStats(period, branchId);
+        if (response.data.success) {
+          if (active) {
+            setStats(response.data.data);
+          }
+        } else {
+          console.error('Failed to load dashboard data');
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
-    init();
+    fetchData();
     return () => { active = false };
-  }, [])
-console.log(stats,"stats")
+  }, [period, currentUser, isLoadingUser]);
+
   // When period changes, use cached data immediately, then refresh in background
   useEffect(() => {
     let active = true;
@@ -256,12 +278,16 @@ console.log(stats,"stats")
         } else {
           setRefreshing(true);
         }
-        const res = await dashboardApi.getStats(period);
-        if (!active) return;
-        setStats(res.data.data);
-        setCache(prev => ({ ...prev, [period]: res.data.data }));
-      } catch (e) {
-        console.error('Error refreshing dashboard data:', e);
+        const branchId = currentUser?.branch?.id;
+        const response = await dashboardApi.getStats(period, branchId);
+        if (response.data.success) {
+          setStats(response.data.data);
+          setCache(prev => ({ ...prev, [period]: response.data.data }));
+        } else {
+          console.error('Failed to load dashboard data');
+        }
+      } catch (err) {
+        console.error('Error refreshing dashboard data:', err);
       } finally {
         if (!active) return;
         setLoading(false);
@@ -270,16 +296,10 @@ console.log(stats,"stats")
     };
     refresh();
     return () => { active = false };
-  }, [period])
+  }, [period, currentUser, isLoadingUser]);
+
   if (!mounted) {
     return null;
-  }
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
   }
   if (loading) {
     return (

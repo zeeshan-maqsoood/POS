@@ -1,10 +1,12 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+// Assuming these UI components are correctly aliased and available
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -26,13 +28,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 
-// Import permission utilities
+// NOTE: These utility and API imports are assumed to be correct based on the context
 import { getAllPermissions, getPermissionLabel } from "@/lib/permissions";
-// Import manager API
-import managerApi from "@/lib/manager-api";
-import type { Manager } from "@/lib/manager-api";
-// Define the form schema
-import { CreateManagerData, UpdateManagerData } from "@/lib/manager-api";
+import type { Permission } from "@/types/prisma";
+import managerApi, { Manager, CreateManagerData, UpdateManagerData } from "@/lib/manager-api";
+import restaurantApi from "@/lib/restaurant-api";
+import branchApi from "@/lib/branch-api";
+import type { Branch } from "@/lib/branch-api";
+
+// ----------------------------------------------------
+// 1. Zod Schema and Types
+// ----------------------------------------------------
+
 export const managerFormSchema = z.object({
   name: z.string().min(2, {
     message: "Name must be at least 2 characters.",
@@ -49,7 +56,6 @@ export const managerFormSchema = z.object({
     message: "Please select a branch.",
   }),
   permissions: z.array(z.string()).default([]),
-  // Updated shift management - now uses shiftSchedule JSON field
   shiftSchedule: z.object({
     MONDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
     TUESDAY: z.object({ startTime: z.string(), endTime: z.string() }).optional(),
@@ -62,10 +68,8 @@ export const managerFormSchema = z.object({
   isShiftActive: z.boolean().optional(),
 });
 
-// Define types
 type Role = "MANAGER" | "KITCHEN_STAFF" | "ADMIN" | "CASHIER" | "WAITER" | "USER";
 type Status = "ACTIVE" | "INACTIVE";
-
 type ManagerFormValues = z.infer<typeof managerFormSchema>;
 
 interface ManagerFormProps {
@@ -79,22 +83,16 @@ interface ManagerFormProps {
     lastLogin?: string;
     createdAt?: string;
     updatedAt?: string;
-    // Updated shift management - now uses shiftSchedule JSON field
-    shiftSchedule?: {
-      MONDAY?: { startTime?: string; endTime?: string };
-      TUESDAY?: { startTime?: string; endTime?: string };
-      WEDNESDAY?: { startTime?: string; endTime?: string };
-      THURSDAY?: { startTime?: string; endTime?: string };
-      FRIDAY?: { startTime?: string; endTime?: string };
-      SATURDAY?: { startTime?: string; endTime?: string };
-      SUNDAY?: { startTime?: string; endTime?: string };
-    };
+    shiftSchedule?: ManagerFormValues['shiftSchedule'];
     isShiftActive?: boolean;
   };
   isEditing?: boolean;
 }
 
-// Group permissions by category
+// ----------------------------------------------------
+// 2. Utility Functions
+// ----------------------------------------------------
+
 const groupPermissionsByCategory = () => {
   const permissions = getAllPermissions();
   const grouped: { [key: string]: string[] } = {};
@@ -108,7 +106,6 @@ const groupPermissionsByCategory = () => {
   return grouped;
 };
 
-// Default permissions for new managers
 const getDefaultManagerPermissions = (): string[] => [
   "ORDER_READ",
   "ORDER_UPDATE",
@@ -116,62 +113,51 @@ const getDefaultManagerPermissions = (): string[] => [
   "ORDER_CREATE",
 ];
 
-  
+// ----------------------------------------------------
+// 3. EditManagerPage Component (Wrapper/Data Fetcher)
+// ----------------------------------------------------
 
-const branches = [
-  { id: 'Bradford', name: 'Bradford' },
-  { id: 'Leeds', name: 'Leeds' },
-  { id: 'Helifax', name: 'Helifax' },
-  { id: 'Darley St Market', name: 'Darley St Market' },
-];
-
-// This is the main edit page component that wraps the ManagerForm
 export default function EditManagerPage({ params }: { params: { id: string } }) {
-  const [manager, setManager] = useState<ManagerFormValues & {
-    id: string;
-    role: Role;
-    status: Status;
-    branch?: string;
-    lastLogin?: string;
-    createdAt?: string;
-    updatedAt?: string;
-  } | null>(null);
+  const [manager, setManager] = useState<ManagerFormProps['initialData'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchManager = async () => {
       try {
-        const response = await managerApi.getManager(params.id);
-        console.log("Manager data:", response.data.data);
-        const managerData = response.data.data as Manager;
-        setManager({
-          name: managerData.name,
-          email: managerData.email,
-          role: managerData.role,
-          status: managerData.status,
-          restaurantId: managerData.restaurantId || "",
-          branch: managerData.branch || "",
-          permissions: managerData.permissions?.map((p: any) => p.permission) || [],
+        setIsLoading(true);
+        const managerResponse = await managerApi.getManager(params.id);
+        const managerData = managerResponse.data.data as Manager;
+
+        if (!managerData) {
+          throw new Error('Manager not found');
+        }
+
+        // Map API data to form values
+        const managerFormData = {
+          name: managerData.name || '',
+          email: managerData.email || '',
+          role: managerData.role || 'MANAGER',
+          status: managerData.status || 'ACTIVE',
+          restaurantId: managerData.branch?.restaurant?.id || '',
+          branch: managerData.branch?.id || '',
+          permissions: Array.isArray(managerData.permissions) 
+            ? managerData.permissions.map((p: any) => p.permission) 
+            : [],
           id: managerData.id,
           lastLogin: managerData.lastLogin,
           createdAt: managerData.createdAt,
           updatedAt: managerData.updatedAt,
-          // Use the new shiftSchedule structure
-          shiftSchedule: managerData.shiftSchedule || {
-            MONDAY: { startTime: "", endTime: "" },
-            TUESDAY: { startTime: "", endTime: "" },
-            WEDNESDAY: { startTime: "", endTime: "" },
-            THURSDAY: { startTime: "", endTime: "" },
-            FRIDAY: { startTime: "", endTime: "" },
-            SATURDAY: { startTime: "", endTime: "" },
-            SUNDAY: { startTime: "", endTime: "" },
-          },
-          isShiftActive: managerData.isShiftActive || false,
-        });
+          shiftSchedule: managerData.shiftSchedule || undefined,
+          isShiftActive: Boolean(managerData.isShiftActive),
+        };
+
+        console.log('Fetched manager data:', managerFormData);
+        setManager(managerFormData);
+        setError(null);
       } catch (err: any) {
+        console.error('Error loading manager:', err);
         setError(err.message || 'Failed to load manager');
-        console.error('Error fetching manager:', err);
       } finally {
         setIsLoading(false);
       }
@@ -181,6 +167,7 @@ export default function EditManagerPage({ params }: { params: { id: string } }) 
       fetchManager();
     } else {
       setIsLoading(false);
+      setError('No manager ID provided');
     }
   }, [params.id]);
 
@@ -200,13 +187,23 @@ export default function EditManagerPage({ params }: { params: { id: string } }) 
     );
   }
 
+  // Add a key to force re-render when manager data changes
+  const formKey = manager ? `manager-form-${manager.id}-${manager.updatedAt || ''}` : 'manager-form';
+
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Edit Manager</h1>
       {manager ? (
-        <ManagerForm 
-          initialData={manager} 
-          isEditing={true} 
+        <ManagerForm
+          key={formKey}
+          initialData={manager}
+          isEditing={true}
+          onManagerUpdated={() => {
+            // Refetch manager data when updated
+            if (params.id) {
+              fetchManager();
+            }
+          }}
         />
       ) : (
         <div>Manager not found</div>
@@ -215,79 +212,230 @@ export default function EditManagerPage({ params }: { params: { id: string } }) 
   );
 }
 
-// This is the form component that handles the actual form logic
-function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
+// ----------------------------------------------------
+// 4. ManagerForm Component (The actual form logic)
+// ----------------------------------------------------
+
+function ManagerForm({ initialData, isEditing = false, onManagerUpdated }: ManagerFormProps & { onManagerUpdated?: () => void }) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [permissionGroups, setPermissionGroups] = useState<{
     [key: string]: string[];
   }>({});
+  const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
 
-  // Default values
-  const defaultValues: Partial<ManagerFormValues> = {
-    name: initialData?.name || "",
-    email: initialData?.email || "",
-    role: initialData?.role || "MANAGER",
-    status: initialData?.status || "ACTIVE",
-    branch: initialData?.branch || "",
-    permissions: initialData?.permissions || [],
-    // Updated shift management - now uses shiftSchedule JSON field
-    shiftSchedule: initialData?.shiftSchedule || {
-      MONDAY: { startTime: "", endTime: "" },
-      TUESDAY: { startTime: "", endTime: "" },
-      WEDNESDAY: { startTime: "", endTime: "" },
-      THURSDAY: { startTime: "", endTime: "" },
-      FRIDAY: { startTime: "", endTime: "" },
-      SATURDAY: { startTime: "", endTime: "" },
-      SUNDAY: { startTime: "", endTime: "" },
-    },
-    isShiftActive: initialData?.isShiftActive || false,
-  };
+  // Initializing the default shift schedule structure for UI coherence
+  const defaultShiftSchedule = useMemo(() => ({
+    MONDAY: { startTime: "", endTime: "" },
+    TUESDAY: { startTime: "", endTime: "" },
+    WEDNESDAY: { startTime: "", endTime: "" },
+    THURSDAY: { startTime: "", endTime: "" },
+    FRIDAY: { startTime: "", endTime: "" },
+    SATURDAY: { startTime: "", endTime: "" },
+    SUNDAY: { startTime: "", endTime: "" },
+  }), []);
 
+  // Set up form with initial values
   const form = useForm<ManagerFormValues>({
     resolver: zodResolver(managerFormSchema),
-    defaultValues: { ...defaultValues, ...initialData },
+    defaultValues: {
+      name: initialData?.name || "",
+      email: initialData?.email || "",
+      role: initialData?.role || "MANAGER",
+      status: initialData?.status || "ACTIVE",
+      restaurantId: initialData?.restaurantId || "",
+      branch: initialData?.branch || "",
+      permissions: Array.isArray(initialData?.permissions) ? initialData.permissions : [],
+      shiftSchedule: initialData?.shiftSchedule || { ...defaultShiftSchedule },
+      isShiftActive: initialData?.isShiftActive || false,
+    } as ManagerFormValues,
+    mode: 'onChange',
   });
 
+  // Update form values when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      const formData = {
+        ...initialData,
+        // Ensure these are always set to valid values
+        permissions: Array.isArray(initialData.permissions) ? initialData.permissions : [],
+        restaurantId: initialData.restaurantId || "",
+        branch: initialData.branch || "",
+        shiftSchedule: {
+          ...defaultShiftSchedule,
+          ...(initialData.shiftSchedule || {})
+        }
+      };
+      
+      // Only reset if the form values are different to prevent unnecessary re-renders
+      const currentValues = form.getValues();
+      if (JSON.stringify(currentValues) !== JSON.stringify(formData)) {
+        form.reset(formData);
+        console.log('Form reset with data:', formData);
+      }
+    }
+  }, [initialData, form, defaultShiftSchedule]);
+
+  // Watchers for conditional logic
+  const selectedRestaurantId = form.watch("restaurantId");
+  const shiftSchedule = useWatch({ control: form.control, name: "shiftSchedule" });
+  const role = useWatch({ control: form.control, name: "role" });
+
+  // Load permission groups once
   useEffect(() => {
     setPermissionGroups(groupPermissionsByCategory());
   }, []);
 
+  // Load restaurants and all branches on component mount
   useEffect(() => {
-    if (initialData) {
-      form.reset({
-        ...defaultValues,
-        ...initialData,
-        permissions: initialData.permissions || [],
-      });
+    const loadRestaurantsAndBranches = async () => {
+      try {
+        setIsLoadingBranches(true);
+        const [restaurantsResponse, branchesResponse] = await Promise.all([
+          restaurantApi.getActiveRestaurants(),
+          branchApi.getActiveBranches()
+        ]);
+        
+        const restaurantsData = (restaurantsResponse as any)?.data?.data || [];
+        setRestaurants(Array.isArray(restaurantsData) ? restaurantsData : []);
+
+        const branchesData = (branchesResponse as any)?.data?.data || [];
+        const allBranches = Array.isArray(branchesData) ? branchesData : [];
+        setBranches(allBranches);
+
+        // If we have initial data, set up the initial restaurant and branch selection
+        if (isEditing && initialData?.restaurantId) {
+          // Set restaurant first
+          form.setValue('restaurantId', initialData.restaurantId, {
+            shouldValidate: true,
+            shouldDirty: false
+          });
+
+          // Then set branch after a small delay to allow the restaurant to be set
+          if (initialData.branch) {
+            setTimeout(() => {
+              form.setValue('branch', initialData.branch as string, { 
+                shouldValidate: true,
+                shouldDirty: false 
+              });
+              
+              // Also update filtered branches
+              const filtered = allBranches.filter(branch =>
+                (branch.restaurantId === initialData.restaurantId ||
+                 branch.restaurant?.id === initialData.restaurantId)
+              );
+              setFilteredBranches(filtered);
+            }, 100);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error loading resources:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load restaurants and branches.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoadingBranches(false);
+      }
+    };
+
+    loadRestaurantsAndBranches();
+  }, [isEditing, initialData, form]);
+
+  // Effect to handle branch filtering and initial branch selection
+  useEffect(() => {
+    if (branches.length === 0) return;
+    
+    if (selectedRestaurantId) {
+      setIsLoadingBranches(true);
+
+      // Filter branches for the selected restaurant
+      const filtered = branches.filter(branch =>
+        branch.restaurantId === selectedRestaurantId ||
+        branch.restaurant?.id === selectedRestaurantId
+      );
+      setFilteredBranches(filtered);
+
+      // Handle initial branch selection for edit mode
+      if (isEditing && initialData?.branch) {
+        const branchExists = filtered.some(b => b.id === initialData.branch);
+        if (branchExists) {
+          // Use setTimeout to ensure the select component is ready
+          setTimeout(() => {
+            form.setValue('branch', initialData.branch as string, { 
+              shouldValidate: true, 
+              shouldDirty: false 
+            });
+          }, 0);
+        } else if (selectedRestaurantId !== initialData.restaurantId) {
+          form.setValue('branch', "");
+        }
+      }
+
+      setIsLoadingBranches(false);
+    } else {
+      setFilteredBranches([]);
+      // Clear branch if restaurant is deselected
+      if (form.getValues('branch')) {
+          form.setValue('branch', "");
+      }
     }
-  }, [initialData]);
+  }, [selectedRestaurantId, branches, isEditing, initialData, form.setValue, form.getValues]);
 
   const onSubmit = async (data: ManagerFormValues) => {
     try {
       setIsLoading(true);
 
+      // Clean up shiftSchedule: remove days that have no start/end time
+      const cleanedShiftSchedule = Object.entries(data.shiftSchedule || {})
+        .filter(([, schedule]) => schedule?.startTime && schedule?.endTime)
+        .reduce((acc, [day, schedule]) => ({ ...acc, [day]: schedule }), {});
+
+      let finalPermissions = data.permissions || [];
+      if (data.role === 'KITCHEN_STAFF') {
+        finalPermissions = ['ORDER_READ', 'ORDER_UPDATE']; // Enforce kitchen staff permissions
+      }
+
+      const payload = {
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        status: data.status,
+        branchId: data.branch,
+        permissions: finalPermissions.map(p => p as Permission),
+        shiftSchedule: Object.keys(cleanedShiftSchedule).length > 0 ? cleanedShiftSchedule : undefined,
+        isShiftActive: data.isShiftActive,
+      };
+
       if (isEditing && initialData?.id) {
-        // 🔄 Update manager
-        await managerApi.updateManager(initialData.id, data as UpdateManagerData);
+        // Update manager
+        await managerApi.updateManager(initialData.id, payload as UpdateManagerData);
         toast({
           title: "Manager updated",
           description: "The manager has been updated successfully.",
         });
       } else {
-        // ➕ Create manager
-        await managerApi.createManager(data as CreateManagerData);
+        // Create manager
+        await managerApi.createManager(payload as unknown as CreateManagerData);
         toast({
           title: "Manager created",
           description: "The manager has been created successfully.",
         });
       }
 
-      // Redirect to managers list
-      setTimeout(() => {
+      // Call the update callback if provided
+      if (onManagerUpdated) {
+        onManagerUpdated();
+      } else {
+        // Fallback to redirect if no callback
         router.push("/dashboard/managers");
         router.refresh();
-      }, 1000);
+      }
+
     } catch (error) {
       console.error("Error saving manager:", error);
       toast({
@@ -348,46 +496,24 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                 <FormItem>
                   <FormLabel>Role</FormLabel>
                   <Select
-                    onValueChange={field.onChange}
+                    onValueChange={(value) => {
+                      field.onChange(value as Role);
+                      if (value === 'KITCHEN_STAFF') {
+                        form.setValue('permissions', getDefaultManagerPermissions());
+                      }
+                    }}
                     value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
+                        <SelectValue placeholder="Select role" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Branch */}
-            <FormField
-              control={form.control}
-              name="branch"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Branch</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={isLoading}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a branch" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {branches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id}>
-                          {branch.name}
+                      {["ADMIN", "MANAGER", "KITCHEN_STAFF", "CASHIER", "WAITER", "USER"].map((roleValue) => (
+                        <SelectItem key={roleValue} value={roleValue}>
+                          {roleValue.replace('_', ' ')}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -423,16 +549,109 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* Restaurant */}
+            <FormField
+              control={form.control}
+              name="restaurantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Restaurant</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      // Reset branch when restaurant changes to trigger filtering/validation
+                      form.setValue("branch", "");
+                    }}
+                    value={field.value}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a restaurant" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {restaurants.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          Loading restaurants...
+                        </div>
+                      ) : (
+                        restaurants.map((restaurant) => (
+                          <SelectItem key={restaurant.id} value={restaurant.id}>
+                            {restaurant.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Branch */}
+            <FormField
+              control={form.control}
+              name="branch"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Branch</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    disabled={isLoading || isLoadingBranches || !selectedRestaurantId}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          isLoadingBranches
+                            ? "Loading branches..."
+                            : !selectedRestaurantId
+                              ? "Select restaurant first"
+                              : filteredBranches.length === 0
+                                ? "No branches available"
+                                : "Select a branch"
+                        } />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {isLoadingBranches ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          Loading branches...
+                        </div>
+                      ) : !selectedRestaurantId ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          Select restaurant first
+                        </div>
+                      ) : filteredBranches.length > 0 ? (
+                        filteredBranches.map((branch) => (
+                          <SelectItem key={branch.id} value={branch.id}>
+                            {branch.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          No branches available
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
           </div>
 
-          {/* Permissions */}
+          {/* ----------------- Permissions ----------------- */}
           <div className="space-y-6 pt-6 border-t">
             <h3 className="text-lg font-medium">Permissions</h3>
-            
-            {form.watch('role') === 'KITCHEN_STAFF' ? (
+
+            {role === 'KITCHEN_STAFF' ? (
               <div className="space-y-4 p-4 bg-gray-50 rounded-md">
                 <p className="text-sm text-gray-600">
-                  Kitchen staff can only have ORDER_READ and ORDER_UPDATE permissions.
+                  Kitchen staff are automatically assigned only read and update permissions for orders.
                 </p>
                 <div className="space-y-2">
                   {['ORDER_READ', 'ORDER_UPDATE'].map((permission) => (
@@ -488,11 +707,11 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
             )}
           </div>
 
-          {/* Shift Management */}
+          {/* ----------------- Shift Management ----------------- */}
           <div className="space-y-4 pt-6 border-t">
             <h3 className="text-lg font-medium">Shift Management</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Configure shift times and working days for this manager
+              Configure shift times and working days for this manager.
             </p>
 
             {/* Days of the week with time inputs */}
@@ -505,88 +724,72 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                 { key: 'FRIDAY', label: 'Friday' },
                 { key: 'SATURDAY', label: 'Saturday' },
                 { key: 'SUNDAY', label: 'Sunday' },
-              ].map((day) => (
-                <div key={day.key} className="p-4 border rounded-lg">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <Checkbox
-                      checked={(() => {
-                        const schedule = form.watch('shiftSchedule');
-                        return schedule?.[day.key]?.startTime;
-                      })()}
-                      onCheckedChange={(checked) => {
-                        const currentSchedule = form.getValues('shiftSchedule') || {};
-                        if (checked) {
-                          currentSchedule[day.key] = { startTime: "", endTime: "" };
-                        } else {
-                          delete currentSchedule[day.key];
-                        }
-                        form.setValue('shiftSchedule', currentSchedule);
-                      }}
-                      disabled={isLoading}
-                    />
-                    <label className="text-sm font-medium">{day.label}</label>
-                  </div>
+              ].map((day) => {
+                const isDayActive = !!shiftSchedule?.[day.key];
 
-                  {(() => {
-                    const schedule = form.watch('shiftSchedule');
-                    return schedule?.[day.key];
-                  })() && (
-                    <div className="grid grid-cols-2 gap-3 ml-6">
-                      <FormField
-                        control={form.control}
-                        name="shiftSchedule"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Start Time</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="time"
-                                value={field.value?.[day.key]?.startTime || ""}
-                                onChange={(e) => {
-                                  const currentSchedule = field.value || {};
-                                  if (!currentSchedule[day.key]) {
-                                    currentSchedule[day.key] = { startTime: "", endTime: "" };
-                                  }
-                                  currentSchedule[day.key].startTime = e.target.value;
-                                  field.onChange(currentSchedule);
-                                }}
-                                disabled={isLoading}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                return (
+                  <div key={day.key} className="p-4 border rounded-lg">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <Checkbox
+                        checked={isDayActive}
+                        onCheckedChange={(checked) => {
+                          const currentSchedule = { ...form.getValues('shiftSchedule') };
+                          if (checked) {
+                            currentSchedule[day.key] = { startTime: "", endTime: "" };
+                          } else {
+                            delete currentSchedule[day.key];
+                          }
+                          form.setValue('shiftSchedule', currentSchedule, { shouldDirty: true });
+                        }}
+                        disabled={isLoading}
                       />
-
-                      <FormField
-                        control={form.control}
-                        name="shiftSchedule"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">End Time</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="time"
-                                value={field.value?.[day.key]?.endTime || ""}
-                                onChange={(e) => {
-                                  const currentSchedule = field.value || {};
-                                  if (!currentSchedule[day.key]) {
-                                    currentSchedule[day.key] = { startTime: "", endTime: "" };
-                                  }
-                                  currentSchedule[day.key].endTime = e.target.value;
-                                  field.onChange(currentSchedule);
-                                }}
-                                disabled={isLoading}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      <label className="text-sm font-medium">{day.label}</label>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {isDayActive && (
+                      <div className="grid grid-cols-2 gap-3 ml-6">
+                        <FormField
+                          control={form.control}
+                          name={`shiftSchedule.${day.key}.startTime` as const}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Start Time</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                  value={field.value || ""}
+                                  disabled={isLoading}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`shiftSchedule.${day.key}.endTime` as const}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">End Time</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                  value={field.value || ""}
+                                  disabled={isLoading}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <FormField
@@ -606,7 +809,7 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
                       Enable Shift Management
                     </FormLabel>
                     <p className="text-sm text-muted-foreground">
-                      When enabled, this manager will have scheduled shift times and working days
+                      When enabled, this manager will have scheduled shift times and working days enforced.
                     </p>
                   </div>
                 </FormItem>
@@ -614,7 +817,7 @@ function ManagerForm({ initialData, isEditing = false }: ManagerFormProps) {
             />
           </div>
 
-          {/* Buttons */}
+          {/* ----------------- Buttons ----------------- */}
           <div className="flex justify-end pt-6 border-t">
             <Button
               type="button"
