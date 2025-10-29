@@ -98,14 +98,12 @@ type MenuItemFormValues = z.infer<typeof menuItemFormSchema>;
 
 interface MenuItemFormProps {
   initialData?: MenuItem;
-  managerBranchId?: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function MenuItemForm({ initialData, onSuccess, onCancel, managerBranchId }: MenuItemFormProps) {
+export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormProps) {
   const [isLoading, setIsLoading] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [categories, setCategories] = React.useState<{ id: string; name: string }[]>([]);
   const [allModifiers, setAllModifiers] = React.useState<{
@@ -130,7 +128,6 @@ export function MenuItemForm({ initialData, onSuccess, onCancel, managerBranchId
   const [ingredientSearchTerm, setIngredientSearchTerm] = React.useState("");
   const [showCategoryHelp, setShowCategoryHelp] = React.useState(false);
   const [formInitialized, setFormInitialized] = React.useState(false);
-  const [managerRestaurant, setManagerRestaurant] = React.useState<{ id: string; name: string } | null>(null); 
   console.log(initialData,"initialData")
   const router = useRouter();
   const { branches, loading: branchesLoading, error: branchesError } = useBranches();
@@ -167,25 +164,7 @@ export function MenuItemForm({ initialData, onSuccess, onCancel, managerBranchId
       categoryId: ""
     };
 
-    if (initialData) {
-      // If we have initial data, use it
-      const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "";
-      const branchName = initialData.branchName || initialData.branch?.name || "";
-      const categoryId = initialData.categoryId || initialData.category?.id || "";
-
-      return {
-        ...baseValues,
-        ...initialData,
-        restaurantId,
-        branchName,
-        categoryId,
-        price: initialData.price || 0,
-        cost: initialData.cost || 0,
-        isActive: initialData.isActive !== false,
-      };
-    }
-
-    return baseValues;
+    if (!initialData) return baseValues;
 
     // Extract restaurantId from initialData - it should be in branch.restaurantId or directly in restaurantId
     const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId || initialData.restaurant?.id || "";
@@ -246,8 +225,6 @@ export function MenuItemForm({ initialData, onSuccess, onCancel, managerBranchId
   const form = useForm<MenuItemFormValues>({
     resolver: zodResolver(menuItemFormSchema),
     defaultValues,
-    mode: "onChange",
-    shouldUnregister: false,
   });
 
   // Debug defaultValues
@@ -572,7 +549,6 @@ console.log(inventoryRes,"inventryRes")
       }
     }
   }, [initialData?.restaurantId, initialData?.branch?.restaurantId, isEditMode]);
-
   // Also load branches when editing with initial data
   React.useEffect(() => {
     if (initialData && isEditMode) {
@@ -708,74 +684,6 @@ console.log(inventoryRes,"inventryRes")
     // Reset form with updated ingredient names
     form.setValue("ingredients", updatedIngredients);
   }, [inventoryItems, initialData, form]);
-
-  // Fetch data for manager's branch and initialize form
-  React.useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      
-      try {
-        if (managerBranchId) {
-          // If managerBranchId is provided, fetch the branch details to get the restaurant
-          const branchRes = await branchApi.getBranch(managerBranchId);
-          const branch = branchRes.data;
-          
-          if (branch && branch.restaurant) {
-            const managerRestaurantData = {
-              id: branch.restaurant.id,
-              name: branch.restaurant.name
-            };
-            
-            setManagerRestaurant(managerRestaurantData);
-            
-            // Set the form value for restaurant
-            form.setValue('restaurantId', managerRestaurantData.id, { shouldValidate: true });
-            
-            // Fetch categories for this restaurant only
-            const categoriesRes = await categoryApi.getCategories(managerRestaurantData.id);
-            setCategories(categoriesRes.data || []);
-            
-            // Set the restaurants array to only include the manager's restaurant
-            setRestaurants([managerRestaurantData]);
-            
-            // Also set the branch name if not already set
-            if (!form.getValues('branchName') && branch.name) {
-              form.setValue('branchName', normalizeBranchName(branch.name), { shouldValidate: true });
-            }
-          }
-        } else {
-          // For admin users, fetch all restaurants and categories
-          const [categoriesRes, restaurantsRes] = await Promise.all([
-            categoryApi.getCategories(),
-            restaurantApi.getRestaurants(),
-          ]);
-          
-          setCategories(categoriesRes.data || []);
-          setRestaurants(restaurantsRes.data || []);
-          
-          // If we have initial data but no restaurant ID, try to set it from the data
-          if (initialData) {
-            const restaurantId = initialData.restaurantId || initialData.branch?.restaurantId;
-            if (restaurantId) {
-              form.setValue('restaurantId', restaurantId, { shouldValidate: true });
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error initializing form data:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to initialize form data. Please try again.',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [managerBranchId, form, initialData]);
-
   const selectedModifiers = React.useMemo(() => {
     try {
       const formModifiers = form.getValues("modifiers");
@@ -898,17 +806,36 @@ console.log(inventoryRes,"inventryRes")
     
     setIsSubmitting(true);
     try {
-      const { restaurantId, branchName, modifiers, ingredients, ...dataWithoutRestaurantBranchModifiersIngredients } = data;
+      console.log('Form data before processing:', JSON.stringify(data, null, 2));
+      
+      // Extract and remove branchId if it exists
+      const { restaurantId, branchName, modifiers, ingredients, branchId, ...dataWithoutExtras } = data;
+      
+      console.log('Data after destructuring:', {
+        branchName,
+        hasBranchId: !!branchId,
+        dataWithoutExtras: Object.keys(dataWithoutExtras)
+      });
 
       // Find the selected branch to get its ID
       const selectedBranch = filteredBranches.find(branch => branch.name === branchName);
 
-      const formattedData = {
-        ...dataWithoutRestaurantBranchModifiersIngredients,
-        price: Number(dataWithoutRestaurantBranchModifiersIngredients.price),
-        cost: Number(dataWithoutRestaurantBranchModifiersIngredients.cost) || 0,
-        taxRate: Number(dataWithoutRestaurantBranchModifiersIngredients.taxRate) || 0,
-        branchId: branchName === "global" ? null : (selectedBranch?.id || ""),
+      // Create a clean data object with only the fields we want to send
+      const formattedData: any = {
+        name: data.name,
+        description: data.description,
+        imageUrl: data.imageUrl,
+        price: Number(data.price) || 0,
+        cost: Number(data.cost) || 0,
+        taxRate: Number(data.taxRate) || 0,
+        taxExempt: data.taxExempt,
+        isActive: data.isActive,
+        categoryId: data.categoryId,
+        tags: data.tags || [],
+// Only include branchName if not global
+        ...(branchName !== "global" && selectedBranch?.name && {
+          branchName: selectedBranch.name
+        }),
         // Handle modifiers properly
         ...(modifiers && modifiers.length > 0 && {
           modifiers: {
@@ -924,6 +851,8 @@ console.log(inventoryRes,"inventryRes")
         }
       };
 
+      console.log('Sending to API:', JSON.stringify(formattedData, null, 2));
+      
       if (isEditMode && initialData?.id) {
         await menuItemApi.updateItem(initialData.id, formattedData as any);
         toast({
@@ -1143,48 +1072,28 @@ console.log(inventoryRes,"inventryRes")
               <FormItem>
                 <FormLabel>Restaurant</FormLabel>
                 <Select
-                  disabled={loading || !!managerRestaurant}
+                  key={`restaurant-${formInitialized}-${restaurants.length}`}
                   onValueChange={field.onChange}
                   value={field.value}
-                  defaultValue={field.value}
+                  disabled={isSubmitting}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue
-                        defaultValue={field.value}
-                        placeholder={
-                          managerRestaurant 
-                            ? managerRestaurant.name 
-                            : 'Select a restaurant'
-                        }
-                      />
+                      <SelectValue placeholder="Select a restaurant">
+                        {field.value ? restaurants.find(r => r.id === field.value)?.name || field.value : "Select a restaurant"}
+                      </SelectValue>
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {managerRestaurant ? (
-                      <SelectItem
-                        key={managerRestaurant.id}
-                        value={managerRestaurant.id}
-                      >
-                        {managerRestaurant.name}
-                      </SelectItem>
-                    ) : (
-                      restaurants.map((restaurant) => (
-                        <SelectItem
-                          key={restaurant.id}
-                          value={restaurant.id}
-                        >
+                    {restaurants
+                      .filter((restaurant) => restaurant.id && restaurant.id.trim() !== "")
+                      .map((restaurant) => (
+                        <SelectItem key={restaurant.id} value={restaurant.id}>
                           {restaurant.name}
                         </SelectItem>
-                      ))
-                    )}
+                      ))}
                   </SelectContent>
                 </Select>
-                {managerRestaurant && (
-                  <FormDescription>
-                    Restaurant is automatically set based on your branch
-                  </FormDescription>
-                )}
                 <FormMessage />
               </FormItem>
             )}
