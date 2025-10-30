@@ -18,7 +18,7 @@ export default function MenuItemsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { user, loading: userLoading, isAdmin } = useUser()
-
+console.log(user,"userprofile")
   const fetchMenuItems = async () => {
     try {
       setIsLoading(true)

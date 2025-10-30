@@ -46,6 +46,7 @@ export function PermissionGate({
   // If user is ADMIN, bypass all checks
   const isAdmin = isAdminFromStorage || hasRole('ADMIN');
   if (isAdmin) {
+    console.log('[PermissionGate] User is admin, bypassing permission checks');
     return <>{children}</>;
   }
 

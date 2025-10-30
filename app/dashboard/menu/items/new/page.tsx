@@ -7,10 +7,11 @@ import { MenuItemForm } from "@/components/admin/menu/menu-item-form"
 import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { WithPermission } from "@/components/auth/with-permission"
-
+import { useUser } from "@/hooks/use-user"
 export default function NewMenuItemPage() {
   const router = useRouter()
-
+const {user}=useUser()
+console.log(user,"userprofileinmenuItems")
   const handleSuccess = () => {
     router.push('/dashboard/menu/items')
     // The form will handle the redirect after successful submission

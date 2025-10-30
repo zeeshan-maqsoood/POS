@@ -1,11 +1,24 @@
 import { useState, useEffect } from 'react';
 import profileApi from '@/lib/profile-api';
 
+export interface Branch {
+  id: string;
+  name: string;
+  restaurantId?: string;
+  isActive?: boolean;
+  // Add other branch properties as needed
+}
+
 export interface User {
   userId: string;
   email: string;
   role: 'ADMIN' | 'MANAGER' | 'CASHIER' | 'WAITER' | 'KITCHEN_STAFF' | 'CUSTOMER';
-  branch?: string;
+  branch?: Branch | string | null;
+  branchId?: string; // Add branchId for easier access
+  restaurant?: {
+    id: string;
+    name: string;
+  } | null;
   permissions: string[];
   name: string;
 }
@@ -31,7 +44,7 @@ export function useUser() {
 
         // Fetch user profile from backend
         const response = await profileApi.getProfile();
-        
+        console.log(response,"responseProfile")
         // Type assertion to handle the API response
         type ApiResponse = {
           id: string;
@@ -39,6 +52,7 @@ export function useUser() {
           name: string;
           role: string;
           branch?: any; // We'll handle this carefully
+          restaurant?:any;
           permissions?: string[];
         };
 
@@ -52,29 +66,32 @@ export function useUser() {
           
           // Safely extract branch information
           let branchValue: string | undefined;
-          if (userData.branch) {
-            if (typeof userData.branch === 'string') {
-              branchValue = userData.branch;
-            } else if (userData.branch.name) {
-              branchValue = userData.branch.name;
-            } else if (userData.branch.id) {
-              branchValue = userData.branch.id;
-            }
-          }
+          // if (userData.branch) {
+          //   if (typeof userData.branch === 'string') {
+          //     branchValue = userData.branch;
+          //   } else if (userData.branch.name) {
+          //     branchValue = userData.branch.name;
+          //   } else if (userData.branch.id) {
+          //     branchValue = userData.branch.id;
+          //   }
+          // }
           
           const userInfo: User = {
             userId: userData.id,
             email: userData.email,
             name: userData.name,
             role: (userData.role || 'CUSTOMER') as User['role'],
-            branch: branchValue,
+            branch: userData,
+            restaurant:userData.restaurant,
             permissions: userData.permissions || []
           };
 console.log(userInfo,"userInfo")
           console.log('Processed user info:', {
             ...userInfo,
             branchType: typeof userInfo.branch,
-            branchValue: userInfo.branch
+            branchValue: userInfo.branch,
+            restaurantType: typeof userInfo.restaurant,
+            restaurantValue: userInfo.restaurant
           });
 
           setUser(userInfo);

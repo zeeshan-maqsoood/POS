@@ -217,55 +217,99 @@ export const usePermissions = (): UsePermissionsReturn => {
   }, [isBrowser, fetchProfile]);
 
   const hasPermission = useCallback((requiredPermission: Permission | Permission[]): boolean => {
-    // On server, default to most restrictive permissions
-    if (!isBrowser || state.isLoading) {
-      return false;
-    }
+  console.group('Permission Check');
+  console.log('Checking permission for:', requiredPermission);
+  console.log('User permissions:', state.permissions);
+  console.log('User role:', state.user?.role);
+  console.log('Is admin?', state.user?.role === 'ADMIN');
 
-    // If no permissions are required, grant access
-    if (!requiredPermission) {
-      return true;
-    }
+  // On server, default to most restrictive permissions
+  if (!isBrowser || state.isLoading) {
+    console.log('Permission denied: Not in browser or still loading');
+    console.groupEnd();
+    return false;
+  }
 
-    // If no permissions are set, deny access
-    if (!state.permissions || state.permissions.length === 0) {
-      return false;
-    }
+  // If no permissions are required, grant access
+  if (!requiredPermission) {
+    console.log('Permission granted: No permission required');
+    console.groupEnd();
+    return true;
+  }
 
-    // ADMIN users have access to everything
-    if (state.user?.role === 'ADMIN') {
-      console.log('Admin user detected, granting all permissions');
-      return true;
-    }
+  // If no permissions are set, deny access
+  if (!state.permissions || state.permissions.length === 0) {
+    console.log('Permission denied: No permissions available');
+    console.groupEnd();
+    return false;
+  }
 
-    // Handle array of required permissions (OR condition)
-    if (Array.isArray(requiredPermission)) {
-      const result = requiredPermission.some(p => state.permissions.includes(p));
-      console.log(`Checking permissions [${requiredPermission.join(', ')}]:`, result, 'Current permissions:', state.permissions);
-      return result;
-    }
+  // ADMIN users have access to everything
+  if (state.user?.role === 'ADMIN') {
+    console.log('Permission granted: User is admin');
+    console.groupEnd();
+    return true;
+  }
 
-    // Handle single permission
-    const result = state.permissions.includes(requiredPermission);
-    console.log(`Checking permission ${requiredPermission}:`, result, 'Current permissions:', state.permissions);
+  // Normalize all permissions to uppercase for case-insensitive comparison
+  const normalizedUserPermissions = state.permissions.map(p => p.toUpperCase().trim());
+  console.log('Normalized user permissions:', normalizedUserPermissions);
+
+  // Handle array of required permissions (OR condition)
+  if (Array.isArray(requiredPermission)) {
+    const normalizedRequired = requiredPermission.map(p => p.toUpperCase().trim());
+    const result = normalizedRequired.some(p => normalizedUserPermissions.includes(p));
+    console.log(`Checking permissions [${normalizedRequired.join(', ')}]:`, 
+      result ? 'GRANTED' : 'DENIED');
+    console.groupEnd();
     return result;
-  }, [state.permissions, state.isLoading, state.user]);
+  }
 
-  const hasAnyPermission = useCallback((requiredPermissions: Permission[]): boolean => {
-    // On server, default to most restrictive permissions
-    if (!isBrowser || state.isLoading) {
-      return false;
-    }
+  // Handle single permission
+  const normalizedRequired = requiredPermission.toUpperCase().trim();
+  const result = normalizedUserPermissions.includes(normalizedRequired);
+  console.log(`Checking permission ${normalizedRequired}:`, 
+    result ? 'GRANTED' : 'DENIED');
+  console.groupEnd();
+  return result;
+}, [state.permissions, state.isLoading, state.user]);
 
-    // ADMIN users have access to everything
-    if (state.user?.role === 'ADMIN') {
-      console.log('Admin user detected, granting all permissions');
-      return true;
-    }
+ const hasAnyPermission = useCallback((requiredPermissions: Permission[]): boolean => {
+  console.group('Any Permission Check');
+  console.log('Checking any of permissions:', requiredPermissions);
+  console.log('User permissions:', state.permissions);
+  
+  // On server, default to most restrictive permissions
+  if (!isBrowser || state.isLoading) {
+    console.log('Permission denied: Not in browser or still loading');
+    console.groupEnd();
+    return false;
+  }
 
-    return requiredPermissions.some(p => state.permissions.includes(p));
-  }, [state.permissions, state.isLoading, state.user]);
+  // ADMIN users have access to everything
+  if (state.user?.role === 'ADMIN') {
+    console.log('Permission granted: User is admin');
+    console.groupEnd();
+    return true;
+  }
 
+  // Normalize all permissions to uppercase for case-insensitive comparison
+  const normalizedUserPermissions = state.permissions.map(p => p.toUpperCase().trim());
+  const normalizedRequired = requiredPermissions.map(p => p.toUpperCase().trim());
+  
+  const hasAny = normalizedRequired.some(p => normalizedUserPermissions.includes(p));
+  console.log(`Has any of [${normalizedRequired.join(', ')}]:`, 
+    hasAny ? 'YES' : 'NO');
+  console.groupEnd();
+  
+  return hasAny;
+}, [state.permissions, state.isLoading, state.user]);
+useEffect(() => {
+  console.log('Current user:', state.user);
+  console.log('Current permissions:', state.permissions);
+  console.log('Has MENU_CREATE permission:', 
+    state.permissions?.includes('MENU_CREATE' as Permission));
+}, [state.user, state.permissions]);
   const hasRole = useCallback((role: UserRoleType | UserRoleType[]): boolean => {
     // On server, default to most restrictive permissions
     if (!isBrowser || state.isLoading || !state.user) {

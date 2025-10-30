@@ -4,7 +4,7 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { useBranches } from "@/hooks/use-branches";
-import { useUser } from "@/hooks/use-user";
+import { useUser, type Branch } from "@/hooks/use-user";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useRouter } from "next/navigation";
@@ -78,18 +78,122 @@ export function CategoryForm({
   const router = useRouter();
   const { branches, loading: branchesLoading, error: branchesError } = useBranches();
   const { user, isAdmin } = useUser();
+  console.log(user,"usercategory")
+  // Helper function to get branch name from different data structures
+  const getBranchName = (branch: Branch | string | null | undefined): string => {
+    if (!branch) return '';
+    if (typeof branch === 'string') return branch;
+    if (branch && typeof branch === 'object' && 'name' in branch) {
+      return branch.name;
+    }
+    return '';
+  };
+  
+  // Helper function to get branch ID from different data structures
+  const getBranchId = (branch: any): string => {
+    if (!branch) {
+      console.warn('No branch data provided');
+      return '';
+    }
+    
+    console.log('getBranchId input:', branch);
+    
+    // If branch is a string, it could be the ID, name, or branchX format
+    if (typeof branch === 'string') {
+      // Check if it's a valid UUID
+      if (branch.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        return branch;
+      }
+      
+      // Check if it's in the format 'branch1', 'branch2', etc.
+      if (branch.match(/^branch\d+$/)) {
+        return branch; // Return as is for backward compatibility
+      }
+      
+      // If we have branches data, try to find the branch by name
+      if (branches && branches.length > 0) {
+        const foundBranch = branches.find(b => 
+          b.name === branch || 
+          b.name?.toLowerCase() === branch.toLowerCase()
+        );
+        
+        if (foundBranch?.id) {
+          console.log(`Found branch ID for name '${branch}':`, foundBranch.id);
+          return foundBranch.id;
+        }
+      }
+      
+      console.warn('Branch is a string but no matching branch found:', branch);
+      return branch; // Return as is if no match found
+    }
+    
+    // If branch is an object, try to extract the ID
+    if (typeof branch === 'object') {
+      // Handle case where branch data might be nested under a 'branch' property
+      if (branch.branch) {
+        return getBranchId(branch.branch); // Recursively process the nested branch object
+      }
+      
+      // Handle direct branch object
+      if (branch.id) return branch.id;
+      if (branch._id) return branch._id;
+      
+      // Handle case where branch might have a name but no ID
+      if (branch.name) {
+        // If it's a full branch object with name but no ID, try to find it in branches list
+        if (branches && branches.length > 0) {
+          const foundBranch = branches.find(b => 
+            b.name === branch.name || 
+            b.name?.toLowerCase() === branch.name?.toLowerCase()
+          );
+          
+          if (foundBranch?.id) {
+            console.log(`Found branch ID for object with name '${branch.name}':`, foundBranch.id);
+            return foundBranch.id;
+          }
+        }
+        
+        console.warn('Branch object has name but no ID, and no match in branches list:', branch.name);
+        return branch.name;
+      }
+      
+      // If we have a branchId field, use that
+      if (branch.branchId) return branch.branchId;
+      
+      // If we have a branch object with a name property, use that
+      const branchName = branch.branch?.name || branch.name;
+      if (branchName) {
+        return getBranchId(branchName); // Recursively process the branch name
+      }
+    }
+    
+    console.warn('Could not extract branch ID from:', branch);
+    return '';
+  };
 console.log(initialData,"initialData")
   // Normalize branch name from old format to new format
-  const normalizeBranchName = (branch: string): string => {
+  const normalizeBranchName = (branch: any): string => {
     if (!branch) return "";
-    if (branch.startsWith('branch')) {
-      return branch
+    
+    // Handle case where branch is an object with a name property
+    const branchName = typeof branch === 'string' 
+      ? branch 
+      : branch?.name || branch?.branchName || '';
+    
+    if (typeof branchName === 'string' && branchName.startsWith('branch')) {
+      return branchName
         .replace('branch1', 'Bradford')
         .replace('branch2', 'Leeds')
         .replace('branch3', 'Helifax')
-        .replace('branch4', 'Darley St Market')
+        .replace('branch4', 'Darley St Market');
     }
-    return branch; // Already in new format
+    
+    // If branch is an object but we couldn't get a name, try to use the ID
+    if (typeof branch !== 'string' && !branchName && branch?.id) {
+      return branch.id;
+    }
+    
+    return branchName || ''; // Return empty string if no valid branch name found
   };
 
   const form = useForm<CategoryFormValues>({
@@ -99,51 +203,79 @@ console.log(initialData,"initialData")
       description: initialData?.description || "",
       imageUrl: initialData?.imageUrl || "",
       isActive: initialData?.isActive ?? true,
-      branchId: isAdmin ? (initialData?.branchId || "") : "", // Use initial data for editing
-      restaurantId: isAdmin ? (initialData?.restaurantId || "") : "", // Use initial data for editing
+      branchId: initialData?.branchId || "",
+      restaurantId: initialData?.restaurantId || "",
     },
     mode: "onChange", // Validate on change to ensure real-time validation
   });
-
-  // Debug form state
-  const isFormValid = form.formState.isValid;
-  const formErrors = form.formState.errors;
-  const watchedValues = form.watch();
-  const isSubmitting = form.formState.isSubmitting;
-
+  
+  // Update form values when initialData changes
   React.useEffect(() => {
-    console.log('Form state changed:', {
-      isValid: isFormValid,
-      errors: formErrors,
-      values: watchedValues,
-      isDirty: form.formState.isDirty,
-      isSubmitting: isSubmitting,
-      submitCount: form.formState.submitCount
-    });
-  }, [isFormValid, formErrors, watchedValues, form.formState.isDirty, isSubmitting, form.formState.submitCount]);
+    if (initialData) {
+      form.reset({
+        ...initialData,
+        isActive: initialData.isActive ?? true,
+      });
+    }
+  }, [initialData, form]);
 
-  // Force validation on mount
+  // Form state
+  const { isValid, errors, isSubmitting, isDirty } = form.formState;
+  const watchedValues = form.watch();
+  
+  // Check if all required fields are filled
+  const isFormValid = React.useMemo(() => {
+    const { name, branchId } = watchedValues;
+    return Boolean(name && branchId);
+  }, [watchedValues]);
+  
+  // Debug form state
+  React.useEffect(() => {
+    console.log('Form state:', {
+      values: watchedValues,
+      isValid,
+      errors,
+      isSubmitting,
+      isDirty,
+      isFormValid
+    });
+  }, [watchedValues, isValid, errors, isSubmitting, isDirty, isFormValid]);
+
+  // Set up manager's branch and restaurant
   React.useEffect(() => {
     if (user && !isAdmin) {
-      const fetchManagerBranch = async () => {
+      const setupManagerData = async () => {
         try {
+          // Set restaurant from user data if available
+          if (user.restaurant?.id) {
+            form.setValue('restaurantId', user.restaurant.id, { shouldValidate: true });
+          }
+          
+          // Set branch from user data if available
+          if (user.branch) {
+            const branchId = getBranchId(user.branch);
+            if (branchId) {
+              console.log('Setting branchId for manager from user data:', branchId);
+              form.setValue('branchId', branchId, { shouldValidate: true });
+              return;
+            }
+          }
+          
+          // Fallback to API if branch not in user data
           const response = await branchApi.getUserBranches();
           const userBranches = Array.isArray(response?.data?.data) ? response.data.data : [];
 
           if (userBranches.length > 0) {
-            // For managers, use the first (and likely only) branch ID
             const managerBranchId = userBranches[0].id;
-            console.log('Setting branchId for manager:', managerBranchId);
+            console.log('Setting branchId for manager from API:', managerBranchId);
             form.setValue('branchId', managerBranchId, { shouldValidate: true });
           }
         } catch (error) {
-          console.error('Error fetching manager branch:', error);
-          // Fallback to empty string if API fails
-          form.setValue('branchId', '', { shouldValidate: true });
+          console.error('Error setting up manager data:', error);
         }
       };
 
-      fetchManagerBranch();
+      setupManagerData();
     }
   }, [user, isAdmin, form]);
 
@@ -272,11 +404,14 @@ console.log(initialData,"initialData")
       // Debug current form state
       console.log('Form submission triggered with data:', data);
       console.log('Current form state:', {
-        isValid: isFormValid,
-        errors: formErrors,
-        values: watchedValues,
+        isValid: form.formState.isValid,
+        errors: form.formState.errors,
+        values: form.getValues(),
         isDirty: form.formState.isDirty,
-        isSubmitting: form.formState.isSubmitting
+        isSubmitting: form.formState.isSubmitting,
+        userBranch: user?.branch,
+        isAdmin: user?.role === 'ADMIN',
+        userRestaurant: user?.restaurant
       });
 
       // Validate required fields
@@ -290,8 +425,9 @@ console.log(initialData,"initialData")
         return;
       }
 
-      // For admins, validate branch and restaurant selection
+      // Handle admin vs manager flow
       if (isAdmin) {
+        // For admins, validate restaurant and branch selection
         if (!data.restaurantId || data.restaurantId.trim() === "") {
           toast({
             title: "Error",
@@ -301,15 +437,46 @@ console.log(initialData,"initialData")
           setIsLoading(false);
           return;
         }
-        if (!data.branchId || data.branchId.trim() === "" || (data.branchId !== "global" && !data.branchId)) {
+        
+        // If branch is not selected but required, show error
+        if (!data.branchId || data.branchId.trim() === "") {
           toast({
             title: "Error",
-            description: "Please select a branch.",
+            description: "Please select a branch or choose 'Global' if this is a global category.",
             variant: "destructive",
           });
           setIsLoading(false);
           return;
         }
+      } else {
+        // For managers, ensure we have a valid branch ID
+        const userBranchId = getBranchId(user?.branch);
+        console.log('Manager branch data:', { userBranch: user?.branch, userBranchId });
+        
+        if (!userBranchId) {
+          toast({
+            title: "Error",
+            description: "Unable to determine your branch. Please contact support.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        // Update the form data with the correct branch ID
+        data.branchId = userBranchId;
+        
+        // Set restaurant ID from user data if not already set
+        if (!data.restaurantId && user?.restaurant?.id) {
+          data.restaurantId = typeof user.restaurant.id === 'string' 
+            ? user.restaurant.id 
+            : user.restaurant.id;
+        }
+        
+        console.log('Manager form data updated:', { 
+          branchId: data.branchId, 
+          restaurantId: data.restaurantId 
+        });
       }
 
       console.log('Form validation passed, proceeding with submission');
@@ -330,15 +497,77 @@ console.log(initialData,"initialData")
           description: "Category updated successfully.",
         });
       } else {
-        // Create new category with proper branch normalization
-        const categoryData = {
+        // Prepare the category data
+        const categoryData: any = {
           name: data.name.trim(),
           description: data.description || undefined,
           imageUrl: data.imageUrl || undefined,
           isActive: data.isActive,
           branchId: data.branchId === "global" ? null : data.branchId,
-          restaurantId: isAdmin ? data.restaurantId : undefined,
+          restaurantId: data.restaurantId
         };
+        
+        // For managers, ensure we're using their assigned branch and restaurant
+        if (!isAdmin && user) {
+          // Always use the branch ID from the form data for managers
+          // as it's already been validated and set above
+          if (data.branchId) {
+            categoryData.branchId = data.branchId;
+            console.log('Using manager branch ID from form data:', categoryData.branchId);
+          } else {
+            // Fallback to user's branch if for some reason it's not in form data
+            const userBranchId = getBranchId(user.branch);
+            if (userBranchId) {
+              categoryData.branchId = userBranchId;
+              console.log('Using manager branch ID from user data:', categoryData.branchId);
+            }
+          }
+          
+          // Use the manager's restaurant if not set
+          if (!categoryData.restaurantId && user.restaurant) {
+            categoryData.restaurantId = typeof user.restaurant === 'string' 
+              ? user.restaurant 
+              : user.restaurant.id;
+            console.log('Using manager restaurant ID:', categoryData.restaurantId);
+          }
+        } else if (isAdmin) {
+          // For admins, ensure we have valid restaurant and branch
+          if (!categoryData.restaurantId) {
+            throw new Error('Restaurant ID is required');
+          }
+          
+          // If branch is 'global', set to null, otherwise ensure it's a valid UUID
+          if (categoryData.branchId === 'global') {
+            categoryData.branchId = null;
+          } else if (categoryData.branchId && !categoryData.branchId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+            console.warn('Invalid branch ID format, setting to null:', categoryData.branchId);
+            categoryData.branchId = null;
+          }
+        }
+        
+        // Remove undefined values
+        Object.keys(categoryData).forEach(key => 
+          categoryData[key] === undefined && delete categoryData[key]
+        );
+        
+        // Ensure branchId is a valid UUID or null
+        if (categoryData.branchId && 
+            !categoryData.branchId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) &&
+            categoryData.branchId !== 'global') {
+          console.warn('Invalid branch ID format, setting to null:', categoryData.branchId);
+          categoryData.branchId = null;
+        }
+        
+        // Log the final data being sent
+        console.log('Final category data:', {
+          ...categoryData,
+          isAdmin,
+          userBranch: user?.branch,
+          formBranchId: data.branchId,
+          finalBranchId: categoryData.branchId
+        });
+        
+        console.log('Final category data before submission:', categoryData);
 
         console.log('Creating category with data:', categoryData);
         console.log('Manager branch ID (raw):', user?.branch);
@@ -424,98 +653,125 @@ console.log(initialData,"initialData")
                 </FormItem>
               )}
             />
-            {isAdmin && (
-              <FormField
-                control={form.control}
-                name="restaurantId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Restaurant *</FormLabel>
-                    <Select
-                      key={`restaurant-${formInitialized}-${restaurants.length}`}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isLoading}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a restaurant" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {restaurants.map((restaurant) => (
-                          <SelectItem key={restaurant.id} value={restaurant.id}>
-                            {restaurant.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-            {isAdmin && (
-              <FormField
-                control={form.control}
-                name="branchId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Branch *</FormLabel>
-                    <Select
-                      key={`branch-${formInitialized}-${filteredBranches.length}`}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isLoading}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a branch">
-                            {field.value === "global"
-                              ? "🌐 Global (All Branches)"
-                              : field.value
-                                ? filteredBranches.find(b => b.id === field.value)?.name || field.value
-                                : "Select a branch"
-                            }
-                          </SelectValue>
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {/* Global option for all branches */}
-                        <SelectItem key="global" value="global">
-                          🌐 Global (All Branches)
-                        </SelectItem>
-                        {filteredBranches.length > 0 ? (
-                          filteredBranches.map((branch) => (
-                            <SelectItem key={branch.id} value={branch.id}>
-                              {branch.name}
+            {isAdmin ? (
+              <>
+                <FormField
+                  control={form.control}
+                  name="restaurantId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Restaurant *</FormLabel>
+                      <Select
+                        key={`restaurant-${formInitialized}-${restaurants.length}`}
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isLoading}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a restaurant" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {restaurants.map((restaurant) => (
+                            <SelectItem key={restaurant.id} value={restaurant.id}>
+                              {restaurant.name}
                             </SelectItem>
-                          ))
-                        ) : (
-                          <div className="p-2 text-sm text-muted-foreground">
-                            {restaurants.length > 0 ? "Select a restaurant first" : "No branches available"}
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-            {/* Hidden branchId field for managers */}
-            {!isAdmin && (
-              <FormField
-                control={form.control}
-                name="branchId"
-                render={({ field }) => (
-                  <FormItem className="hidden">
-                    <FormControl>
-                      <Input {...field} value={normalizeBranchName(user?.branch || "")} readOnly />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="branchId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Branch *</FormLabel>
+                      <Select
+                        key={`branch-${formInitialized}-${filteredBranches.length}`}
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isLoading}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a branch">
+                              {field.value === "global"
+                                ? "🌐 Global (All Branches)"
+                                : field.value
+                                  ? filteredBranches.find(b => b.id === field.value)?.name || field.value
+                                  : "Select a branch"
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem key="global" value="global">
+                            🌐 Global (All Branches)
+                          </SelectItem>
+                          {filteredBranches.length > 0 ? (
+                            filteredBranches.map((branch) => (
+                              <SelectItem key={branch.id} value={branch.id}>
+                                {branch.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              {restaurants.length > 0 ? "Select a restaurant first" : "No branches available"}
+                            </div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            ) : (
+              // Show read-only branch info for non-admin users (managers)
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Restaurant</p>
+                  <div className="flex items-center p-2 border rounded-md bg-gray-50">
+                    <span className="text-sm">
+                      {user?.restaurant?.name || 'Not assigned'}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Branch</p>
+                  <div className="flex items-center p-2 border rounded-md bg-gray-50">
+                    <span className="text-sm">
+                      {getBranchName(user?.branch) || 'Not assigned'}
+                    </span>
+                  </div>
+                </div>
+                {/* Hidden branchId field for managers */}
+                <FormField
+                  control={form.control}
+                  name="branchId"
+                  render={({ field }) => {
+                    // Get branch ID using the helper function
+                    const branchId = getBranchId(user?.branch);
+                    
+                    // Ensure the field value is set
+                    if (branchId && branchId !== field.value) {
+                      field.onChange(branchId);
+                    }
+                    
+                    return (
+                      <FormItem className="hidden">
+                        <FormControl>
+                          <Input {...field} value={branchId} readOnly />
+                        </FormControl>
+                      </FormItem>
+                    );
+                  }}
+                />
+              </div>
             )}
           </div>
 
@@ -576,6 +832,13 @@ console.log(initialData,"initialData")
         type="submit"
         disabled={isLoading || isSubmitting || !isFormValid}
         className={!isFormValid ? 'opacity-50 cursor-not-allowed' : ''}
+        onClick={() => {
+          console.log('Submit clicked - Form state:', {
+            values: form.getValues(),
+            isValid: form.formState.isValid,
+            errors: form.formState.errors
+          });
+        }}
       >
         {isLoading || isSubmitting ? (
           <>

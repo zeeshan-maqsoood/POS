@@ -19,7 +19,7 @@ export default function EditMenuItemPage({ params }: { params: { id: string } })
   const [menuItem, setMenuItem] = useState<MenuItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
-console.log(user,"user")
+console.log(user?.branch?.branch,"user")
   // Helper function to get branch ID from different possible structures
  const getBranchId = (branch: any): string | null => {
   if (!branch) return null;
@@ -67,7 +67,7 @@ console.log(user,"user")
       // For managers, check branch access
       if (user?.role === 'MANAGER') {
         // Get branch IDs for comparison
-        const userBranchId = user.branch?.id || user.branch;
+        const userBranchId = user.branch?.branch?.id || user.branch;
         const itemBranchId = item.branch?.id || item.branchId;
         
        // Update the branch check logic
@@ -100,7 +100,7 @@ else if (userBranchId === item.branch?.id) {
 } 
 
 // Check if user's branch name is in the item's branch object
-else if (user.branch?.name === item.branch?.name) {
+else if (user.branch?.branch?.name === item.branch?.name) {
   console.log('Branch names match - allowing access');
   setMenuItem(item);
 } 
