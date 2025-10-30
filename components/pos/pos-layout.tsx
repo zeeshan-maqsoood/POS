@@ -137,7 +137,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
       try {
         const response = await orderApi.getOrder(editOrderId);
         const orderData = response.data.data;
-
+console.log(orderData,"orderData")
         // Update cart with order items
         if (orderData.items) {
           const updatedCart = orderData.items.map((item: any) => {
@@ -483,14 +483,29 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
         setError(null);
 
         const apiParams: any = {};
-        if (!isAdmin && user?.branch && user.branch) {
-          const normalizedBranch = user.branch.startsWith('branch')
-            ? user.branch.replace('branch1', 'Bradford')
-                .replace('branch2', 'Leeds')
-                .replace('branch3', 'Helifax')
-                .replace('branch4', 'Darley St Market')
-            : user.branch;
-          apiParams.branchName = normalizedBranch;
+        if (!isAdmin && user?.branch) {
+          // Get the branch name whether it's a string or an object
+          const branchName = typeof user.branch === 'object' ? user.branch.name || user.branch.id : user.branch;
+          
+          // Only proceed if we have a branch name
+          if (branchName) {
+            const normalizedBranch = typeof branchName === 'string' && branchName.startsWith('branch')
+              ? branchName
+                  .replace('branch1', 'Main Branch')
+                  .replace('branch2', 'Downtown Branch')
+                  .replace('branch3', 'Uptown Branch')
+                  .replace('branch4', 'Westside Branch')
+                  .replace('branch5', 'Eastside Branch')
+              : branchName;
+              
+            apiParams.branchName = normalizedBranch;
+            console.log('Branch name normalization:', {
+              original: branchName,
+              normalized: normalizedBranch,
+              isAdmin,
+              userBranch: user.branch
+            });
+          }
         }
 
         const [categoriesResponse, itemsResponse] = await Promise.allSettled([
@@ -718,7 +733,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
       </div>
     );
   }
-
+console.log(error,"error")
   if (error) {
     if (error !== 'No menu items or categories found') {
       return (
@@ -883,7 +898,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
                 tableNumber={tableNumber}
                 customerName={customerName}
                 onOrderPlaced={handleOrderPlaced}
-                userBranch={user?.branch}
+                userBranch={typeof user?.branch === 'object' ? user.branch.name : user?.branch}
                 orderType={orderType}
                 onOrderTypeChange={handleOrderTypeChange}
                 occupiedTables={occupiedTables}

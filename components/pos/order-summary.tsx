@@ -624,7 +624,14 @@ export function OrderSummary({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {/* Restaurant */}
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-gray-700">Restaurant</label>
+            <label className="block text-sm font-medium text-gray-700">
+              Restaurant
+              {!isEditMode && userBranch && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  (Assigned to your branch)
+                </span>
+              )}
+            </label>
             {isEditMode ? (
               <Input
                 value={restaurants?.find((r) => r.id === selectedRestaurant)?.name || ''}
@@ -632,7 +639,11 @@ export function OrderSummary({
                 className="bg-gray-100"
               />
             ) : (
-              <Select value={selectedRestaurant} onValueChange={onRestaurantChange}>
+              <Select 
+                value={selectedRestaurant} 
+                onValueChange={onRestaurantChange}
+                disabled={!!userBranch} // Disable if user has an assigned branch
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select restaurant" />
                 </SelectTrigger>
@@ -649,15 +660,30 @@ export function OrderSummary({
 
           {/* Branch */}
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-gray-700">Branch</label>
+            <label className="block text-sm font-medium text-gray-700">
+              Branch
+              {!isEditMode && userBranch && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  (Assigned to you)
+                </span>
+              )}
+            </label>
             {isEditMode ? (
-              <Input value={editOrderData?.branchName || editOrderData?.data?.branchName || ''} disabled className="bg-gray-100" />
+              <Input 
+                value={editOrderData?.branchName || editOrderData?.data?.branchName || ''} 
+                disabled 
+                className="bg-gray-100" 
+              />
             ) : filteredBranches.length === 0 ? (
               <div className="w-full p-2 border rounded-md bg-gray-50 text-gray-500 text-sm">
-                No branch assigned
+                {userBranch ? userBranch : 'No branch assigned'}
               </div>
             ) : (
-              <Select value={selectedBranch || ''} onValueChange={onBranchChange}>
+              <Select 
+                value={selectedBranch || ''} 
+                onValueChange={onBranchChange}
+                disabled={!!userBranch} // Disable if user has an assigned branch
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
