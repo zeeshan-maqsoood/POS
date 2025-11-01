@@ -2222,23 +2222,24 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
 
   // Get manager's branch and restaurant from user profile
   const managerBranch = React.useMemo(() => {
-    if (user?.branch) {
-      // If branch is a string, return it as name
-      if (typeof user.branch === 'string') {
-        return {
-          id: '', // We'll get this from branches list
-          name: user.branch,
-          restaurantId: user.restaurant?.id || ''
-        };
-      }
-      // If branch is an object, extract the data
+    if (!user?.branch) return null;
+    
+    // If branch is a string, return it as name
+    if (typeof user.branch === 'string') {
       return {
-        id: user.branch.id || '',
-        name: user.branch.name || user.branch || '',
+        id: '', // We'll get this from branches list
+        name: user.branch,
         restaurantId: user.restaurant?.id || ''
       };
     }
-    return null;
+    
+    // If branch is an object, extract the data safely
+    const branchData = user.branch.branch || user.branch;
+    return {
+      id: branchData?.id || '',
+      name: branchData?.name || user.branch.name || '',
+      restaurantId: user.restaurant?.id || ''
+    };
   }, [user?.branch, user?.restaurant]);
 
   const managerRestaurant = React.useMemo(() => {
@@ -2430,25 +2431,49 @@ React.useEffect(() => {
         // Prepare modifier API parameters
         const modifierParams: any = {};
         
-        if (!isAdmin && managerBranch) {
-          // For managers, always filter by their assigned branch and restaurant
-          modifierParams.branchId = managerBranch.id;
-          if (managerRestaurant?.id) {
-            modifierParams.restaurantId = managerRestaurant.id;
+        if (!isAdmin && (managerBranch || managerRestaurant)) {
+          // For managers, we need to find their branch and restaurant to get the IDs
+          const branchName = managerBranch ? (typeof managerBranch === 'string' ? managerBranch : managerBranch.name || '') : '';
+          const branchId = managerBranch?.id || '';
+          const restaurantId = managerRestaurant?.id || '';
+          
+          // Always include the restaurant ID if available
+          if (restaurantId) {
+            modifierParams.restaurantId = restaurantId;
           }
+          
+          // For managers, we want to include:
+          // 1. Modifiers specific to their branch
+          // 2. Global modifiers for their restaurant
+          // 3. Truly global modifiers (no branch or restaurant)
+          if (branchId) {
+            // If we have a branch ID, use that
+            modifierParams.branchId = branchId;
+          } else if (branchName) {
+            // Otherwise use the branch name
+            modifierParams.branchName = branchName;
+          }
+          
           console.log('Loading modifiers for manager:', { 
             branchId: modifierParams.branchId, 
+            branchName: modifierParams.branchName,
             restaurantId: modifierParams.restaurantId 
           });
+          
+          // Add a flag to indicate this is a manager request
+          modifierParams.isManagerRequest = true;
         } else if (selectedBranchName && selectedBranchName !== "" && selectedBranchName !== "global") {
           // For admins, filter by selected branch
           const selectedBranch = filteredBranches.find(branch => branch.name === selectedBranchName);
           if (selectedBranch) {
             modifierParams.branchId = selectedBranch.id;
+            if (selectedBranch.restaurantId) {
+              modifierParams.restaurantId = selectedBranch.restaurantId;
+            }
           }
         } else if (selectedBranchName === "global") {
-          // For global selection, don't filter by branch - load all modifiers
-          console.log('Loading global modifiers (no branch filter)');
+          // For global selection, don't filter by branch or restaurant - load all global modifiers
+          console.log('Loading global modifiers (no branch/restaurant filter)');
         }
 
         const [modifiersRes, inventoryRes] = await Promise.all([
@@ -2456,16 +2481,25 @@ React.useEffect(() => {
           inventoryItemApi.getItems(),
         ]);
 
-        const allModifiersData = Array.isArray(modifiersRes?.data?.data)
-          ? modifiersRes.data.data.map((m: any) => ({
-            type: m.type || "SINGLE",
-            id: m.id,
-            name: m.name,
-            price: m.price || 0,
-            isActive: m.isActive ?? true,
-          }))
-          : [];
+        console.log('Modifiers API response:', modifiersRes);
+        
+        // Handle both direct array response and data.data structure
+        let modifiersData = [];
+        if (Array.isArray(modifiersRes?.data)) {
+          modifiersData = modifiersRes.data;
+        } else if (Array.isArray(modifiersRes?.data?.data)) {
+          modifiersData = modifiersRes.data.data;
+        }
 
+        const allModifiersData = modifiersData.map((m: any) => ({
+          type: m.type || "SINGLE",
+          id: m.id,
+          name: m.name,
+          price: m.price || 0,
+          isActive: m.isActive ?? true,
+        }));
+
+        console.log('Processed modifiers:', allModifiersData);
         setAllModifiers(allModifiersData);
 
         // Filter inventory items by branch for managers
@@ -2939,6 +2973,7 @@ React.useEffect(() => {
         taxExempt: data.taxExempt,
         isActive: data.isActive,
         categoryId: data.categoryId,
+        restaurantId: restaurantId, // Include restaurantId in the data sent to the API
         tags: data.tags || [],
         // Only include branchName if not global
         ...(branchName !== "global" && selectedBranch?.name && {

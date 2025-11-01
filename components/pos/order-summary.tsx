@@ -50,14 +50,11 @@ interface OrderSummaryProps {
   restaurants?: Restaurant[];
   branches?: Branch[];
   filteredBranches?: Branch[];
+  isAdmin?: boolean;
+  userRole?: string;
+  userRestaurantId?: string | null;
+  userBranchId?: string | null;
 }
-
-const branches = [
-  { id: 'Bradford', name: 'Bradford' },
-  { id: 'Leeds', name: 'Leeds' },
-  { id: 'Darley St Market', name: 'Darley St Market' },
-  { id: 'Helifax', name: 'Helifax' },
-];
 
 const tableNumbers = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
 
@@ -89,132 +86,32 @@ export function OrderSummary({
   restaurants = [],
   branches = [],
   filteredBranches = [],
+  isAdmin = false,
+  userRole = 'CASHIER',
+  userRestaurantId,
+  userBranchId,
 }: OrderSummaryProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
   const { socket } = useSocket();
   const { printReceipt } = usePrintReceipt();
 
-  // Ensure occupiedTables is always a Set
-  const safeOccupiedTables = useMemo(() => {
-    if (occupiedTables instanceof Set) {
-      return occupiedTables;
-    }
-    // If it's not a Set (e.g., undefined, null, or wrong type), return empty Set
-    return new Set<string>();
-  }, [occupiedTables]);
+  const isManager = userRole === 'MANAGER';
 
-  const userRole =
-    typeof window !== 'undefined' ? localStorage.getItem('userRole') || 'CASHIER' : 'CASHIER';
-
-  // Initialize form when editing order
+  // Auto-select restaurant and branch for managers
   useEffect(() => {
-    if (isEditMode && editOrderData) {
-      const orderData = editOrderData.data;
-      onOrderTypeChange(orderData.orderType || 'DINE_IN');
-
-      const branchToSelect =
-        orderData.branchName || userBranch || (branches.length > 0 ? branches[0].id : null);
-
-      // Find branch by name and get its ID
-      const branchByName = branches.find(branch => branch.name === branchToSelect);
-      const branchId = branchByName?.id || branchToSelect;
-
-      if (branchId) {
-        onBranchChange(branchId);
-      }
-
-      onCustomerNameChange(orderData.customerName || '');
-
-      if (orderData.orderType === 'DINE_IN' && orderData.tableNumber) {
-        onTableNumberChange(orderData.tableNumber.toString());
-      }
-      console.log(orderData, 'editOrderData');
-
-      if (orderData.items && orderData.items.length > 0) {
-        const updatedCart = orderData.items.map((item: any) => {
-          const matchedItem = menuItems?.find((menuItem: MenuItem) => menuItem.id === item.menuItemId);
-          const modifiersTotal = (item.modifiers || []).reduce(
-            (sum: number, mod: any) => sum + (Number(mod.price) || 0),
-            0
-          );
-          const basePrice = Number(item.price) || 0; // Price includes tax
-
-          const selectedModifierIds = new Set(
-            (item.modifiers || []).map((m: any) => m.id || m.menuItemModifierId)
-          );
-
-          const modifiers = (matchedItem?.modifiers || []).map((mod: any) => {
-            const isSelected = Array.from(selectedModifierIds).some(
-              (id) => id === mod.id || id === mod.menuItemModifierId
-            );
-            return {
-              ...mod,
-              selected: isSelected,
-              price: Number(mod.price || 0),
-              tax: Number(mod.tax || 0),
-            };
-          });
-
-          const selectedModifiers = modifiers.filter((m: any) => m.selected);
-
-          return {
-            id: Math.random().toString(36).substr(2, 9),
-            item: {
-              id: item.menuItemId || item.id,
-              name: item.name || matchedItem?.name || 'Unknown Item',
-              price: basePrice, // Price includes tax
-              description: matchedItem?.description ?? '',
-              categoryId: matchedItem?.categoryId ?? '',
-              isActive: true,
-              imageUrl: matchedItem?.imageUrl ?? '',
-              modifiers: modifiers,
-            },
-            quantity: item.quantity || 1,
-            selectedModifiers,
-            totalPrice: (basePrice + modifiersTotal) * (item.quantity || 1), // Include modifiers only if selected
-            basePrice: basePrice,
-            price: basePrice,
-            taxRate: Number(item.taxRate) || 0,
-          };
-        });
-
-        onUpdateCart(updatedCart);
-      }
-
-      setIsMounted(true);
-
-      return () => {
-        if (isEditMode) {
-          onUpdateCart([]);
-          onOrderTypeChange('DINE_IN');
-          onBranchChange('');
-          onCustomerNameChange('');
-          onTableNumberChange('');
-        }
-      };
+    if (isManager && userRestaurantId && !selectedRestaurant) {
+      onRestaurantChange(userRestaurantId);
     }
-  }, [
-    isEditMode,
-    editOrderData,
-    onBranchChange,
-    onTableNumberChange,
-    onCustomerNameChange,
-    onOrderTypeChange,
-    onUpdateCart,
-    userBranch,
-    menuItems,
-  ]);
+  }, [isManager, userRestaurantId, selectedRestaurant, onRestaurantChange]);
 
-  console.log(cart, 'cartItem');
-
-  const finalBranches = useMemo(
-    () => (userBranch ? branches.filter((branch) => branch.id === userBranch) : branches),
-    [userBranch, branches]
-  );
+  useEffect(() => {
+    if (isManager && userBranchId && !selectedBranch) {
+      onBranchChange(userBranchId);
+    }
+  }, [isManager, userBranchId, selectedBranch, onBranchChange]);
 
   const selectedBranchObj = useMemo(
     () => filteredBranches.find((b) => b.id === selectedBranch),
@@ -296,7 +193,7 @@ export function OrderSummary({
           menuItemId: item.id,
           quantity,
           name: item.name,
-          price: Number(item.price), // Price includes tax
+          price: Number(item.price),
           modifiers: (selectedModifiers || []).map((mod) => ({
             id: mod.id,
             name: mod.name,
@@ -308,51 +205,15 @@ export function OrderSummary({
           tableNumber: orderType === 'DINE_IN' ? tableNumber : null,
           customerName: customerName || null,
           items,
-          branchName: (() => {
-            // For edit mode, try to get branch name from various sources
-            if (isEditMode) {
-              // First try to get from editOrderData
-              const editBranchName = editOrderData?.data?.branchName || editOrderData?.branchName;
-              if (editBranchName) return editBranchName;
-
-              // If we have selectedBranch, get name from filteredBranches or branches
-              if (selectedBranch) {
-                const branchFromFiltered = filteredBranches?.find(branch => branch.id === selectedBranch);
-                if (branchFromFiltered) return branchFromFiltered.name;
-
-                const branchFromAll = branches?.find(branch => branch.id === selectedBranch);
-                if (branchFromAll) return branchFromAll.name;
-              }
-
-              // If we have branches data, use the first available branch
-              if (filteredBranches && filteredBranches.length > 0) {
-                return filteredBranches[0].name;
-              }
-              if (branches && branches.length > 0) {
-                return branches[0].name;
-              }
-            } else {
-              // For create mode, get from selected branch
-              if (selectedBranch) {
-                const branchFromFiltered = filteredBranches?.find(branch => branch.id === selectedBranch);
-                if (branchFromFiltered) return branchFromFiltered.name;
-
-                const branchFromAll = branches?.find(branch => branch.id === selectedBranch);
-                if (branchFromAll) return branchFromAll.name;
-              }
-            }
-
-            // Final fallback - should not reach here in normal operation
-            return 'Bradford';
-          })(),
-          restaurantId: selectedRestaurant, // Add restaurantId to the update payload
-          subtotal: cartTotal, // Subtotal includes item prices (with tax) and modifiers
-          total: cartTotal, // No separate tax
+          branchName: isEditMode
+            ? (editOrderData?.data?.branchName || (selectedBranch && branches.find(branch => branch.id === selectedBranch)?.name) || '')
+            : (selectedBranch && branches.find(branch => branch.id === selectedBranch)?.name) || '',
+          restaurantId: selectedRestaurant,
+          subtotal: cartTotal,
+          total: cartTotal,
           orderType,
           status: OrderStatus.PENDING,
         };
-
-        console.log('Update order payload:', payload);
 
         const res = await orderApi.updateOrder(editOrderData.id, payload);
         if (res?.data?.data) {
@@ -382,7 +243,7 @@ export function OrderSummary({
         menuItemId: item.id,
         quantity,
         name: item.name,
-        price: Number(item.price), // Price includes tax
+        price: Number(item.price),
         modifiers: (selectedModifiers || []).map((mod) => ({
           id: mod.id,
           name: mod.name,
@@ -395,35 +256,14 @@ export function OrderSummary({
         customerName: customerName || undefined,
         items,
         paymentMethod: PaymentMethod.CASH,
-        branchName: (() => {
-          // Get branch name from selected branch
-          if (selectedBranch) {
-            const branchFromFiltered = filteredBranches?.find(branch => branch.id === selectedBranch);
-            if (branchFromFiltered) return branchFromFiltered.name;
-
-            const branchFromAll = branches?.find(branch => branch.id === selectedBranch);
-            if (branchFromAll) return branchFromAll.name;
-          }
-
-          // Fallback to first available branch
-          if (filteredBranches && filteredBranches.length > 0) {
-            return filteredBranches[0].name;
-          }
-          if (branches && branches.length > 0) {
-            return branches[0].name;
-          }
-
-          return 'Bradford';
-        })(),
-        restaurantId: selectedRestaurant || undefined, // Add restaurantId to the payload
-        subtotal: cartTotal, // Subtotal includes item prices (with tax) and modifiers
-        total: cartTotal, // No separate tax
+        branchName: (selectedBranch && branches.find(branch => branch.id === selectedBranch)?.name) || '',
+        restaurantId: selectedRestaurant || undefined,
+        subtotal: cartTotal,
+        total: cartTotal,
         status: OrderStatus.PENDING,
         orderType,
         notes: '',
       } as const;
-
-      console.log('Create order payload:', payload);
 
       const res = await orderApi.createOrder(payload as any);
       if (res?.data?.data) {
@@ -434,7 +274,7 @@ export function OrderSummary({
             createdByRole: userRole,
           });
         }
-        onClearCart();
+   
         onOrderPlaced?.(res.data.data.id);
         toast.success('Order placed successfully!');
       } else {
@@ -448,6 +288,164 @@ export function OrderSummary({
     }
   };
 
+  // Cart item render function to fix the syntax issue
+  const renderCartItem = (cartItem: CartItem) => {
+    const { item, quantity, totalPrice, selectedModifiers } = cartItem;
+    
+    return (
+      <div key={item.id} className="bg-white rounded-lg border p-3 shadow-sm">
+        <div className="flex justify-between items-start">
+          <div className="flex gap-3 flex-1">
+            <div className="relative w-14 h-14 flex-shrink-0">
+              {item.imageUrl ? (
+                <img
+                  src={item.imageUrl.startsWith('http') ? item.imageUrl : `/${item.imageUrl.replace(/^\/+/, '')}`}
+                  alt={item.name}
+                  className="w-full h-full rounded-md object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    const placeholder = target.nextElementSibling as HTMLElement;
+                    if (placeholder) {
+                      placeholder.classList.remove('hidden');
+                    }
+                  }}
+                />
+              ) : null}
+              <div
+                className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}
+              >
+                <Utensils className="h-5 w-5 text-gray-400" />
+              </div>
+            </div>
+
+            <div className="flex-1">
+              <div className="flex justify-between">
+                <p className="font-medium">{item.name}</p>
+                <p className="font-semibold">£{totalPrice.toFixed(2)}</p>
+              </div>
+              <p className="text-sm text-gray-500">
+                £{Number(item.price || 0).toFixed(2)} × {quantity}
+              </p>
+
+              {/* Modifiers Section */}
+              {item.modifiers && item.modifiers.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs font-medium text-gray-500">Modifiers:</p>
+                  <div className="space-y-1">
+                    {item.modifiers.map((modifier) => (
+                      <div key={modifier.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          id={`${item.id}-${modifier.id}`}
+                          checked={modifier.selected || false}
+                          onChange={(e) => {
+                            const updatedCart = cart.map((cartItem) => {
+                              if (cartItem.item.id === item.id) {
+                                const updatedModifiers = cartItem.item.modifiers?.map((m) =>
+                                  m.id === modifier.id ? { ...m, selected: e.target.checked } : m
+                                ) || [];
+
+                                const selectedModifiersTotal = updatedModifiers
+                                  .filter((m) => m.selected)
+                                  .reduce((sum, m) => sum + Number(m.price || 0), 0);
+
+                                const selectedModifiers = updatedModifiers
+                                  .filter((m) => m.selected)
+                                  .map(({ id, name, price, selected, tax }) => ({
+                                    id,
+                                    name,
+                                    price: Number(price || 0) + Number(tax || 0),
+                                    selected: true,
+                                  }));
+
+                                const updatedTotalPrice =
+                                  (Number(cartItem.item.price) + selectedModifiersTotal) *
+                                  cartItem.quantity;
+
+                                return {
+                                  ...cartItem,
+                                  item: {
+                                    ...cartItem.item,
+                                    modifiers: updatedModifiers,
+                                  },
+                                  totalPrice: updatedTotalPrice,
+                                  selectedModifiers,
+                                };
+                              }
+                              return cartItem;
+                            });
+                            onUpdateCart(updatedCart);
+                          }}
+                          className="h-3 w-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <label
+                          htmlFor={`${item.id}-${modifier.id}`}
+                          className="text-gray-700 cursor-pointer"
+                        >
+                          {modifier.name} (+£{Number(modifier.price || 0).toFixed(2)})
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end ml-2">
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 w-6 p-0"
+                onClick={() => updateQuantity(item.id, quantity - 1)}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="px-2 text-sm">{quantity}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 w-6 p-0"
+                onClick={() => updateQuantity(item.id, quantity + 1)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 text-xs mt-1 h-6"
+              onClick={() => removeItem(item.id)}
+            >
+              <Trash2 className="h-3 w-3 mr-1" /> Remove
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Debugging logs
+  useEffect(() => {
+    console.log('Button disabled state check:', {
+      isPlacingOrder,
+      cartLength: cart.length,
+      selectedRestaurant,
+      selectedBranch,
+      orderType,
+      tableNumber,
+      customerName: customerName.trim(),
+      isDisabled: isPlacingOrder || 
+        cart.length === 0 ||
+        !selectedRestaurant ||
+        !selectedBranch ||
+        (orderType === 'DINE_IN' && !tableNumber) ||
+        (orderType === 'TAKEAWAY' && !customerName.trim())
+    });
+  }, [isPlacingOrder, cart.length, selectedRestaurant, selectedBranch, orderType, tableNumber, customerName]);
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Cart Items */}
@@ -458,141 +456,7 @@ export function OrderSummary({
             <p>Your cart is empty</p>
           </div>
         ) : (
-          cart.map(({ item, quantity, totalPrice, selectedModifiers }) => {
-            return (
-              <div key={item.id} className="bg-white rounded-lg border p-3 shadow-sm">
-                <div className="flex justify-between items-start">
-                  <div className="flex gap-3 flex-1">
-                    <div className="relative w-14 h-14 flex-shrink-0">
-                      {item.imageUrl ? (
-                        <img
-                          src={item.imageUrl.startsWith('http') ? item.imageUrl : `/${item.imageUrl.replace(/^\/+/, '')}`}
-                          alt={item.name}
-                          className="w-full h-full rounded-md object-cover"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const placeholder = target.nextElementSibling as HTMLElement;
-                            if (placeholder) {
-                              placeholder.classList.remove('hidden');
-                            }
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className={`${item.imageUrl ? 'hidden' : ''} absolute inset-0 w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center`}
-                      >
-                        <Utensils className="h-5 w-5 text-gray-400" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex justify-between">
-                        <p className="font-medium">{item.name}</p>
-                        <p className="font-semibold">£{totalPrice.toFixed(2)}</p>
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        £{Number(item.price || 0).toFixed(2)} × {quantity}
-                      </p>
-
-                      {/* Modifiers Section */}
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <div className="mt-2 space-y-2">
-                          <p className="text-xs font-medium text-gray-500">Modifiers:</p>
-                          <div className="space-y-1">
-                            {item.modifiers.map((modifier) => (
-                              <div key={modifier.id} className="flex items-center gap-2 text-xs">
-                                <input
-                                  type="checkbox"
-                                  id={`${item.id}-${modifier.id}`}
-                                  checked={modifier.selected || false}
-                                  onChange={(e) => {
-                                    const updatedCart = cart.map((cartItem) => {
-                                      if (cartItem.item.id === item.id) {
-                                        const updatedModifiers = cartItem.item.modifiers?.map((m) =>
-                                          m.id === modifier.id ? { ...m, selected: e.target.checked } : m
-                                        ) || [];
-
-                                        const selectedModifiersTotal = updatedModifiers
-                                          .filter((m) => m.selected)
-                                          .reduce((sum, m) => sum + Number(m.price || 0), 0);
-
-                                        const selectedModifiers = updatedModifiers
-                                          .filter((m) => m.selected)
-                                          .map(({ id, name, price, selected, tax }) => ({
-                                            id,
-                                            name,
-                                            price: Number(price || 0) + Number(tax || 0),
-                                            selected: true,
-                                          }));
-
-                                        const updatedTotalPrice =
-                                          (Number(cartItem.item.price) + selectedModifiersTotal) *
-                                          cartItem.quantity;
-
-                                        return {
-                                          ...cartItem,
-                                          item: {
-                                            ...cartItem.item,
-                                            modifiers: updatedModifiers,
-                                          },
-                                          totalPrice: updatedTotalPrice,
-                                          selectedModifiers,
-                                        };
-                                      }
-                                      return cartItem;
-                                    });
-                                    onUpdateCart(updatedCart);
-                                  }}
-                                  className="h-3 w-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                />
-                                <label
-                                  htmlFor={`${item.id}-${modifier.id}`}
-                                  className="text-gray-700 cursor-pointer"
-                                >
-                                  {modifier.name} (+£{Number(modifier.price || 0).toFixed(2)})
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end ml-2">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.id, quantity - 1)}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="px-2 text-sm">{quantity}</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.id, quantity + 1)}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 text-xs mt-1 h-6"
-                      onClick={() => removeItem(item.id)}
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" /> Remove
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            );
-          })
+          cart.map(renderCartItem)
         )}
       </div>
 
@@ -624,31 +488,20 @@ export function OrderSummary({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {/* Restaurant */}
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-gray-700">
-              Restaurant
-              {!isEditMode && userBranch && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  (Assigned to your branch)
-                </span>
-              )}
-            </label>
-            {isEditMode ? (
+            <label className="block text-sm font-medium text-gray-700">Restaurant</label>
+            {isEditMode || isManager ? (
               <Input
-                value={restaurants?.find((r) => r.id === selectedRestaurant)?.name || ''}
+                value={restaurants.find((r) => r.id === selectedRestaurant)?.name || ''}
                 disabled
                 className="bg-gray-100"
               />
             ) : (
-              <Select 
-                value={selectedRestaurant} 
-                onValueChange={onRestaurantChange}
-                disabled={!!userBranch} // Disable if user has an assigned branch
-              >
+              <Select value={selectedRestaurant} onValueChange={onRestaurantChange}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select restaurant" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(restaurants || []).map((restaurant) => (
+                  {restaurants.map((restaurant) => (
                     <SelectItem key={restaurant.id} value={restaurant.id}>
                       {restaurant.name}
                     </SelectItem>
@@ -660,35 +513,24 @@ export function OrderSummary({
 
           {/* Branch */}
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-gray-700">
-              Branch
-              {!isEditMode && userBranch && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  (Assigned to you)
-                </span>
-              )}
-            </label>
-            {isEditMode ? (
+            <label className="block text-sm font-medium text-gray-700">Branch</label>
+            {isEditMode || isManager ? (
               <Input 
-                value={editOrderData?.branchName || editOrderData?.data?.branchName || ''} 
+                value={filteredBranches.find(b => b.id === selectedBranch)?.name || ''} 
                 disabled 
                 className="bg-gray-100" 
               />
             ) : filteredBranches.length === 0 ? (
               <div className="w-full p-2 border rounded-md bg-gray-50 text-gray-500 text-sm">
-                {userBranch ? userBranch : 'No branch assigned'}
+                No branch assigned
               </div>
             ) : (
-              <Select 
-                value={selectedBranch || ''} 
-                onValueChange={onBranchChange}
-                disabled={!!userBranch} // Disable if user has an assigned branch
-              >
+              <Select value={selectedBranch || ''} onValueChange={onBranchChange}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(filteredBranches || []).map((branch) => (
+                  {filteredBranches.map((branch) => (
                     <SelectItem key={branch.id} value={branch.id}>
                       {branch.name}
                     </SelectItem>
@@ -720,7 +562,7 @@ export function OrderSummary({
                   </SelectTrigger>
                   <SelectContent>
                     {tableNumbers.map((num) => {
-                      const isOccupied = safeOccupiedTables.has(num) && num !== tableNumber;
+                      const isOccupied = (occupiedTables as Set<string>).has(num) && num !== tableNumber;
                       return (
                         <SelectItem
                           key={num}
@@ -729,7 +571,7 @@ export function OrderSummary({
                           className={isOccupied ? 'opacity-50 cursor-not-allowed' : ''}
                         >
                           {isOccupied
-                            ? `Table ${num} (Occupied - ${safeOccupiedTables.has(num) ? 'Payment Pending' : 'Available'})`
+                            ? `Table ${num} (Occupied - ${occupiedTables.has(num) ? 'Payment Pending' : 'Available'})`
                             : `Table ${num}`}
                         </SelectItem>
                       );
@@ -767,7 +609,7 @@ export function OrderSummary({
                 <SelectValue placeholder="Select order type" />
               </SelectTrigger>
               <SelectContent>
-                {(allowedOrderTypes || []).map((type) => (
+                {allowedOrderTypes.map((type) => (
                   <SelectItem key={type} value={type}>
                     {type === 'DINE_IN' ? 'Dine In' : 'Take Away'}
                   </SelectItem>
@@ -789,7 +631,14 @@ export function OrderSummary({
               className="w-full mt-3"
               size="lg"
               onClick={handlePlaceOrder}
-              disabled={isPlacingOrder || cart.length === 0}
+              disabled={
+                isPlacingOrder || 
+                cart.length === 0 ||
+                !selectedRestaurant ||
+                !selectedBranch ||
+                (orderType === 'DINE_IN' && !tableNumber && !isManager) ||
+                (orderType === 'TAKEAWAY' && !customerName.trim() && !isManager)
+              }
             >
               {isPlacingOrder ? (
                 <>

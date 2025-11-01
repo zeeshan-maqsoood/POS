@@ -107,8 +107,16 @@ export const branchApi = {
   },
 
   // 📋 Get branches for dropdown
-  getBranchesForDropdown: () => {
-    return api.get<Array<{ id: string; name: string; value: string; restaurantName?: string }>>('/branches/dropdown');
+  async getBranchesForDropdown() {
+    try {
+      console.log('Fetching branches for dropdown...');
+      const response = await api.get<Array<{ id: string; name: string; value: string; restaurantName?: string }>>('/branches/dropdown');
+      console.log('Branches API response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error fetching branches for dropdown:', error);
+      throw error;
+    }
   },
 
   // 📋 Get branches for a specific restaurant

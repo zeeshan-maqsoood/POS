@@ -38,16 +38,29 @@ export interface DashboardData {
 }
 
 export const dashboardApi = {
-  getStats: (period: "day" | "week" | "month", branchId?: string) =>
-    api.get<{ success: boolean; data: DashboardData }>(
+  getStats: (
+    period: "day" | "week" | "month" | "custom", 
+    branchId?: string,
+    startDate?: string,
+    endDate?: string
+  ) => {
+    const params: Record<string, any> = { period };
+    
+    if (branchId && branchId !== 'all') {
+      params.branchId = branchId;
+    }
+    
+    if (period === 'custom' && startDate && endDate) {
+      params.startDate = startDate;
+      params.endDate = endDate;
+    }
+    
+    return api.get<{ success: boolean; data: DashboardData }>(
       `/dashboard/stats`,
-      { 
-        params: { 
-          period,
-          ...(branchId && { branchId })
-        } 
-      }
-    ),
+      { params }
+    );
+  },
+  
 }
 
 export default dashboardApi

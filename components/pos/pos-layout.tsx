@@ -53,18 +53,17 @@ const initialMenuItems: MenuItem[] = [];
 const initialCategories: Category[] = [];
 
 interface POSLayoutProps {
-  editOrderData?: any; // You might want to create a proper type for this
+  editOrderData?: any;
 }
 
 export function POSLayout({ editOrderData }: POSLayoutProps) {
   const searchParams = useSearchParams();
   const editOrderId = searchParams.get('editOrderId');
+ 
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const hasProcessedEditOrder = useRef(false);
-
-  // Move menuItems state to the top to ensure it's defined before useEffect
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
   const [categories, setCategories] = useState<Category[]>(initialCategories);
 
@@ -85,7 +84,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
             name: mod.name,
             price: Number(mod.price || 0),
             tax: Number(mod.tax || 0),
-            selected: true, // Modifiers from editOrderData are selected
+            selected: true,
           })),
         },
         quantity: item.quantity || 1,
@@ -117,17 +116,39 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
   const [tableError, setTableError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
-  const [tableNumber, setTableNumber] = useState<string>(editOrderData?.tableNumber || '');
+  const [tableNumber, setTableNumber] = useState<string>(() => {
+    // Handle both direct tableNumber and table object
+    const tableNum = editOrderData?.tableNumber || editOrderData?.table?.number || '';
+    return tableNum ? String(tableNum) : '';
+  });
   const [customerName, setCustomerName] = useState<string>(editOrderData?.customerName || '');
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<string>(() => {
-    // If we have editOrderData, set the restaurant ID
     return editOrderData?.restaurantId || editOrderData?.restaurant?.id || '';
   });
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
   const [isLoadingRestaurants, setIsLoadingRestaurants] = useState(false);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
+
+  const { user, isAdmin } = useUser();
+  const { hasPermission } = usePermissions();
+
+  // Extract user restaurant and branch IDs
+  const userRestaurantId = useMemo(() => {
+    if (!user?.restaurant) return null;
+    return typeof user.restaurant === 'object' ? user.restaurant.id : user.restaurant;
+  }, [user?.restaurant]);
+
+  const userBranchId = useMemo(() => {
+    if (!user?.branch) return null;
+    if (typeof user.branch === 'object') {
+      return user.branch.branch?.id || user.branch.id;
+    }
+    return user.branch;
+  }, [user?.branch]);
+
+  const isManager = user?.role === 'MANAGER';
 
   useEffect(() => {
     const fetchOrderData = async () => {
@@ -137,8 +158,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
       try {
         const response = await orderApi.getOrder(editOrderId);
         const orderData = response.data.data;
-console.log(orderData,"orderData")
-        // Update cart with order items
+
         if (orderData.items) {
           const updatedCart = orderData.items.map((item: any) => {
             const matchedItem = menuItems.find((menuItem: MenuItem) => menuItem.id === item.menuItemId);
@@ -179,38 +199,48 @@ console.log(orderData,"orderData")
               taxRate: Number(item.taxRate) || 0,
             };
           });
-          console.log(updatedCart, "updatedCart");
           setCart(updatedCart);
         }
 
-        // Update form fields
-        setOrderType(orderData.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN');
+        // Set order type, defaulting to DINE_IN if not specified
+        setOrderType(orderData.orderType === 'TAKEAWAY' || orderData.orderType === 'TAKEOUT' ? 'TAKEAWAY' : 'DINE_IN');
 
-        // Find branch by name and set its ID
-        const branchByName = branches.find(branch => branch.name === orderData.branchName);
-        const branchById = branchByName?.id || null;
-
-        // If branch lookup by name fails, try to find by other methods
-        let finalBranchId = branchById;
-        if (!finalBranchId && orderData.branchName) {
-          // Try case-insensitive match
-          const caseInsensitiveMatch = branches.find(branch =>
-            branch.name.toLowerCase() === orderData.branchName.toLowerCase()
-          );
-          finalBranchId = caseInsensitiveMatch?.id || null;
-
-          // If still not found, try partial match
-          if (!finalBranchId) {
-            const partialMatch = branches.find(branch =>
-              branch.name.toLowerCase().includes(orderData.branchName.toLowerCase()) ||
-              orderData.branchName.toLowerCase().includes(branch.name.toLowerCase())
+        // Handle branch selection
+        let finalBranchId = null;
+        
+        // Try to get branch from various possible properties
+        if (orderData.branchId) {
+          finalBranchId = orderData.branchId;
+        } else if (orderData.branch?.id) {
+          finalBranchId = orderData.branch.id;
+        } else if (orderData.branchName) {
+          // Fallback to name-based matching
+          const branchByName = branches.find(branch => branch.name === orderData.branchName);
+          if (branchByName) {
+            finalBranchId = branchByName.id;
+          } else {
+            // Try case-insensitive match
+            const caseInsensitiveMatch = branches.find(branch =>
+              branch.name.toLowerCase() === orderData.branchName.toLowerCase()
             );
-            finalBranchId = partialMatch?.id || null;
+            finalBranchId = caseInsensitiveMatch?.id || null;
+
+            // Try partial match if still not found
+            if (!finalBranchId) {
+              const partialMatch = branches.find(branch =>
+                branch.name.toLowerCase().includes(orderData.branchName.toLowerCase()) ||
+                orderData.branchName.toLowerCase().includes(branch.name.toLowerCase())
+              );
+              finalBranchId = partialMatch?.id || null;
+            }
           }
         }
 
         setSelectedBranch(finalBranchId);
-        setTableNumber(orderData.tableNumber || '');
+        
+        // Set table number, handling both direct tableNumber and table object
+        const tableNum = orderData.tableNumber || orderData.table?.number || '';
+        setTableNumber(tableNum ? String(tableNum) : '');
         setCustomerName(orderData.customerName || '');
         setSelectedRestaurant(orderData.restaurantId || orderData.restaurant?.id || '');
 
@@ -252,21 +282,29 @@ console.log(orderData,"orderData")
   const handleRestaurantChange = useCallback((restaurantId: string) => {
     console.log('Restaurant changed:', restaurantId);
     setSelectedRestaurant(restaurantId);
-    setSelectedBranch(null); // Reset branch when restaurant changes
-    setFilteredBranches(branches.filter(branch => branch.restaurantId === restaurantId));
+    
+    const filtered = branches.filter(branch => branch.restaurantId === restaurantId);
+    setFilteredBranches(filtered);
+    
+    if (filtered.length === 1) {
+      setSelectedBranch(filtered[0].id);
+    } else {
+      setSelectedBranch(null);
+    }
   }, [branches]);
 
-  // Get user information for branch filtering
-  const { user, isAdmin } = useUser();
-
-  // Set initial branch when user data is loaded
+  // Auto-set restaurant and branch for managers
   useEffect(() => {
-    if (user) {
-      if (!isAdmin && user.branch && !selectedBranch) {
-        setSelectedBranch(user.branch);
-      }
+    if (isManager && userRestaurantId && !selectedRestaurant) {
+      setSelectedRestaurant(userRestaurantId);
     }
-  }, [user, isAdmin, selectedBranch]);
+  }, [isManager, userRestaurantId, selectedRestaurant]);
+
+  useEffect(() => {
+    if (isManager && userBranchId && !selectedBranch) {
+      setSelectedBranch(userBranchId);
+    }
+  }, [isManager, userBranchId, selectedBranch]);
 
   // Fetch restaurants and branches on component mount
   useEffect(() => {
@@ -276,12 +314,7 @@ console.log(orderData,"orderData")
         setIsLoadingBranches(true);
 
         const restaurantsResponse = await restaurantApi.getActiveRestaurants();
-        console.log('Restaurants API response:', restaurantsResponse);
-        console.log('Restaurants response data:', restaurantsResponse.data);
-        console.log('Restaurants data type:', typeof restaurantsResponse.data);
-        console.log('Restaurants data is array:', Array.isArray(restaurantsResponse.data));
-
-        // Handle different response structures
+        
         let restaurantsData;
         if (Array.isArray(restaurantsResponse.data)) {
           restaurantsData = restaurantsResponse.data;
@@ -293,16 +326,9 @@ console.log(orderData,"orderData")
           restaurantsData = [];
         }
 
-        console.log('Final restaurants data:', restaurantsData);
         setRestaurants(restaurantsData);
 
         const branchesResponse = await branchApi.getActiveBranches();
-        console.log('Branches API response:', branchesResponse);
-        console.log('Branches response data:', branchesResponse.data);
-        console.log('Branches data type:', typeof branchesResponse.data);
-        console.log('Branches data is array:', Array.isArray(branchesResponse.data));
-
-        // Handle different response structures
         let branchesData: Branch[] = [];
         const branchesResponseData = (branchesResponse as any).data;
 
@@ -316,7 +342,6 @@ console.log(orderData,"orderData")
           }
         }
 
-        // If no branches from API, use fallback data
         if (branchesData.length === 0) {
           console.warn('No branches received from API, using fallback data');
           branchesData = [
@@ -324,16 +349,15 @@ console.log(orderData,"orderData")
           ];
         }
 
-        console.log('Final branches data:', branchesData);
         setBranches(branchesData);
 
-        if (!isAdmin && user?.branch) {
-          const userBranch = branchesData.find(branch => branch.name === user.branch);
-          if (userBranch) {
-            setSelectedRestaurant(userBranch.restaurant?.id);
-            setFilteredBranches([userBranch]);
-            setSelectedBranch(userBranch.id);
-          }
+        // For managers, filter branches to only show their assigned branch
+        if (isManager && userRestaurantId && userBranchId) {
+          const userBranches = branchesData.filter(branch => 
+            branch.restaurantId === userRestaurantId && branch.id === userBranchId
+          );
+          setFilteredBranches(userBranches);
+          setSelectedBranch(userBranchId);
         }
       } catch (error) {
         console.error('Error loading restaurants and branches:', error);
@@ -347,25 +371,24 @@ console.log(orderData,"orderData")
     if (isAdmin || user) {
       loadRestaurantsAndBranches();
     }
-  }, [isAdmin, user]);
+  }, [isAdmin, user, isManager, userRestaurantId, userBranchId]);
 
-  // Filter branches when restaurant selection changes
+  // Filter branches when restaurant selection changes (for admins)
   useEffect(() => {
-    console.log('Branch filtering triggered:', { selectedRestaurant, branches: branches.length });
-    if (selectedRestaurant) {
+    if (selectedRestaurant && !isManager) {
       const filtered = (branches || []).filter(branch => branch.restaurantId === selectedRestaurant);
-      console.log('Filtered branches:', filtered);
       setFilteredBranches(filtered);
-      if (selectedBranch && !filtered.find(branch => branch.id === selectedBranch)) {
-        console.log('Clearing selected branch because it\'s not in filtered list');
+      
+      if (filtered.length === 1) {
+        setSelectedBranch(filtered[0].id);
+      } else if (selectedBranch && !filtered.some(b => b.id === selectedBranch)) {
         setSelectedBranch(null);
       }
-    } else {
-      console.log('No restaurant selected, clearing filtered branches');
-      setFilteredBranches([]);
+    } else if (!selectedRestaurant && !isManager) {
+      setFilteredBranches([...branches]);
       setSelectedBranch(null);
     }
-  }, [selectedRestaurant, branches, selectedBranch]);
+  }, [selectedRestaurant, branches, selectedBranch, isManager]);
 
   // Fetch occupied tables when branch changes
   useEffect(() => {
@@ -389,7 +412,6 @@ console.log(orderData,"orderData")
       const response = await orderApi.getOrdersByBranch(branchName);
       const orders = response.data || [];
 
-      // Filter for occupied tables (orders that are not completed, cancelled, or paid)
       const occupiedTableNumbers = new Set(
         orders
           .filter(order =>
@@ -414,7 +436,6 @@ console.log(orderData,"orderData")
   useEffect(() => {
     const handleOrderUpdate = (data: any) => {
       if (['COMPLETED', 'CANCELLED', 'PAID'].includes(data.status) || data.paymentStatus === 'PAID') {
-        // Refresh occupied tables when an order status changes
         fetchOccupiedTables();
         if (data.tableNumber === tableNumber) {
           setTableNumber('');
@@ -429,7 +450,6 @@ console.log(orderData,"orderData")
           .listen('OrderStatusUpdated', handleOrderUpdate)
           .listen('PaymentStatusUpdated', (data: any) => {
             if (data.paymentStatus === 'PAID') {
-              // Refresh occupied tables when payment status changes
               fetchOccupiedTables();
               if (data.tableNumber === tableNumber) {
                 setTableNumber('');
@@ -446,32 +466,22 @@ console.log(orderData,"orderData")
     };
   }, [selectedBranch, tableNumber, filteredBranches]);
 
-  const { hasPermission } = usePermissions();
   const canCreateMenuItems = hasPermission('MENU_CREATE');
 
   // Determine back button destination based on permissions
   const getBackButtonDestination = () => {
-    // Priority 1: If manager has DASHBOARD_READ permission, go to dashboard
     if (hasPermission('DASHBOARD_READ')) {
       return '/dashboard';
     }
-
-    // Priority 2: If manager has ORDER_READ permission, go to orders
     if (hasPermission('ORDER_READ')) {
       return '/dashboard/orders';
     }
-
-    // Priority 3: If manager has MENU_READ permission, go to menu
     if (hasPermission('MENU_READ')) {
       return '/dashboard/menu';
     }
-
-    // Priority 4: If manager has USER_READ permission, go to users
     if (hasPermission('USER_READ')) {
       return '/dashboard/users';
     }
-
-    // Fallback: Go to dashboard
     return '/dashboard';
   };
 
@@ -484,10 +494,8 @@ console.log(orderData,"orderData")
 
         const apiParams: any = {};
         if (!isAdmin && user?.branch) {
-          // Get the branch name whether it's a string or an object
           const branchName = typeof user.branch === 'object' ? user.branch.name || user.branch.id : user.branch;
           
-          // Only proceed if we have a branch name
           if (branchName) {
             const normalizedBranch = typeof branchName === 'string' && branchName.startsWith('branch')
               ? branchName
@@ -499,12 +507,6 @@ console.log(orderData,"orderData")
               : branchName;
               
             apiParams.branchName = normalizedBranch;
-            console.log('Branch name normalization:', {
-              original: branchName,
-              normalized: normalizedBranch,
-              isAdmin,
-              userBranch: user.branch
-            });
           }
         }
 
@@ -560,7 +562,7 @@ console.log(orderData,"orderData")
             taxExempt: item.taxExempt || false,
             modifiers: (item.modifiers || []).map((mod: any) => ({
               ...mod,
-              selected: false, // Ensure modifiers are not selected by default
+              selected: false,
               price: Number(mod.price || 0),
               tax: Number(mod.tax || 0),
             })),
@@ -582,22 +584,19 @@ console.log(orderData,"orderData")
 
   const addToCart = useCallback((menuItem: MenuItem, modifiers: Array<{ id: string; name: string; price: number }> = []) => {
     setCart(prevCart => {
-      // Find existing item without considering modifiers initially
       const existingItemIndex = prevCart.findIndex(cartItem => cartItem.item.id === menuItem.id && JSON.stringify(cartItem.selectedModifiers.map(m => m.id).sort()) === JSON.stringify(modifiers.map(m => m.id).sort()));
 
-      // Create a new menu item with tax-included price
       const menuItemWithTax = {
         ...menuItem,
         price: Number(menuItem.price) * (1 + (Number(menuItem.taxRate) / 100)),
         modifiers: (menuItem.modifiers || []).map(mod => ({
           ...mod,
-          selected: modifiers.some(m => m.id === mod.id), // Only select modifiers passed in
+          selected: modifiers.some(m => m.id === mod.id),
           price: Number(mod.price || 0),
           tax: Number(mod.tax || 0),
         })),
       };
 
-      // Initialize selectedModifiers with only explicitly provided modifiers
       const selectedModifiers = modifiers.map(mod => ({
         id: mod.id,
         name: mod.name,
@@ -605,12 +604,10 @@ console.log(orderData,"orderData")
         selected: true,
       }));
 
-      // Calculate total price with only base price unless modifiers are provided
       const modifiersTotal = selectedModifiers.reduce((sum, mod) => sum + mod.price, 0);
-      const itemTotal = (menuItemWithTax.price + modifiersTotal) * 1; // Quantity is 1 initially
+      const itemTotal = (menuItemWithTax.price + modifiersTotal) * 1;
 
       if (existingItemIndex >= 0) {
-        // Update existing item
         const updatedCart = [...prevCart];
         const existingItem = updatedCart[existingItemIndex];
         updatedCart[existingItemIndex] = {
@@ -622,7 +619,6 @@ console.log(orderData,"orderData")
         return updatedCart;
       }
 
-      // Add new item to cart
       return [
         ...prevCart,
         {
@@ -687,7 +683,7 @@ console.log(orderData,"orderData")
     }
 
     setCart([]);
-    await fetchOccupiedTables(); // Fetch updated occupied tables after order is placed
+    await fetchOccupiedTables();
 
     toast.success(editOrderData?.data?.id ? 'Order updated successfully!' : 'Order placed successfully!');
   };
@@ -700,7 +696,7 @@ console.log(orderData,"orderData")
     return cart.reduce((sum, cartItem) => sum + cartItem.totalPrice, 0);
   }, [cart]);
 
-  const tax = 0; // Tax is already included in item.price
+  const tax = 0;
   const total = subtotal;
 
   const filteredItems = useMemo(() => {
@@ -733,7 +729,7 @@ console.log(orderData,"orderData")
       </div>
     );
   }
-console.log(error,"error")
+
   if (error) {
     if (error !== 'No menu items or categories found') {
       return (
@@ -910,6 +906,10 @@ console.log(error,"error")
                 restaurants={restaurants}
                 branches={branches}
                 filteredBranches={filteredBranches}
+                isAdmin={isAdmin}
+                userRole={user?.role}
+                userRestaurantId={userRestaurantId}
+                userBranchId={userBranchId}
               />
             </div>
           </div>

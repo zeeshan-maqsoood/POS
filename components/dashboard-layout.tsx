@@ -3,6 +3,7 @@
 import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { authApi } from "@/lib/auth-api"
+import { usePermissions } from "@/hooks/use-permissions"
 import Link from "next/link"
 import { Button } from "./ui/button"
 import {
@@ -77,22 +78,41 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     }
   }, [userMenuOpen])
 
+  const { isAdmin, isManager } = usePermissions()
+
   const navItems = React.useMemo<NavItemType[]>(
-    () => [
-      { name: "Dashboard", href: "/dashboard", icon: Home },
-      { name: "Menu", href: "/dashboard/menu", icon: Sparkles },
-      { name: "POS", href: "/pos", icon: ShoppingCart },
-      { name: "Managers", href: "/dashboard/managers", icon: Users },
-      { name: "Branches", href: "/dashboard/branches", icon: Building },
-      { name: "Restaurants", href: "/dashboard/restaurants", icon: Building2 },
-      { name: "Orders", href: "/dashboard/orders", icon: Package },
-      // { name: "Customers", href: "/dashboard/customers", icon: User },
-      { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
-      { name: "Reports", href: "/dashboard/reports", icon: BarChart2 },
-      { name: "Inventory", href: "/dashboard/Inventory", icon: BarChart2 },
-      // { name: "Settings", href: "/dashboard/settings", icon: Settings },
-    ],
-    []
+    () => {
+      const baseItems = [
+        { name: "Dashboard", href: "/dashboard", icon: Home },
+        { name: "Menu", href: "/dashboard/menu", icon: Sparkles },
+        { name: "POS", href: "/pos", icon: ShoppingCart },
+        { name: "Orders", href: "/dashboard/orders", icon: Package },
+      ]
+
+      // Add admin-only items
+      if (isAdmin) {
+        return [
+          ...baseItems,
+          { name: "Managers", href: "/dashboard/managers", icon: Users },
+          { name: "Branches", href: "/dashboard/branches", icon: Building },
+          { name: "Restaurants", href: "/dashboard/restaurants", icon: Building2 },
+          { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
+          { name: "Reports", href: "/dashboard/reports", icon: BarChart2 },
+          { name: "Inventory", href: "/dashboard/Inventory", icon: Warehouse },
+        ]
+      }
+
+      // Manager-specific items
+      if (isManager) {
+        return [
+          ...baseItems,
+          // Add any manager-specific items here if needed
+        ]
+      }
+
+      return baseItems
+    },
+    [isAdmin, isManager]
   )
 
   const productItems = [

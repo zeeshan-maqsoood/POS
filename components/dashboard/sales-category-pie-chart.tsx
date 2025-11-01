@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { CategorySales } from "@/lib/dashbaord-api";
-import { formatEuro } from "@/lib/format-currency";
+import { formatPounds } from "@/lib/format-currency";
 import { dashboardApi } from "@/lib/dashbaord-api";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -95,30 +95,43 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
     );
   }
 
+  // Define a type for the pie chart data
+  type PieChartData = {
+    name: string;
+    value: number;
+    categoryId: string;
+    categoryName: string;
+  };
+
   // Sort and limit to top 5 categories for better visualization
-  const topCategories = [...data]
+  const topCategories: PieChartData[] = [...data]
     .sort((a, b) => b.sales - a.sales)
-    .slice(0, 5);
+    .slice(0, 5)
+    .map(item => ({
+      name: item.categoryName,
+      value: item.sales,
+      categoryId: item.categoryId,
+      categoryName: item.categoryName
+    }));
 
   // Calculate "Others" category if there are more than 5 categories
   const othersCategory = data.length > 5
-    ? data
-        .slice(5)
-        .reduce((acc, curr) => ({
-          ...acc,
-          sales: acc.sales + curr.sales,
-          orderCount: acc.orderCount + curr.orderCount,
-          itemsSold: acc.itemsSold + curr.itemsSold
-        }), { 
-          categoryId: 'others',
-          categoryName: 'Others',
-          sales: 0,
-          orderCount: 0,
-          itemsSold: 0
-        } as CategorySales)
+    ? data.slice(5).reduce((acc, curr) => ({
+        ...acc,
+        value: acc.value + curr.sales,
+        orderCount: acc.orderCount + curr.orderCount,
+        itemsSold: acc.itemsSold + curr.itemsSold
+      }), { 
+        name: 'Others',
+        value: 0,
+        categoryId: 'others',
+        categoryName: 'Others',
+        orderCount: 0,
+        itemsSold: 0
+      } as PieChartData & { orderCount: number; itemsSold: number })
     : null;
 
-  const chartData = othersCategory && othersCategory.sales > 0
+  const chartData = othersCategory && othersCategory.value > 0
     ? [...topCategories, othersCategory]
     : topCategories;
 
@@ -169,8 +182,8 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
                   innerRadius={60}
                   outerRadius={80}
                   paddingAngle={2}
-                  dataKey="sales"
-                  nameKey="categoryName"
+                  dataKey="value"
+                  nameKey="name"
                   labelLine={false}
                   label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                   className="text-xs font-medium"
@@ -185,10 +198,14 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(value: number, name: string, props: any) => [
-                    formatEuro(Number(value)),
-                    `${name} (${((props.payload.percent || 0) * 100).toFixed(1)}%)`
-                  ]}
+                  formatter={(value: number, name: string, props: any) => {
+                    const percent = props?.payload?.percent || 0;
+                    const categoryName = props?.payload?.payload?.categoryName || name;
+                    return [
+                      formatPounds(Number(value)),
+                      `${categoryName} (${(percent * 100).toFixed(1)}%)`
+                    ];
+                  }}
                   contentStyle={{
                     borderRadius: '0.5rem',
                     border: '1px solid #e5e7eb',
@@ -215,7 +232,7 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
                   />
                   <span className="truncate">{entry.categoryName}</span>
                   <span className="ml-auto font-medium">
-                    {formatEuro(entry.sales)}
+                    {formatPounds(entry.sales)}
                   </span>
                 </div>
               ))}

@@ -1,4 +1,8 @@
-// Format number as Pound Sterling currency
+/**
+ * Format number as Pound Sterling currency
+ * @param amount - The amount to format
+ * @returns Formatted currency string with £ symbol
+ */
 export const formatPounds = (amount: number): string => {
   return new Intl.NumberFormat('en-GB', {
     style: 'currency',
@@ -7,6 +11,3 @@ export const formatPounds = (amount: number): string => {
     maximumFractionDigits: 2
   }).format(amount);
 };
-
-// For backward compatibility
-export const formatEuro = formatPounds;

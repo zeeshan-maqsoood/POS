@@ -56,8 +56,9 @@ function LoginFormContent() {
       const api = (await import('@/utils/api')).default
       api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
   
-      // Determine redirect path based on user role
+      // Determine redirect path based on user role and permissions
       let redirectPath = '/dashboard';
+      const userPermissions = response.data.user.permissions || [];
 
       // Force kitchen staff to orders page
       if (response.data.user.role === 'KITCHEN_STAFF') {
@@ -69,7 +70,13 @@ function LoginFormContent() {
         console.log('Admin detected, redirecting to dashboard');
         redirectPath = '/dashboard';
       }
-      // For managers and other roles, go to dashboard by default
+      // Redirect managers with POS_READ permission to POS
+      else if (response.data.user.role === 'MANAGER' && 
+              (userPermissions.includes('POS_READ') || userPermissions.includes('POS_CREATE'))) {
+        console.log('Manager with POS access detected, redirecting to POS');
+        redirectPath = '/pos';
+      }
+      // For other managers and roles, go to dashboard
       else {
         console.log('Manager or other role detected, redirecting to dashboard');
         redirectPath = '/dashboard';

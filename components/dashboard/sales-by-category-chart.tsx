@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { CategorySales } from "@/lib/dashbaord-api";
-import { formatEuro } from "@/lib/format-currency";
+import { formatPounds } from "@/lib/format-currency";
 import { dashboardApi } from "@/lib/dashbaord-api";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -129,7 +129,7 @@ export function SalesByCategoryChart({ initialData }: SalesByCategoryChartProps)
             />
             <Tooltip 
               formatter={(value: number, name: string, props: any) => [
-                formatEuro(Number(value)),
+                formatPounds(Number(value)),
                 name === 'sales' ? 'Total Sales' : name,
               ]}
               labelFormatter={(label) => `Category: ${label}`}
