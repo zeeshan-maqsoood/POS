@@ -12,6 +12,7 @@ import { WithPermission } from '@/components/auth/with-permission';
 import { usePermissions } from '@/hooks/use-permissions';
 import { restaurantApi, Restaurant } from '@/lib/restaurant-api';
 import { branchApi, Branch } from '@/lib/branch-api';
+import { User } from '@/types/user';
 import {
   Select,
   SelectContent,
@@ -56,7 +57,7 @@ export default function OrdersPage() {
   const router = useRouter();
   const isKitchenStaff = hasRole('KITCHEN_STAFF');
   const isManager = hasRole('MANAGER');
-  const userBranch = user?.branch; // Get the user's branch from the auth context
+  const userBranch = user?.branchId || user?.branch; // Get the user's branch from the auth context
 
   const handleEditOrder = (order: Order) => {
     const timeStamp = Date.now()
@@ -66,43 +67,77 @@ export default function OrdersPage() {
   // Fetch restaurants and branches on component mount
   useEffect(() => {
     const loadRestaurantsAndBranches = async () => {
+      setLoading(true);
       try {
-        // Load restaurants
-        const restaurantsResponse = await restaurantApi.getActiveRestaurants();
-        const restaurantsData = restaurantsResponse.data.data || [];
+        let restaurantsData: Restaurant[] = [];
+        
+        if (isManager) {
+          // For managers, only show their restaurant
+          const restaurantId = user?.restaurantId || (user as any)?.restaurant?.id;
+          if (restaurantId) {
+            const restaurantResponse = await restaurantApi.getRestaurantById(restaurantId);
+            const managerRestaurant = restaurantResponse.data?.data || restaurantResponse.data;
+            if (managerRestaurant) {
+              restaurantsData = [managerRestaurant];
+              setSelectedRestaurant(managerRestaurant.id);
+              
+              // If manager has a branch, set it
+              const branchId = user?.branchId || (user as any)?.branch?.id || (user as any)?.branch;
+              if (branchId) {
+                const branchResponse = await branchApi.getBranchById(branchId);
+                const managerBranch = branchResponse.data?.data || branchResponse.data;
+                if (managerBranch) {
+                  setFilteredBranches([managerBranch]);
+                  setSelectedBranch(managerBranch.id);
+                }
+              }
+            }
+          }
+        } else {
+          // For admins, load all active restaurants
+          const restaurantsResponse = await restaurantApi.getActiveRestaurants();
+          restaurantsData = restaurantsResponse.data?.data || restaurantsResponse.data || [];
+          // For admins, we don't need to wait for branches to be loaded
+          // as we'll handle that in a separate effect
+          setSelectedRestaurant('all');
+        }
+        
         console.log('Loaded restaurants:', restaurantsData);
         setRestaurants(restaurantsData);
         setRestaurantsLoaded(true);
-
-        // Don't load branches initially - wait for restaurant selection
-        setFilteredBranches([]);
+        
       } catch (error) {
         console.error('Error loading restaurants:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadRestaurantsAndBranches();
-  }, []);
+  }, [isManager, user]);
 
-  // Fetch branches when restaurant selection changes
+  // Fetch branches when restaurant selection changes (only for admins)
   useEffect(() => {
-    if (restaurantsLoaded) {
+    if (restaurantsLoaded && !isManager) {
       console.log('Restaurant changed to:', selectedRestaurant);
-      fetchBranchesForRestaurant(selectedRestaurant);
-      // Reset branch selection when restaurant changes
-      if (selectedRestaurant === 'all') {
-        setSelectedBranch('all');
+      
+      // Only fetch branches if a specific restaurant is selected
+      if (selectedRestaurant !== 'all') {
+        setLoading(true);
+        fetchBranchesForRestaurant(selectedRestaurant)
+          .catch(error => {
+            console.error('Error fetching branches:', error);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
       } else {
-        // If current branch doesn't belong to selected restaurant, reset to 'all'
-        if (selectedBranch !== 'all') {
-          const currentRestaurant = branches.find(branch => branch.id === selectedBranch)?.restaurantId;
-          if (currentRestaurant !== selectedRestaurant) {
-            setSelectedBranch('all');
-          }
-        }
+        // If 'all' is selected, clear branches
+        setFilteredBranches([]);
+        setSelectedBranch('all');
       }
     }
-  }, [selectedRestaurant, restaurantsLoaded]); // Only depend on selectedRestaurant and restaurantsLoaded
+  }, [selectedRestaurant, restaurantsLoaded, isManager]);
 
   // const fetchOrders = async () => {
   //   try {
@@ -134,7 +169,20 @@ export default function OrdersPage() {
   // };
   const fetchOrders = async (status?: OrderStatus | 'ALL') => {
     try {
-      const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+      let branchName: string | undefined;
+      
+      if (selectedBranch !== 'all') {
+        const branch = filteredBranches.find(branch => branch.id === selectedBranch);
+        branchName = branch?.name;
+        
+        // If we have a selected branch but couldn't find its name, log an error
+        if (selectedBranch && !branchName) {
+          console.error('Selected branch not found in filteredBranches', {
+            selectedBranch,
+            filteredBranches: filteredBranches.map(b => ({ id: b.id, name: b.name }))
+          });
+        }
+      }
 
       console.log('=== FETCH ORDERS DEBUG ===');
       console.log('selectedRestaurant:', selectedRestaurant);
@@ -153,20 +201,63 @@ export default function OrdersPage() {
         sortOrder: 'desc'
       });
 
-      const payload: any = response.data;
-      const list = Array.isArray(payload?.data)
-        ? payload.data
-        : Array.isArray(payload?.data?.data)
-          ? payload.data.data
-          : [];
-      console.log('Orders fetched:', list.length);
-      setOrders(list);
+      console.log('Orders API Response:', response);
+      
+      let ordersList: any[] = [];
+      
+      // Handle different response formats
+      if (Array.isArray(response.data)) {
+        ordersList = response.data;
+      } else if (response.data && Array.isArray(response.data.data)) {
+        ordersList = response.data.data;
+      } else if (response.data && response.data.data && Array.isArray(response.data.data.data)) {
+        ordersList = response.data.data.data;
+      }
+      
+      console.log('Parsed orders list:', ordersList);
+      setOrders(ordersList);
+      
+      // If no orders found, log it
+      if (ordersList.length === 0) {
+        console.log('No orders found with current filters');
+      }
     } catch (error) {
       console.error('Error fetching orders:', error);
+      // Set empty array on error to clear any previous orders
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
+  // Fetch orders when activeTab, selectedRestaurant, or selectedBranch changes
+  useEffect(() => {
+    const loadData = async () => {
+      if (!restaurantsLoaded) return;
+      
+      console.log('Fetching orders with params:', {
+        activeTab,
+        selectedRestaurant,
+        selectedBranch,
+        hasBranches: filteredBranches.length > 0
+      });
+      
+      setLoading(true);
+      try {
+        await fetchOrders(activeTab);
+      } catch (error) {
+        console.error('Failed to fetch orders:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    const timer = setTimeout(() => {
+      loadData();
+    }, 0);
+    
+    return () => clearTimeout(timer);
+  }, [activeTab, selectedRestaurant, selectedBranch, restaurantsLoaded]);
+
   // Fetch branches for selected restaurant
   const fetchBranchesForRestaurant = async (restaurantId: string) => {
     try {
@@ -331,13 +422,21 @@ export default function OrdersPage() {
       throw error; // Re-throw to handle in the UI if needed
     }
   };
-  // Fetch data on component mount and when activeTab changes
+  // Initial data load on component mount
   useEffect(() => {
     const loadData = async () => {
+      if (!restaurantsLoaded) return;
+      
       setLoading(true);
       try {
-        const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-        await Promise.all([fetchOrders(), fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)]);
+        const branchName = selectedBranch === 'all' 
+          ? undefined 
+          : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+            
+        await Promise.all([
+          fetchOrders(activeTab), 
+          fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
+        ]);
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -345,27 +444,50 @@ export default function OrdersPage() {
       }
     };
 
-    loadData();
-  }, [activeTab]);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 0);
+    
+    return () => clearTimeout(timer);
+  }, [restaurantsLoaded]); // Only run when restaurants are loaded
 
-  // Fetch orders when filters change
+  // Handle filter changes
   useEffect(() => {
-    fetchOrders(activeTab);
-  }, [selectedRestaurant, selectedBranch, filteredBranches, activeTab]);
-
-  // Refresh stats when filters change
-  useEffect(() => {
-    // Convert branch ID to branch name for API call
-    const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-    console.log('Stats useEffect - selectedBranch:', selectedBranch, 'branchName:', branchName, 'filteredBranches:', filteredBranches);
-    fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName);
-  }, [selectedRestaurant, selectedBranch, filteredBranches]);
+    if (!restaurantsLoaded) return;
+    
+    const timer = setTimeout(() => {
+      const branchName = selectedBranch === 'all' 
+        ? undefined 
+        : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+      
+      console.log('Filter changed - fetching data:', {
+        selectedRestaurant,
+        selectedBranch,
+        branchName,
+        activeTab
+      });
+      
+      setLoading(true);
+      Promise.all([
+        fetchOrders(activeTab),
+        fetchStats(
+          selectedRestaurant === 'all' ? undefined : selectedRestaurant, 
+          branchName
+        )
+      ]).finally(() => {
+        setLoading(false);
+      });
+    }, 300); // Small debounce to prevent rapid updates
+    
+    return () => clearTimeout(timer);
+  }, [selectedRestaurant, selectedBranch, activeTab, restaurantsLoaded]);
 
   const filteredOrders = activeTab === 'ALL'
     ? orders
     : orders.filter(order => order.status === activeTab);
 
-  if (loading || !orders) {
+  // Only show loading state if we're still loading the initial data
+  if (loading && orders.length === 0) {
     return (
       <div className="container mx-auto p-4">
         <Skeleton className="h-8 w-1/4 mb-4" />
@@ -404,20 +526,21 @@ export default function OrdersPage() {
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Restaurant</label>
-            <Select value={selectedRestaurant} onValueChange={setSelectedRestaurant} disabled={!restaurantsLoaded}>
+            <Select 
+              value={selectedRestaurant} 
+              onValueChange={setSelectedRestaurant} 
+              disabled={!restaurantsLoaded || isManager}
+            >
               <SelectTrigger>
-                <SelectValue placeholder={restaurantsLoaded ? "All Restaurants" : "Loading restaurants..."} />
+                <SelectValue placeholder={restaurantsLoaded ? (isManager ? user?.restaurant?.name || "Loading..." : "All Restaurants") : "Loading restaurants..."} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Restaurants</SelectItem>
-                {(() => {
-                  console.log('Rendering restaurant dropdown with restaurants:', restaurants);
-                  return restaurants.map((restaurant) => (
-                    <SelectItem key={restaurant.id} value={restaurant.id}>
-                      {restaurant.name}
-                    </SelectItem>
-                  ));
-                })()}
+                {!isManager && <SelectItem value="all">All Restaurants</SelectItem>}
+                {restaurants.map((restaurant) => (
+                  <SelectItem key={restaurant.id} value={restaurant.id}>
+                    {restaurant.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -427,35 +550,30 @@ export default function OrdersPage() {
             <Select
               value={selectedBranch}
               onValueChange={setSelectedBranch}
-              disabled={!restaurantsLoaded || selectedRestaurant === 'all' || filteredBranches.length === 0}
+              disabled={!restaurantsLoaded || isManager || selectedRestaurant === 'all' || filteredBranches.length === 0}
             >
               <SelectTrigger>
                 <SelectValue placeholder={
-                  !restaurantsLoaded
-                    ? "Loading restaurants..."
-                    : selectedRestaurant === 'all'
-                      ? "Select a restaurant first"
-                      : filteredBranches.length === 0
-                        ? "Loading branches..."
-                        : "All Branches"
+                  isManager 
+                    ? (user?.branch?.name || "No branch assigned") 
+                    : !restaurantsLoaded
+                      ? "Loading..."
+                      : selectedRestaurant === 'all'
+                        ? "Select a restaurant first"
+                        : filteredBranches.length === 0
+                          ? "No branches available"
+                          : "All Branches"
                 } />
               </SelectTrigger>
               <SelectContent>
-                {(() => {
-                  console.log('Rendering branch dropdown with filteredBranches:', filteredBranches);
-                  return (
-                    <>
-                      {filteredBranches.length > 0 && (
-                        <SelectItem value="all">All Branches</SelectItem>
-                      )}
-                      {filteredBranches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </SelectItem>
-                      ))}
-                    </>
-                  );
-                })()}
+                {filteredBranches.length > 0 && !isManager && (
+                  <SelectItem value="all">All Branches</SelectItem>
+                )}
+                {filteredBranches.map((branch) => (
+                  <SelectItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -549,22 +667,24 @@ export default function OrdersPage() {
 
           {/* Tab Content */}
           <TabsContent value={activeTab === "ALL" ? "all" : activeTab.toLowerCase()} className="space-y-4 mt-2">
-            {filteredOrders.length > 0 ? (
-              <OrderList
-                orders={filteredOrders}
-                onStatusUpdate={updateOrderStatus}
-                onPaymentStatusUpdate={async (orderId, paymentStatus, paymentMethod) => {
-                  try {
-                    await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
-                    const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-                    // Refresh both orders and stats when payment status or method changes
-                    await Promise.all([
-                      fetchOrders(activeTab), 
-                      fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
-                    ]);
-                  } catch (error) {
-                    console.error("Error updating payment status:", error);
-                  }
+            <OrderList
+              orders={filteredOrders}
+              onStatusUpdate={updateOrderStatus}
+              onPaymentStatusUpdate={async (orderId, paymentStatus, paymentMethod) => {
+                try {
+                  setLoading(true);
+                  await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
+                  const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+                  // Refresh both orders and stats when payment status or method changes
+                  await Promise.all([
+                    fetchOrders(activeTab), 
+                    fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
+                  ]);
+                } catch (error) {
+                  console.error("Error updating payment status:", error);
+                } finally {
+                  setLoading(false);
+                }
                 }}
                 onEditOrder={handleEditOrder}
               />

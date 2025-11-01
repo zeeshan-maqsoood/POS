@@ -1,14 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Printer, Plus, Edit, Trash2, Play, Pause, Wifi, WifiOff, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import printerApi, { Printer as PrinterType, CreatePrinterRequest, UpdatePrinterRequest } from '@/lib/printer-api';
 import api from '@/utils/api';
-
-// Reusing Printer type from printer-api
 
 // Extend the Printer type from the API to match our UI needs
 interface Printer extends Omit<PrinterType, 'status' | 'branchId' | 'branchName'> {
@@ -17,7 +13,7 @@ interface Printer extends Omit<PrinterType, 'status' | 'branchId' | 'branchName'
     id: string;
     name: string;
   };
-  description?: string; // Add description to the interface
+  description?: string;
   printJobs?: Array<{
     id: string;
     status: string;
@@ -48,7 +44,6 @@ export default function PrintersPage() {
     try {
       const response = await printerApi.list();
       if (response.success) {
-        // Map the API response to match our extended Printer interface
         const mappedPrinters = response.data.map(printer => ({
           ...printer,
           branch: {
@@ -62,6 +57,11 @@ export default function PrintersPage() {
       }
     } catch (error) {
       console.error('Error fetching printers:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch printers',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -83,7 +83,7 @@ export default function PrintersPage() {
     }
   };
 
-  const handleCreatePrinter = async (printerData: Omit<Printer, 'id' | 'createdAt' | 'updatedAt' | 'branchId' | 'branchName' | 'restaurantId'> & { branchId: string }) => {
+  const handleCreatePrinter = async (printerData: any) => {
     try {
       if (!printerData.branchId) {
         toast({
@@ -94,7 +94,6 @@ export default function PrintersPage() {
         return;
       }
 
-      // Prepare the request data
       const requestData: CreatePrinterRequest = {
         body: {
           name: printerData.name,
@@ -103,17 +102,16 @@ export default function PrintersPage() {
           connectionType: printerData.connectionType,
           ipAddress: printerData.ipAddress,
           port: printerData.port ? parseInt(printerData.port.toString()) : undefined,
+          devicePath: printerData.devicePath,
+          paperSize: printerData.paperSize,
+          characterPerLine: printerData.characterPerLine,
+          autoCut: printerData.autoCut,
+          openCashDrawer: printerData.openCashDrawer,
+          printLogo: printerData.printLogo,
           branchId: printerData.branchId,
-          // Set default values for optional fields
-          paperSize: 'TWO_INCH',
-          characterPerLine: 42,
-          autoCut: true,
-          openCashDrawer: false,
-          printLogo: true
+          isActive: true
         }
       };
-      
-      console.log('Sending printer create request:', requestData);
       
       const response = await printerApi.create(requestData);
       if (response.success) {
@@ -125,11 +123,37 @@ export default function PrintersPage() {
           description: 'Printer created successfully',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating printer:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create printer',
+        description: error.response?.data?.message || 'Failed to create printer',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUpdatePrinter = async (printerId: string, updateData: any) => {
+    try {
+      const requestData: UpdatePrinterRequest = {
+        body: updateData
+      };
+      
+      const response = await printerApi.update(printerId, requestData);
+      if (response.success) {
+        setSelectedPrinter(null);
+        fetchPrinters();
+        fetchStats();
+        toast({
+          title: 'Success',
+          description: 'Printer updated successfully',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error updating printer:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to update printer',
         variant: 'destructive',
       });
     }
@@ -137,13 +161,8 @@ export default function PrintersPage() {
 
   const handleUpdateStatus = async (printerId: string, currentStatus: string) => {
     try {
-      const isActive = currentStatus === 'ONLINE' || currentStatus === 'MAINTENANCE';
-      const response = await printerApi.update(printerId, {
-        body: {
-          isActive: !isActive,
-          status: !isActive ? 'ONLINE' : 'OFFLINE'
-        }
-      });
+      const isActive = currentStatus === 'ONLINE';
+      const response = await printerApi.updateStatus(printerId, !isActive);
       
       if (response.success) {
         fetchPrinters();
@@ -153,11 +172,11 @@ export default function PrintersPage() {
           description: `Printer ${!isActive ? 'enabled' : 'disabled'} successfully`,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating printer status:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update printer status',
+        description: error.response?.data?.message || 'Failed to update printer status',
         variant: 'destructive',
       });
     }
@@ -165,15 +184,43 @@ export default function PrintersPage() {
 
   const handleTestPrint = async (printerId: string) => {
     try {
-      const response = await fetch(`/api/printers/${printerId}/test`, {
-        method: 'POST',
-      });
-      
-      if (response.ok) {
-        alert('Test print job sent successfully!');
+      const response = await printerApi.testPrint(printerId);
+      if (response.success) {
+        toast({
+          title: 'Success',
+          description: 'Test print job sent successfully!',
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending test print:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to send test print',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeletePrinter = async (printerId: string) => {
+    if (!confirm('Are you sure you want to delete this printer?')) return;
+    
+    try {
+      const response = await printerApi.delete(printerId);
+      if (response.success) {
+        fetchPrinters();
+        fetchStats();
+        toast({
+          title: 'Success',
+          description: 'Printer deleted successfully',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error deleting printer:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to delete printer',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -194,6 +241,7 @@ export default function PrintersPage() {
       case 'BAR': return 'bg-orange-100 text-orange-800';
       case 'LABEL': return 'bg-indigo-100 text-indigo-800';
       case 'REPORT': return 'bg-teal-100 text-teal-800';
+      case 'OTHER': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -276,31 +324,6 @@ export default function PrintersPage() {
             <span>Add Printer</span>
           </button>
         </div>
-
-        <div className="flex space-x-2">
-          <select className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Branches</option>
-            <option value="branch1">Main Branch</option>
-            <option value="branch2">Downtown Branch</option>
-          </select>
-          
-          <select className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Types</option>
-            <option value="KITCHEN">Kitchen</option>
-            <option value="RECEIPT">Receipt</option>
-            <option value="BAR">Bar</option>
-            <option value="LABEL">Label</option>
-            <option value="REPORT">Report</option>
-          </select>
-
-          <select className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Status</option>
-            <option value="ONLINE">Online</option>
-            <option value="OFFLINE">Offline</option>
-            <option value="ERROR">Error</option>
-            <option value="MAINTENANCE">Maintenance</option>
-          </select>
-        </div>
       </div>
 
       {/* Printers Table */}
@@ -336,11 +359,11 @@ export default function PrintersPage() {
                     <div className="text-sm font-medium text-gray-900">
                       {printer.name}
                     </div>
-                    {printer.description && printer.description.trim() !== '' ? (
+                    {printer.description && (
                       <div className="text-sm text-gray-500">
                         {printer.description}
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -375,13 +398,14 @@ export default function PrintersPage() {
                     <Edit className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => handleUpdateStatus(printer.id, printer.status === 'ONLINE' ? 'OFFLINE' : 'ONLINE')}
+                    onClick={() => handleUpdateStatus(printer.id, printer.status)}
                     className={printer.status === 'ONLINE' ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'}
                     title={printer.status === 'ONLINE' ? 'Disable' : 'Enable'}
                   >
                     {printer.status === 'ONLINE' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                   </button>
                   <button
+                    onClick={() => handleDeletePrinter(printer.id)}
                     className="text-red-600 hover:text-red-900"
                     title="Delete"
                   >
@@ -423,7 +447,7 @@ export default function PrintersPage() {
         <EditPrinterModal
           printer={selectedPrinter}
           onClose={() => setSelectedPrinter(null)}
-          onUpdate={fetchPrinters}
+          onSubmit={handleUpdatePrinter}
         />
       )}
     </div>
@@ -432,12 +456,27 @@ export default function PrintersPage() {
 
 // Create Printer Modal Component
 function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
-  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; restaurantId: string }>>([]);
   const [restaurants, setRestaurants] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRestaurant, setSelectedRestaurant] = useState('');
 
-  // Fetch branches and restaurants
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    type: 'RECEIPT' as const,
+    connectionType: 'NETWORK' as const,
+    branchId: '',
+    ipAddress: '',
+    port: 9100,
+    devicePath: '',
+    paperSize: 'TWO_INCH' as const,
+    characterPerLine: 42,
+    autoCut: true,
+    openCashDrawer: false,
+    printLogo: true,
+  });
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -447,11 +486,6 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
         const restaurantsRes = await api.get('/restaurants');
         if (restaurantsRes.data?.data) {
           setRestaurants(restaurantsRes.data.data);
-          
-          // If there's only one restaurant, select it by default
-          if (restaurantsRes.data.data.length === 1) {
-            setSelectedRestaurant(restaurantsRes.data.data[0].id);
-          }
         }
         
         // Fetch branches
@@ -461,11 +495,6 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load branches and restaurants',
-          variant: 'destructive',
-        });
       } finally {
         setIsLoading(false);
       }
@@ -473,37 +502,24 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
 
     fetchData();
   }, []);
-  
-  // Filter branches based on selected restaurant
+
   const filteredBranches = selectedRestaurant 
     ? branches.filter(branch => branch.restaurantId === selectedRestaurant)
-    : [];
-
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    type: 'RECEIPT' as const,
-    connectionType: 'USB' as const,
-    branchId: '',
-    ipAddress: '',
-    port: '',
-    devicePath: '',
-    paperSize: 'TWO_INCH' as const,
-    characterPerLine: 42,
-    autoCut: true,
-    printLogo: true,
-  });
+    : branches;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Convert port to number if it exists
+    if (!formData.branchId) {
+      alert('Please select a branch');
+      return;
+    }
+
     const dataToSubmit = {
       ...formData,
-      port: formData.port ? parseInt(formData.port) : undefined,
+      port: formData.port ? parseInt(formData.port.toString()) : undefined,
     };
     
-    console.log('Submitting printer data:', dataToSubmit);
     onSubmit(dataToSubmit);
   };
 
@@ -517,19 +533,18 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h2 className="text-xl font-bold mb-4">Add New Printer</h2>
           
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Restaurant Selection */}
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">Restaurant</label>
                 <select
                   value={selectedRestaurant}
                   onChange={(e) => setSelectedRestaurant(e.target.value)}
-                  required
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   disabled={isLoading}
                 >
@@ -543,8 +558,8 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
               </div>
 
               {/* Branch Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Branch</label>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Branch *</label>
                 {isLoading ? (
                   <div className="flex items-center justify-center p-4">
                     <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
@@ -556,8 +571,7 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
                     value={formData.branchId}
                     onChange={handleChange}
                     required
-                    disabled={!selectedRestaurant || filteredBranches.length === 0}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:bg-gray-50"
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select a branch</option>
                     {filteredBranches.map((branch) => (
@@ -565,15 +579,12 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
                         {branch.name}
                       </option>
                     ))}
-                    {filteredBranches.length === 0 && selectedRestaurant && (
-                      <option value="" disabled>No branches available for this restaurant</option>
-                    )}
                   </select>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Name</label>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Name *</label>
                 <input
                   type="text"
                   name="name"
@@ -583,26 +594,25 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Description</label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={2}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows={2}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Type</label>
+                <label className="block text-sm font-medium text-gray-700">Type *</label>
                 <select
                   name="type"
                   value={formData.type}
                   onChange={handleChange}
+                  required
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="KITCHEN">Kitchen</option>
@@ -610,65 +620,70 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
                   <option value="BAR">Bar</option>
                   <option value="LABEL">Label</option>
                   <option value="REPORT">Report</option>
+                  <option value="OTHER">Other</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">Connection</label>
+                <label className="block text-sm font-medium text-gray-700">Connection Type *</label>
                 <select
                   name="connectionType"
                   value={formData.connectionType}
                   onChange={handleChange}
+                  required
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="USB">USB</option>
                   <option value="NETWORK">Network</option>
+                  <option value="USB">USB</option>
                   <option value="BLUETOOTH">Bluetooth</option>
+                  <option value="CLOUD">Cloud</option>
                   <option value="SERIAL">Serial</option>
                 </select>
               </div>
-            </div>
 
-            {formData.connectionType === 'NETWORK' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">IP Address</label>
+              {formData.connectionType === 'NETWORK' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">IP Address *</label>
+                    <input
+                      type="text"
+                      name="ipAddress"
+                      value={formData.ipAddress}
+                      onChange={handleChange}
+                      required
+                      placeholder="192.168.1.100"
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Port</label>
+                    <input
+                      type="number"
+                      name="port"
+                      value={formData.port}
+                      onChange={handleChange}
+                      placeholder="9100"
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {formData.connectionType === 'USB' && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Device Path *</label>
                   <input
                     type="text"
-                    name="ipAddress"
-                    value={formData.ipAddress}
+                    name="devicePath"
+                    value={formData.devicePath}
                     onChange={handleChange}
+                    required
+                    placeholder="/dev/usb/lp0"
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Port</label>
-                  <input
-                    type="number"
-                    name="port"
-                    value={formData.port}
-                    onChange={handleChange}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            )}
+              )}
 
-            {formData.connectionType === 'USB' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Device Path</label>
-                <input
-                  type="text"
-                  name="devicePath"
-                  value={formData.devicePath}
-                  onChange={handleChange}
-                  placeholder="/dev/usb/lp0"
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Paper Size</label>
                 <select
@@ -677,11 +692,12 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
                   onChange={handleChange}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="TWO_INCH">2 Inch</option>
-                  <option value="THREE_INCH">3 Inch</option>
+                  <option value="TWO_INCH">2 Inch (58mm)</option>
+                  <option value="THREE_INCH">3 Inch (80mm)</option>
                   <option value="FOUR_INCH">4 Inch</option>
                   <option value="A4">A4</option>
                   <option value="A5">A5</option>
+                  <option value="LETTER">Letter</option>
                 </select>
               </div>
 
@@ -699,7 +715,7 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
               <label className="flex items-center">
                 <input
                   type="checkbox"
@@ -714,6 +730,17 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
               <label className="flex items-center">
                 <input
                   type="checkbox"
+                  name="openCashDrawer"
+                  checked={formData.openCashDrawer}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Open Cash Drawer</span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
                   name="printLogo"
                   checked={formData.printLogo}
                   onChange={handleChange}
@@ -723,7 +750,7 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
               </label>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
+            <div className="flex justify-end space-x-3 pt-6 border-t">
               <button
                 type="button"
                 onClick={onClose}
@@ -746,80 +773,142 @@ function CreatePrinterModal({ onClose, onSubmit }: { onClose: () => void; onSubm
 }
 
 // Edit Printer Modal Component
-function EditPrinterModal({ printer, onClose, onUpdate }: { printer: Printer; onClose: () => void; onUpdate: () => void }) {
+function EditPrinterModal({ printer, onClose, onSubmit }: { printer: Printer; onClose: () => void; onSubmit: (id: string, data: any) => void }) {
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; restaurantId: string }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     name: printer.name,
     description: printer.description || '',
     type: printer.type,
     connectionType: printer.connectionType,
     status: printer.status,
+    branchId: printer.branch.id,
+    ipAddress: printer.ipAddress || '',
+    port: printer.port || 9100,
+    devicePath: (printer as any).devicePath || '',
+    paperSize: (printer as any).paperSize || 'TWO_INCH',
+    characterPerLine: (printer as any).characterPerLine || 42,
+    autoCut: printer.autoCut || false,
+    openCashDrawer: printer.openCashDrawer || false,
+    printLogo: printer.printLogo || false,
+    isActive: printer.status === 'ONLINE'
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`/api/printers/${printer.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-      
-      if (response.ok) {
-        onUpdate();
-        onClose();
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        setIsLoading(true);
+        const branchesRes = await api.get('/branches');
+        if (branchesRes.data?.data) {
+          setBranches(branchesRes.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching branches:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error updating printer:', error);
-    }
+    };
+
+    fetchBranches();
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Prepare update data
+    const updateData = {
+      name: formData.name,
+      description: formData.description,
+      type: formData.type,
+      connectionType: formData.connectionType,
+      status: formData.status,
+      branchId: formData.branchId,
+      ipAddress: formData.ipAddress || undefined,
+      port: formData.port ? Number(formData.port) : undefined,
+      devicePath: formData.devicePath || undefined,
+      paperSize: formData.paperSize,
+      characterPerLine: formData.characterPerLine ? Number(formData.characterPerLine) : 42,
+      autoCut: formData.autoCut,
+      openCashDrawer: formData.openCashDrawer,
+      printLogo: formData.printLogo,
+      isActive: formData.isActive
+    };
+
+    onSubmit(printer.id, updateData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
     }));
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h2 className="text-xl font-bold mb-4">Edit Printer</h2>
           
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Name</label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Branch</label>
+                {isLoading ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+                    <span className="ml-2 text-sm text-gray-500">Loading branches...</span>
+                  </div>
+                ) : (
+                  <select
+                    name="branchId"
+                    value={formData.branchId}
+                    onChange={handleChange}
+                    required
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select a branch</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Description</label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={2}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows={2}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Type</label>
+                <label className="block text-sm font-medium text-gray-700">Type *</label>
                 <select
                   name="type"
                   value={formData.type}
                   onChange={handleChange}
+                  required
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="KITCHEN">Kitchen</option>
@@ -827,6 +916,7 @@ function EditPrinterModal({ printer, onClose, onUpdate }: { printer: Printer; on
                   <option value="BAR">Bar</option>
                   <option value="LABEL">Label</option>
                   <option value="REPORT">Report</option>
+                  <option value="OTHER">Other</option>
                 </select>
               </div>
 
@@ -844,9 +934,147 @@ function EditPrinterModal({ printer, onClose, onUpdate }: { printer: Printer; on
                   <option value="MAINTENANCE">Maintenance</option>
                 </select>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Connection Type *</label>
+                <select
+                  name="connectionType"
+                  value={formData.connectionType}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="NETWORK">Network</option>
+                  <option value="USB">USB</option>
+                  <option value="BLUETOOTH">Bluetooth</option>
+                  <option value="CLOUD">Cloud</option>
+                  <option value="SERIAL">Serial</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Is Active</label>
+                <select
+                  name="isActive"
+                  value={formData.isActive.toString()}
+                  onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.value === 'true' }))}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </div>
+
+              {formData.connectionType === 'NETWORK' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">IP Address *</label>
+                    <input
+                      type="text"
+                      name="ipAddress"
+                      value={formData.ipAddress}
+                      onChange={handleChange}
+                      required
+                      placeholder="192.168.1.100"
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Port</label>
+                    <input
+                      type="number"
+                      name="port"
+                      value={formData.port}
+                      onChange={handleChange}
+                      placeholder="9100"
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {formData.connectionType === 'USB' && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Device Path *</label>
+                  <input
+                    type="text"
+                    name="devicePath"
+                    value={formData.devicePath}
+                    onChange={handleChange}
+                    required
+                    placeholder="/dev/usb/lp0"
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Paper Size</label>
+                <select
+                  name="paperSize"
+                  value={formData.paperSize}
+                  onChange={handleChange}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="TWO_INCH">2 Inch (58mm)</option>
+                  <option value="THREE_INCH">3 Inch (80mm)</option>
+                  <option value="FOUR_INCH">4 Inch</option>
+                  <option value="A4">A4</option>
+                  <option value="A5">A5</option>
+                  <option value="LETTER">Letter</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Characters per Line</label>
+                <input
+                  type="number"
+                  name="characterPerLine"
+                  value={formData.characterPerLine}
+                  onChange={handleChange}
+                  min="20"
+                  max="100"
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="autoCut"
+                  checked={formData.autoCut}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Auto Cut</span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="openCashDrawer"
+                  checked={formData.openCashDrawer}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Open Cash Drawer</span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="printLogo"
+                  checked={formData.printLogo}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Print Logo</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-6 border-t">
               <button
                 type="button"
                 onClick={onClose}
