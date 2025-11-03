@@ -79,22 +79,35 @@ export function MenuItemsTable({
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-8 w-8 p-0 hover:bg-gray-100"
+              className="h-8 w-8 p-0 hover:bg-gray-100 relative menu-actions-container"
               onClick={(e) => {
                 e.stopPropagation();
-                const buttonRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const button = e.currentTarget as HTMLElement;
+                const buttonRect = button.getBoundingClientRect();
                 const menu = document.getElementById(`menu-${menuItem.id}`);
                 
-                // Hide all other menus
-                document.querySelectorAll('.custom-menu-dropdown').forEach(m => {
-                  if (m !== menu) m.classList.add('hidden');
-                });
+                // Close all menus first
+                closeAllMenus();
                 
-                // Toggle current menu
                 if (menu) {
-                  menu.style.top = `${buttonRect.bottom + window.scrollY}px`;
+                  // Calculate available space below the button
+                  const spaceBelow = window.innerHeight - buttonRect.bottom;
+                  const menuHeight = 180; // Approximate height of the menu
+                  
+                  // Position the menu above or below based on available space
+                  if (spaceBelow < menuHeight && buttonRect.top > menuHeight) {
+                    // Not enough space below, show above
+                    menu.style.top = `${buttonRect.top + window.scrollY - menuHeight - 5}px`;
+                  } else {
+                    // Enough space below, show below
+                    menu.style.top = `${buttonRect.bottom + window.scrollY}px`;
+                  }
+                  
+                  // Align right edge with button
                   menu.style.right = `${window.innerWidth - buttonRect.right}px`;
-                  menu.classList.toggle('hidden');
+                  
+                  // Show the menu
+                  menu.classList.remove('hidden');
                 }
               }}
             >
@@ -105,60 +118,67 @@ export function MenuItemsTable({
             {/* Custom Dropdown */}
             <div 
               id={`menu-${menuItem.id}`}
-              className="custom-menu-dropdown hidden"
+              className="fixed z-50 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden menu-dropdown"
               role="menu"
               aria-orientation="vertical"
               aria-labelledby="menu-button"
               tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
-              ref={(el) => {
-                if (el) {
-                  const rect = el.closest('.menu-actions-container')?.getBoundingClientRect();
-                  if (rect) {
-                    el.style.top = `${rect.bottom + window.scrollY}px`;
-                    el.style.right = `${window.innerWidth - rect.right}px`;
-                  }
-                }
+              style={{
+                position: 'fixed',
+                right: 0,
+                zIndex: 50,
+                width: '12rem',
+                backgroundColor: 'white',
+                borderRadius: '0.375rem',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                outline: 'none',
+                maxHeight: '60vh',
+                overflowY: 'auto',
               }}
             >
               <div className="py-1" role="none">
 
                 {/* Single Edit Button */}
-                <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
-                  <button
-                    className="text-blue-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-blue-50"
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      // Close the dropdown
-                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                      // Navigate programmatically
-                      window.location.href = `/dashboard/menu/items/edit/${menuItem.id}`;
-                    }}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit Item
-                  </button>
-                </PermissionGate>
+                <div className="py-1" role="none">
+                  <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
+                    <button
+                      className="text-gray-700 hover:bg-gray-100 hover:text-gray-900 group flex items-center px-4 py-2 text-sm w-full text-left"
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeAllMenus();
+                        // Small delay to ensure menu is hidden before navigation
+                        setTimeout(() => {
+                          window.location.href = `/dashboard/menu/items/edit/${menuItem.id}`;
+                        }, 100);
+                      }}
+                    >
+                      <Pencil className="mr-3 h-4 w-4 text-gray-500 group-hover:text-gray-600" />
+                      Edit Item
+                    </button>
+                  </PermissionGate>
 
-                {/* Single Delete Button */}
-                <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm('Are you sure you want to delete this item?')) {
-                        onDelete(menuItem.id);
-                      }
-                      document.getElementById(`menu-${menuItem.id}`)?.classList.add('hidden');
-                    }}
-                    className="text-red-600 group flex items-center px-4 py-2 text-sm w-full text-left hover:bg-red-50"
-                    role="menuitem"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Item
-                  </button>
-                </PermissionGate>
+                  <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeAllMenus();
+                        if (confirm('Are you sure you want to delete this item?')) {
+                          onDelete(menuItem.id);
+                        }
+                      }}
+                      className="text-red-600 hover:bg-red-50 group flex items-center px-4 py-2 text-sm w-full text-left"
+                      role="menuitem"
+                    >
+                      <Trash2 className="mr-3 h-4 w-4 text-red-500 group-hover:text-red-600" />
+                      Delete Item
+                    </button>
+                  </PermissionGate>
+
+                  {/* Toggle Status Button */}
+                </div>
               </div>
             </div>
           </div>
@@ -167,46 +187,43 @@ export function MenuItemsTable({
     },
   ]
 
-  // Close menu when clicking outside
+  // Close menu when clicking outside or when the component unmounts
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest('.menu-actions-container')) {
-        document.querySelectorAll('.custom-menu-dropdown').forEach(menu => {
-          menu.classList.add('hidden');
-        });
+        closeAllMenus();
       }
     };
 
-    // Add styles for the dropdown menu
-    const style = document.createElement('style');
-    style.textContent = `
-      .custom-menu-dropdown {
-        position: fixed;
-        z-index: 9999;
-        margin-top: 0.25rem;
-        width: 14rem;
-        border-radius: 0.375rem;
-        background-color: white;
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-        outline: none;
-        max-height: 80vh;
-        overflow-y: auto;
-      }
-      
-      .menu-actions-container {
-        position: relative;
-        display: inline-block;
-      }
-    `;
-    document.head.appendChild(style);
+    // Close all menus when scrolling
+    const handleScroll = () => {
+      closeAllMenus();
+    };
+
+    // Close all menus when the window is resized
+    const handleResize = () => {
+      closeAllMenus();
+    };
 
     document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.head.removeChild(style);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+      closeAllMenus();
     };
   }, []);
+
+  // Function to close all open menus
+  const closeAllMenus = () => {
+    document.querySelectorAll('.menu-dropdown').forEach(menu => {
+      menu.classList.add('hidden');
+    });
+  };
 
   if (isLoading) {
     return (
