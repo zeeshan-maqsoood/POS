@@ -278,7 +278,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center space-x-2">
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
+                <Button variant="ghost" size="icon" className="lg:hidden">
                   <Menu className="h-5 w-5" />
                   <span className="sr-only">Toggle menu</span>
                 </Button>
@@ -386,7 +386,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   // --- DESKTOP LAYOUT ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200">
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <div className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border/50 shadow-xl">
           <div className="flex h-16 items-center px-6 border-b border-sidebar-border/50 ">
             <div className="flex items-center gap-2">
@@ -406,7 +406,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <Button
             variant="ghost"
             size="sm"
-            className="lg:hidden hover:bg-primary/10 hover:text-primary transition-all duration-300"
+            className="md:hidden hover:bg-primary/10 hover:text-primary transition-all duration-300"
             onClick={() => setIsOpen(true)}
           >
             <Menu className="h-5 w-5" />

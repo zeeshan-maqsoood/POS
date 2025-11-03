@@ -59,14 +59,14 @@ interface POSLayoutProps {
 export function POSLayout({ editOrderData }: POSLayoutProps) {
   const searchParams = useSearchParams();
   const editOrderId = searchParams.get('editOrderId');
- 
+  
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const hasProcessedEditOrder = useRef(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
   const [categories, setCategories] = useState<Category[]>(initialCategories);
-
+  
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (editOrderData?.items) {
       return editOrderData.items.map((item: any) => ({
@@ -863,18 +863,6 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           }}
           id="order-summary-panel"
         >
-          <div className="flex items-center justify-between p-3 border-b md:hidden bg-white sticky top-0 z-10">
-            <h2 className="text-lg font-semibold">Order Summary</h2>
-            <button
-              onClick={() => {
-                const panel = document.getElementById('order-summary-panel');
-                panel?.classList.add('translate-y-full');
-              }}
-              className="p-1.5 rounded-full hover:bg-gray-100"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
 
           <div className="flex-1 overflow-y-auto">
             <div className="h-full flex flex-col">
@@ -915,6 +903,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           </div>
         </div>
       </div>
+      
     </div>
   );
 }

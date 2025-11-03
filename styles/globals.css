@@ -126,7 +126,52 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  .print\:block,
+  .print\:block * {
+    visibility: visible;
+  }
+  
+  .print\:block {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+    padding: 20px;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Button styles for print */
+  button {
+    display: none !important;
+  }
+  
+  /* Modal backdrop */
+  .fixed.inset-0 {
+    position: static !important;
+    background: white !important;
+  }
+  
+  /* Modal content */
+  .bg-white.rounded-lg {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
 
+@media screen {
+  .print\:block {
+    display: none;
+  }
+}
 @layer base {
   * {
     @apply border-border outline-ring/50;

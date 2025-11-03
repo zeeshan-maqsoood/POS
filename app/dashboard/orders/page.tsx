@@ -30,6 +30,7 @@ const PaymentStatus = {
 } as const;
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
+import { OrderPrintView } from '@/components/orders/order-print-view';
 
 interface OrderStats {
   totalOrders: number;
@@ -53,6 +54,7 @@ export default function OrdersPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
   const [restaurantsLoaded, setRestaurantsLoaded] = useState(false);
+  const [orderToPrint, setOrderToPrint] = useState<Order | null>(null);
   const { hasRole, user } = usePermissions();
   const router = useRouter();
   const isKitchenStaff = hasRole('KITCHEN_STAFF');
@@ -62,6 +64,10 @@ export default function OrdersPage() {
   const handleEditOrder = (order: Order) => {
     const timeStamp = Date.now()
     router.push(`/pos?editOrderId=${order.id}&t=${timeStamp}`);
+  };
+
+  const handleAfterPrint = () => {
+    setOrderToPrint(null);
   };
 
   // Fetch restaurants and branches on component mount
@@ -675,11 +681,23 @@ export default function OrdersPage() {
                   setLoading(true);
                   await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
                   const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
+                  
                   // Refresh both orders and stats when payment status or method changes
                   await Promise.all([
                     fetchOrders(activeTab), 
                     fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
                   ]);
+                  
+                  // If payment status is updated to PAID, set the order to print
+                  if (paymentStatus === 'PAID') {
+                    const order = orders.find(o => o.id === orderId);
+                    if (order) {
+                      // Use setTimeout to ensure the state updates before printing
+                      setTimeout(() => {
+                        setOrderToPrint({ ...order, paymentStatus, paymentMethod });
+                      }, 0);
+                    }
+                  }
                 } catch (error) {
                   console.error("Error updating payment status:", error);
                 } finally {
@@ -689,6 +707,7 @@ export default function OrdersPage() {
                 onEditOrder={handleEditOrder}
               />
             ) : (
+// ...
               <div className="text-center py-12 border rounded-lg">
                 <p className="text-muted-foreground">No orders found</p>
                 <Button
@@ -703,6 +722,15 @@ export default function OrdersPage() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {/* Order Print View - Using a portal to avoid layout issues */}
+      {typeof window !== 'undefined' && orderToPrint && (
+        <OrderPrintView 
+          order={orderToPrint} 
+          onAfterPrint={handleAfterPrint}
+          key={`print-${orderToPrint.id}-${Date.now()}`}
+        />
+      )}
     </WithPermission>
   );
 }

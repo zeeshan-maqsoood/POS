@@ -22,6 +22,26 @@ import {
   ArrowTrendingDownIcon,
 } from '@heroicons/react/24/outline';
 import { useUser } from '@/hooks/use-user';
+import { 
+  LineChart, 
+  Line, 
+  BarChart, 
+  Bar, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer,
+  Area,
+  AreaChart
+} from 'recharts';
+import { SalesCategoryPieChart } from '@/components/dashboard/sales-category-pie-chart';
+
+const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1'];
 
 // Stat Card Component
 interface StatCardProps {
@@ -69,26 +89,63 @@ function StatCard({ title, value, icon: Icon, trend }: StatCardProps) {
 
 // Revenue Chart Component
 function RevenueChart({ data }: { data: DashboardData['revenueData'] }) {
-  const maxRevenue = Math.max(...data.map(d => d.revenue));
-  
+  // Ensure data is properly formatted and sorted by date
+  const chartData = [...data]
+    .map(item => ({
+      ...item,
+      // Ensure revenue is a number
+      revenue: Number(item.revenue)
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return (
-    <div className="space-y-2">
-      {data.map((item, index) => (
-        <div key={index} className="flex items-center justify-between">
-          <span className="text-sm text-gray-600 w-16">{item.date}</span>
-          <div className="flex-1 mx-4">
-            <div className="bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 rounded-full h-2 transition-all duration-300"
-                style={{ width: `${(item.revenue / maxRevenue) * 100}%` }}
-              />
-            </div>
-          </div>
-          <span className="text-sm font-medium text-gray-900 w-20 text-right">
-           {formatPounds(item.revenue)}
-          </span>
-        </div>
-      ))}
+    <div className="h-80 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart
+          data={chartData}
+          margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+        >
+          <defs>
+            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.8}/>
+              <stop offset="95%" stopColor="#4F46E5" stopOpacity={0.1}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+          <XAxis 
+            dataKey="date" 
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis 
+            tickFormatter={(value) => `£${value.toLocaleString()}`} 
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            axisLine={false}
+            width={80}
+          />
+          <Tooltip 
+            contentStyle={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+            }}
+            formatter={(value: number) => [formatPounds(Number(value)), 'Revenue']}
+            labelFormatter={(label) => `Date: ${label}`}
+          />
+          <Area 
+            type="monotone" 
+            dataKey="revenue" 
+            name="Revenue" 
+            stroke="#4F46E5"
+            fillOpacity={1}
+            fill="url(#colorRevenue)"
+            strokeWidth={2}
+            activeDot={{ r: 6, strokeWidth: 2 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -228,33 +285,16 @@ function TopCategoriesList({ categories }: { categories: DashboardData['topCateg
   );
 }
 
-// Sales by Category Chart Component
+// Sales by Category Chart Component - Using the SalesCategoryPieChart component
 function SalesByCategoryChart({ data }: { data: DashboardData['salesByCategory'] }) {
-  const totalSales = data.reduce((sum, category) => sum + category.sales, 0);
-  
   return (
-    <div className="space-y-3">
-      {data.map((category, index) => (
-        <div key={category.categoryId}>
-          <div className="flex justify-between text-sm mb-1">
-            <span className="font-medium text-gray-900">{category.categoryName}</span>
-            <span className="text-gray-600">
-            {formatPounds(Number(category.sales.toFixed(2)))} ({(category.sales / totalSales * 100).toFixed(1)}%)
-            </span>
-          </div>
-          <div className="bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-purple-600 rounded-full h-2 transition-all duration-300"
-              style={{ width: `${(category.sales / totalSales) * 100}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>{category.orderCount} orders</span>
-            <span>{category.itemsSold} items sold</span>
-          </div>
-        </div>
-      ))}
-    </div>
+    <SalesCategoryPieChart initialData={data.map(category => ({
+      categoryId: category.categoryId,
+      categoryName: category.categoryName,
+      sales: category.sales,
+      orderCount: category.orderCount,
+      itemsSold: category.itemsSold
+    }))} />
   );
 }
 
