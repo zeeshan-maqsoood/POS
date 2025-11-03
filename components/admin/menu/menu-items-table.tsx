@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, Pencil, Trash2, MoreHorizontal, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
+import { menuItemApi } from "@/lib/menu-api"
 interface MenuItemsTableProps {
   data: Array<MenuItem & { cost?: number } & { branch?: { id: string; name: string; restaurantId?: string } | null }>
   onEdit?: (id: string) => void
@@ -77,7 +78,7 @@ export function MenuItemsTable({
       cell: ({ row }) => {
         const menuItem = row.original;
         return (
-          <div className="relative" ref={menuRef}>
+          <div className="relative menu-actions-container" ref={menuRef}>
             <Button 
               variant="ghost" 
               size="icon"
@@ -103,12 +104,12 @@ export function MenuItemsTable({
                       className="text-gray-700 hover:bg-gray-100 hover:text-gray-900 group flex w-full items-center px-4 py-2 text-sm"
                       onClick={(e) => {
                         e.stopPropagation();
+                        e.preventDefault();
                         setOpenMenuId(null);
-                        if (onEdit) {
-                          onEdit(menuItem.id);
-                        } else {
-                          window.location.href = `/dashboard/menu/items/edit/${menuItem.id}`;
-                        }
+                        // Use a small timeout to ensure the menu is closed before navigation
+                        setTimeout(() => {
+                          handleEdit(menuItem.id);
+                        }, 100);
                       }}
                     >
                       <Pencil className="mr-3 h-4 w-4 text-gray-500 group-hover:text-gray-600" />
@@ -121,10 +122,12 @@ export function MenuItemsTable({
                       className="text-red-600 hover:bg-red-50 group flex w-full items-center px-4 py-2 text-sm"
                       onClick={(e) => {
                         e.stopPropagation();
+                        e.preventDefault();
                         setOpenMenuId(null);
-                        if (confirm('Are you sure you want to delete this item?')) {
-                          onDelete(menuItem.id);
-                        }
+                        // Use a small timeout to ensure the menu is closed before action
+                        setTimeout(() => {
+                          handleDelete(menuItem.id);
+                        }, 100);
                       }}
                     >
                       <Trash2 className="mr-3 h-4 w-4 text-red-500 group-hover:text-red-600" />
@@ -143,7 +146,11 @@ export function MenuItemsTable({
   // Handle clicks outside the menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      // Only close if clicking outside the menu and not on a menu button
+      const target = event.target as HTMLElement;
+      const isMenuButton = target.closest('.menu-actions-container');
+      
+      if (menuRef.current && !menuRef.current.contains(target) && !isMenuButton) {
         setOpenMenuId(null);
       }
     };
@@ -168,6 +175,40 @@ export function MenuItemsTable({
       window.removeEventListener('resize', handleScrollOrResize);
     };
   }, []);
+
+  // Handle edit action
+  const handleEdit = (id: string) => {
+    console.log('Edit clicked for item:', id);
+    if (onEdit) {
+      console.log('Using parent onEdit handler');
+      onEdit(id);
+    } else {
+      console.log('Using default edit navigation');
+      window.location.href = `/dashboard/menu/items/edit/${id}`;
+    }
+  };
+
+  // Handle delete action
+  const handleDelete = (id: string) => {
+    console.log('Delete clicked for item:', id);
+    if (onDelete) {
+      console.log('Using parent onDelete handler');
+      onDelete(id);
+    } else if (confirm('Are you sure you want to delete this item?')) {
+      console.log('Using direct delete API call');
+      // If no onDelete handler is provided, try to delete directly
+      menuItemApi.deleteItem(id)
+        .then(() => {
+          console.log('Item deleted successfully');
+          // Refresh the page or update the state as needed
+          window.location.reload();
+        })
+        .catch(error => {
+          console.error('Failed to delete menu item:', error);
+          alert('Failed to delete menu item. Please try again.');
+        });
+    }
+  };
 
   if (isLoading) {
     return (

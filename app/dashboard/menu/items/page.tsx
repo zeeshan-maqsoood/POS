@@ -80,6 +80,10 @@ console.log(user,"userprofile")
     }
   }, [userLoading, user, isAdmin])
 
+  const handleEdit = (id: string) => {
+    window.location.href = `/dashboard/menu/items/edit/${id}`;
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this menu item?")) return
 
@@ -89,6 +93,7 @@ console.log(user,"userprofile")
         title: "Success",
         description: "Menu item deleted successfully.",
       })
+      fetchMenuItems() // Refresh the list
     } catch (err) {
       console.error("Failed to delete menu item:", err)
       toast({
@@ -181,6 +186,7 @@ console.log(user,"userprofile")
           ) : (
             <MenuItemsTable
               data={menuItems}
+              onEdit={handleEdit}
               onDelete={handleDelete}
               onToggleStatus={handleToggleStatus}
               isLoading={isLoading}
