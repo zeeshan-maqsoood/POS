@@ -747,7 +747,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
       <header className="bg-white shadow-sm p-2 sm:p-4 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center justify-between w-full sm:w-auto">
@@ -759,7 +759,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
               </Button>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Point of Sale</h1>
             </div>
-            <div className="sm:hidden">
+            <div className="md:hidden">
               <Button
                 variant="outline"
                 size="sm"
@@ -781,7 +781,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <div className="relative w-full sm:w-1/3 mt-2 sm:mt-0">
+            <div className="relative w-full sm:w-80 mt-2 sm:mt-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
@@ -853,7 +853,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
         </div>
 
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 md:static md:z-10 md:w-2/5 bg-white border-t md:border-l border-gray-200 shadow-lg md:shadow-none flex flex-col transition-transform duration-300 ease-in-out transform translate-y-full md:translate-y-0"
+          className="fixed bottom-0 left-0 right-0 z-50 md:static md:z-10 md:w-2/5 bg-white border-t md:border-l border-gray-200 shadow-lg md:shadow-none flex flex-col transition-transform duration-300 ease-in-out transform md:translate-y-0"
           style={{
             height: '80vh',
             maxHeight: 'calc(100vh - 4rem)',
@@ -864,7 +864,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           id="order-summary-panel"
         >
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:overflow-hidden md:flex">
             <div className="h-full flex flex-col">
               <OrderSummary
                 cart={cart}
