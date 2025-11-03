@@ -807,7 +807,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
         </div>
       </header>
 
-      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden h-[calc(100vh-4rem)]">
         <div className="w-full md:w-3/5 p-2 sm:p-4 md:p-6 overflow-y-auto">
           <div className="mb-4 sm:mb-6">
             <div className="overflow-x-auto pb-2">
@@ -853,7 +853,7 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
         </div>
 
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 md:static md:z-10 md:w-2/5 bg-white border-t md:border-l border-gray-200 shadow-lg md:shadow-none flex flex-col transition-transform duration-300 ease-in-out transform md:translate-y-0"
+          className="fixed bottom-0 left-0 right-0 z-50 md:relative md:z-10 md:w-2/5 bg-white border-t md:border-l border-gray-200 shadow-lg md:shadow-none flex flex-col transition-transform duration-300 ease-in-out transform md:translate-y-0"
           style={{
             height: '80vh',
             maxHeight: 'calc(100vh - 4rem)',
@@ -864,8 +864,8 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
           id="order-summary-panel"
         >
 
-          <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:overflow-hidden md:flex">
-            <div className="h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:overflow-y-auto md:flex">
+            <div className="h-full w-full flex flex-col">
               <OrderSummary
                 cart={cart}
                 onUpdateCart={setCart}
