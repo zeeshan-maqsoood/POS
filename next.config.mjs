@@ -19,12 +19,9 @@ const nextConfig = {
   // Enable server-side rendering
   output: 'standalone',
 
-  // Experimental features
+  // Experimental features (removed deprecated options)
   experimental: {
-    // Disable server components if not needed
-    serverComponents: false,
-    // Disable server actions if not needed
-    serverActions: false,
+    // Add any current experimental features here if needed
   },
 
   // Generate build ID
