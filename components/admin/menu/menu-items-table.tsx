@@ -25,6 +25,8 @@ export function MenuItemsTable({
   onToggleStatus, 
   isLoading = false 
 }: MenuItemsTableProps) {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   type MenuItemWithCost = MenuItem & { cost?: number } & { branch?: { id: string; name: string; restaurantId?: string } | null };
   const columns: ColumnDef<MenuItemWithCost>[] = [
     {
@@ -73,86 +75,40 @@ export function MenuItemsTable({
     {
       id: "actions",
       cell: ({ row }) => {
-        const menuItem = row.original
+        const menuItem = row.original;
         return (
-          <div className="relative menu-actions-container">
+          <div className="relative" ref={menuRef}>
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-8 w-8 p-0 hover:bg-gray-100 relative menu-actions-container"
+              className="h-8 w-8 p-0 hover:bg-gray-100"
               onClick={(e) => {
                 e.stopPropagation();
-                const button = e.currentTarget as HTMLElement;
-                const buttonRect = button.getBoundingClientRect();
-                const menu = document.getElementById(`menu-${menuItem.id}`);
-                
-                // Close all menus first
-                closeAllMenus();
-                
-                if (menu) {
-                  // Calculate available space below the button
-                  const spaceBelow = window.innerHeight - buttonRect.bottom;
-                  const menuHeight = 180; // Approximate height of the menu
-                  
-                  // Position the menu above or below based on available space
-                  if (spaceBelow < menuHeight && buttonRect.top > menuHeight) {
-                    // Not enough space below, show above
-                    menu.style.top = `${buttonRect.top + window.scrollY - menuHeight - 5}px`;
-                  } else {
-                    // Enough space below, show below
-                    menu.style.top = `${buttonRect.bottom + window.scrollY}px`;
-                  }
-                  
-                  // Align right edge with button
-                  menu.style.right = `${window.innerWidth - buttonRect.right}px`;
-                  
-                  // Show the menu
-                  menu.classList.remove('hidden');
-                }
+                setOpenMenuId(openMenuId === menuItem.id ? null : menuItem.id);
               }}
             >
-              <span className="sr-only">Open menu</span>
               <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
             </Button>
             
-            {/* Custom Dropdown */}
-            <div 
-              id={`menu-${menuItem.id}`}
-              className="fixed z-50 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden menu-dropdown"
-              role="menu"
-              aria-orientation="vertical"
-              aria-labelledby="menu-button"
-              tabIndex={-1}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: 'fixed',
-                right: 0,
-                zIndex: 50,
-                width: '12rem',
-                backgroundColor: 'white',
-                borderRadius: '0.375rem',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                outline: 'none',
-                maxHeight: '60vh',
-                overflowY: 'auto',
-              }}
-            >
-              <div className="py-1" role="none">
-
-                {/* Single Edit Button */}
-                <div className="py-1" role="none">
+            {openMenuId === menuItem.id && (
+              <div 
+                className="absolute right-0 z-50 mt-2 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5"
+                role="menu"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="py-1">
                   <PermissionGate required="MENU_UPDATE" disableInsteadOfHide>
                     <button
-                      className="text-gray-700 hover:bg-gray-100 hover:text-gray-900 group flex items-center px-4 py-2 text-sm w-full text-left"
-                      role="menuitem"
+                      className="text-gray-700 hover:bg-gray-100 hover:text-gray-900 group flex w-full items-center px-4 py-2 text-sm"
                       onClick={(e) => {
-                        e.preventDefault();
                         e.stopPropagation();
-                        closeAllMenus();
-                        // Small delay to ensure menu is hidden before navigation
-                        setTimeout(() => {
+                        setOpenMenuId(null);
+                        if (onEdit) {
+                          onEdit(menuItem.id);
+                        } else {
                           window.location.href = `/dashboard/menu/items/edit/${menuItem.id}`;
-                        }, 100);
+                        }
                       }}
                     >
                       <Pencil className="mr-3 h-4 w-4 text-gray-500 group-hover:text-gray-600" />
@@ -162,68 +118,56 @@ export function MenuItemsTable({
 
                   <PermissionGate required="MENU_DELETE" disableInsteadOfHide>
                     <button
+                      className="text-red-600 hover:bg-red-50 group flex w-full items-center px-4 py-2 text-sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        closeAllMenus();
+                        setOpenMenuId(null);
                         if (confirm('Are you sure you want to delete this item?')) {
                           onDelete(menuItem.id);
                         }
                       }}
-                      className="text-red-600 hover:bg-red-50 group flex items-center px-4 py-2 text-sm w-full text-left"
-                      role="menuitem"
                     >
                       <Trash2 className="mr-3 h-4 w-4 text-red-500 group-hover:text-red-600" />
                       Delete Item
                     </button>
                   </PermissionGate>
-
-                  {/* Toggle Status Button */}
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )
       },
     },
   ]
 
-  // Close menu when clicking outside or when the component unmounts
+  // Handle clicks outside the menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.menu-actions-container')) {
-        closeAllMenus();
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
       }
     };
 
-    // Close all menus when scrolling
-    const handleScroll = () => {
-      closeAllMenus();
-    };
-
-    // Close all menus when the window is resized
-    const handleResize = () => {
-      closeAllMenus();
-    };
-
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleResize);
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleResize);
-      closeAllMenus();
     };
   }, []);
 
-  // Function to close all open menus
-  const closeAllMenus = () => {
-    document.querySelectorAll('.menu-dropdown').forEach(menu => {
-      menu.classList.add('hidden');
-    });
-  };
+  // Close menu when scrolling or resizing
+  useEffect(() => {
+    const handleScrollOrResize = () => {
+      setOpenMenuId(null);
+    };
+
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, []);
 
   if (isLoading) {
     return (
