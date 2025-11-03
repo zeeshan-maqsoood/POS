@@ -151,16 +151,12 @@ export function useBranches({ filterByBranchName }: UseBranchesProps = {}) {
           }
           
           console.log('useBranches: Final branches data:', branchesData);
-          setBranches(branchesData);
-          
-          console.log('useBranches: Processed active branches:', branchesData);
           
           if (branchesData.length > 0) {
-            console.log('useBranches: Setting branches from active branches API');
+            console.log('useBranches: Setting branches from API');
             setBranches(branchesData);
-            return;
           } else {
-            console.warn('useBranches: No active branches found');
+            console.warn('useBranches: No branches found');
           }
         } catch (err) {
           console.error('Failed to load branches:', err);
