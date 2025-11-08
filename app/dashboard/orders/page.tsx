@@ -1020,7 +1020,6 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate, onEditOrder 
                     <div className="relative w-full max-w-[200px] sm:w-40">
                       <select
                         disabled={updatingOrderId === order.id}
-
                         style={{
                           WebkitAppearance: 'none' as const,
                           MozAppearance: 'none' as const,
@@ -1028,23 +1027,27 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate, onEditOrder 
                         }}
                         value={order.status}
                         onChange={(e) => handleStatusUpdate(order.id, e.target.value as OrderStatus)}
-                        title={order.status.charAt(0) + order.status.slice(1).toLowerCase().replace('_', ' ')}
+                        title={order.status.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')}
+                        className="w-full px-3 py-1.5 text-sm border rounded-md bg-white text-gray-900"
                       >
                         {updatingOrderId === order.id ? (
-                          <option value="updating-status">Updating...</option>
+                          <option value="">Updating...</option>
                         ) : (
-                          Object.values(OrderStatus)
-                            .filter(status => status !== order.status)
-                            .map((status) => (
+                          Object.values(OrderStatus).map((status) => {
+                            const displayText = status.split('_').map(w => 
+                              w.charAt(0) + w.slice(1).toLowerCase()
+                            ).join(' ');
+                            
+                            return (
                               <option
                                 key={status}
                                 value={status}
-                                className="bg-white text-gray-900 truncate"
-                                title={status.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')}
+                                className="bg-white text-gray-900"
                               >
-                                {status.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')}
+                                {displayText}
                               </option>
-                            ))
+                            );
+                          })
                         )}
                       </select>
                       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
