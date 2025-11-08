@@ -287,19 +287,26 @@ console.log(initialData,"initialData")
         branchId: initialData.branchId,
         branchName: initialData.branchName
       });
-      // Set restaurantId if available in initial data
-      if (initialData.restaurantId) {
-        console.log('Setting restaurantId:', initialData.restaurantId);
-        form.setValue('restaurantId', initialData.restaurantId, { shouldValidate: true });
-      }
-      // Set branchId if available in initial data
+      
+      // Set initial form values
+      form.reset({
+        name: initialData.name || "",
+        description: initialData.description || "",
+        imageUrl: initialData.imageUrl || "",
+        isActive: initialData.isActive ?? true,
+        branchId: initialData.branchId || "",
+        restaurantId: initialData.restaurantId || ""
+      });
+      
+      setFormInitialized(true);
+    } else if (initialData && !isAdmin) {
+      // For non-admin users, ensure branch is set if available
       if (initialData.branchId) {
-        console.log('Setting branchId:', initialData.branchId);
         form.setValue('branchId', initialData.branchId, { shouldValidate: true });
       }
       setFormInitialized(true);
     }
-  }, [initialData?.restaurantId, initialData?.branchId, isAdmin, form]);
+  }, [initialData, isAdmin, form]);
 
   // Trigger validation after a short delay to ensure all fields are properly initialized
   React.useEffect(() => {
@@ -318,13 +325,27 @@ console.log(initialData,"initialData")
         console.log("Fetching restaurants...");
         const response = await restaurantApi.getRestaurantsForDropdown();
         console.log("Restaurant API response:", response);
-        console.log("Response data:", response?.data?.data);
-        console.log("Response data type:", typeof response?.data?.data);
-        console.log("Is array?", Array.isArray(response?.data?.data));
-
+        
         const restaurantsData = Array.isArray(response?.data?.data) ? response.data.data : [];
         console.log("Processed restaurants data:", restaurantsData);
         setRestaurants(restaurantsData);
+        
+        // If we have initialData with a restaurantId, set it after restaurants are loaded
+        if (initialData?.restaurantId) {
+          console.log('Setting restaurant after fetch:', initialData.restaurantId);
+          // Use setTimeout to ensure the select component is rendered before setting the value
+          setTimeout(() => {
+            form.setValue('restaurantId', initialData.restaurantId, { shouldValidate: true });
+            
+            // Also set the branch if available
+            if (initialData.branchId) {
+              console.log('Setting branch after restaurant:', initialData.branchId);
+              form.setValue('branchId', initialData.branchId, { shouldValidate: true });
+            }
+          }, 0);
+        }
+        
+        setFormInitialized(true);
       } catch (error) {
         console.error("Error fetching restaurants:", error);
         setRestaurants([]);
@@ -332,7 +353,7 @@ console.log(initialData,"initialData")
     };
 
     fetchRestaurants();
-  }, []);
+  }, [initialData?.restaurantId, initialData?.branchId]);
   // Fetch branches when restaurant is selected
   React.useEffect(() => {
     const selectedRestaurantId = form.watch("restaurantId");
@@ -357,7 +378,7 @@ console.log(initialData,"initialData")
 
   // Also fetch branches when initial data is loaded for editing
   React.useEffect(() => {
-    if (initialData && initialData.restaurantId && isAdmin) {
+    if (initialData?.restaurantId && isAdmin) {
       console.log('Fetching branches for initial restaurant (editing):', initialData.restaurantId);
       branchApi.getBranchesByRestaurant(initialData.restaurantId).then((res) => {
         const restaurantBranches = Array.isArray(res?.data?.data) ? res.data.data : [];
@@ -368,12 +389,18 @@ console.log(initialData,"initialData")
         }));
         setFilteredBranches(mappedBranches);
         console.log('Set filtered branches:', mappedBranches);
+        
+        // Ensure the branch is selected after branches are loaded
+        if (initialData.branchId) {
+          console.log('Setting branch after branches loaded:', initialData.branchId);
+          form.setValue('branchId', initialData.branchId, { shouldValidate: true });
+        }
       }).catch((error) => {
         console.error("Error fetching branches for initial restaurant:", error);
         setFilteredBranches([]);
       });
     }
-  }, [initialData?.restaurantId, isAdmin]);
+  }, [initialData?.restaurantId, initialData?.branchId, isAdmin, form]);
 
   const handleApiError = (error: any) => {
     console.error("API Error:", error);
@@ -658,31 +685,43 @@ console.log(initialData,"initialData")
                 <FormField
                   control={form.control}
                   name="restaurantId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Restaurant *</FormLabel>
-                      <Select
-                        key={`restaurant-${formInitialized}-${restaurants.length}`}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isLoading}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a restaurant" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {restaurants.map((restaurant) => (
-                            <SelectItem key={restaurant.id} value={restaurant.id}>
-                              {restaurant.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    console.log('Restaurant field value:', field.value);
+                    return (
+                      <FormItem>
+                        <FormLabel>Restaurant *</FormLabel>
+                        <Select
+                          key={`restaurant-${formInitialized}-${restaurants.length}`}
+                          onValueChange={(value) => {
+                            console.log('Restaurant selected:', value);
+                            field.onChange(value);
+                            // Reset branch when restaurant changes
+                            form.setValue('branchId', '');
+                            setFilteredBranches([]);
+                          }}
+                          value={field.value || ''}
+                          disabled={isLoading}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a restaurant" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {restaurants.map((restaurant) => (
+                              <SelectItem 
+                                key={restaurant.id} 
+                                value={restaurant.id}
+                              >
+                                {restaurant.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
                 <FormField
                   control={form.control}

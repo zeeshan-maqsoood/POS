@@ -55,6 +55,12 @@ export default function OrdersPage() {
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([]);
   const [restaurantsLoaded, setRestaurantsLoaded] = useState(false);
   const [orderToPrint, setOrderToPrint] = useState<Order | null>(null);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    pageSize: 10,
+    totalItems: 0,
+    totalPages: 1
+  });
   const { hasRole, user } = usePermissions();
   const router = useRouter();
   const isKitchenStaff = hasRole('KITCHEN_STAFF');
@@ -173,7 +179,7 @@ export default function OrdersPage() {
   //     setLoading(false);
   //   }
   // };
-  const fetchOrders = async (status?: OrderStatus | 'ALL') => {
+  const fetchOrders = async (status?: OrderStatus | 'ALL', page: number = 1) => {
     try {
       let branchName: string | undefined;
       
@@ -181,7 +187,6 @@ export default function OrdersPage() {
         const branch = filteredBranches.find(branch => branch.id === selectedBranch);
         branchName = branch?.name;
         
-        // If we have a selected branch but couldn't find its name, log an error
         if (selectedBranch && !branchName) {
           console.error('Selected branch not found in filteredBranches', {
             selectedBranch,
@@ -193,37 +198,57 @@ export default function OrdersPage() {
       console.log('=== FETCH ORDERS DEBUG ===');
       console.log('selectedRestaurant:', selectedRestaurant);
       console.log('selectedBranch:', selectedBranch);
-      console.log('filteredBranches:', filteredBranches);
       console.log('branchName to send:', branchName);
       console.log('status:', status);
+      console.log('page:', page, 'pageSize:', pagination.pageSize);
 
+      // Only fetch the current page of orders
       const response = await orderApi.getOrders({
         status: status === 'ALL' ? undefined : status,
         branchName: branchName,
         restaurantId: selectedRestaurant === 'all' ? undefined : selectedRestaurant || undefined,
-        page: 1,
-        pageSize: 100,
+        page: page,
+        pageSize: pagination.pageSize,
         sortBy: 'createdAt',
-        sortOrder: 'desc'
+        sortOrder: 'desc',
+        // Add these parameters to ensure server-side pagination
+        skip: (page - 1) * pagination.pageSize,
+        take: pagination.pageSize
       });
 
       console.log('Orders API Response:', response);
       
       let ordersList: any[] = [];
+      let totalItems = 0;
       
       // Handle different response formats
       if (Array.isArray(response.data)) {
+        // If the API returns a simple array, we can't do proper pagination
+        console.warn('API returned a simple array. Consider updating the API to support pagination.');
         ordersList = response.data;
+        totalItems = response.data.length;
       } else if (response.data && Array.isArray(response.data.data)) {
+        // Handle paginated response with data and meta
         ordersList = response.data.data;
-      } else if (response.data && response.data.data && Array.isArray(response.data.data.data)) {
+        totalItems = response.data.meta?.total || response.data.total || 0;
+      } else if (response.data?.data && Array.isArray(response.data.data.data)) {
+        // Handle nested paginated response
         ordersList = response.data.data.data;
+        totalItems = response.data.data.meta?.total || response.data.data.total || 0;
       }
       
       console.log('Parsed orders list:', ordersList);
       setOrders(ordersList);
       
-      // If no orders found, log it
+      // Update pagination
+      const totalPages = Math.ceil(totalItems / pagination.pageSize);
+      setPagination(prev => ({
+        ...prev,
+        currentPage: page,
+        totalItems,
+        totalPages: Math.max(1, totalPages) // Ensure at least 1 page
+      }));
+      
       if (ordersList.length === 0) {
         console.log('No orders found with current filters');
       }
@@ -235,7 +260,25 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
-  // Fetch orders when activeTab, selectedRestaurant, or selectedBranch changes
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > pagination.totalPages) return;
+    setPagination(prev => ({ ...prev, currentPage: page }));
+    fetchOrders(activeTab, page);
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newSize = parseInt(e.target.value, 10);
+    setPagination(prev => ({
+      ...prev,
+      pageSize: newSize,
+      currentPage: 1, // Reset to first page when changing page size
+      totalPages: Math.ceil(prev.totalItems / newSize)
+    }));
+  };
+
+  // Fetch orders when activeTab, selectedRestaurant, selectedBranch, or pagination changes
   useEffect(() => {
     const loadData = async () => {
       if (!restaurantsLoaded) return;
@@ -244,12 +287,22 @@ export default function OrdersPage() {
         activeTab,
         selectedRestaurant,
         selectedBranch,
-        hasBranches: filteredBranches.length > 0
+        hasBranches: filteredBranches.length > 0,
+        page: pagination.currentPage,
+        pageSize: pagination.pageSize
       });
       
       setLoading(true);
       try {
-        await fetchOrders(activeTab);
+        // Always fetch the first page when filters change
+        if (pagination.currentPage !== 1) {
+          // If we're not already on page 1, reset to page 1
+          setPagination(prev => ({ ...prev, currentPage: 1 }));
+          await fetchOrders(activeTab, 1);
+        } else {
+          // If we're already on page 1, just refetch
+          await fetchOrders(activeTab, 1);
+        }
       } catch (error) {
         console.error('Failed to fetch orders:', error);
       } finally {
@@ -263,6 +316,24 @@ export default function OrdersPage() {
     
     return () => clearTimeout(timer);
   }, [activeTab, selectedRestaurant, selectedBranch, restaurantsLoaded]);
+  
+  // Handle page changes separately to avoid unnecessary refetches
+  useEffect(() => {
+    if (!restaurantsLoaded) return;
+    
+    const loadPage = async () => {
+      setLoading(true);
+      try {
+        await fetchOrders(activeTab, pagination.currentPage);
+      } catch (error) {
+        console.error('Failed to fetch orders:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadPage();
+  }, [pagination.currentPage, pagination.pageSize]);
 
   // Fetch branches for selected restaurant
   const fetchBranchesForRestaurant = async (restaurantId: string) => {
@@ -615,7 +686,7 @@ export default function OrdersPage() {
               {!isKitchenStaff && (
                 <StatsCard
                   title="Total Revenue"
-                  value={`£${(stats.totalRevenue ?? 0)}`}
+                  value={`£${(stats.totalRevenue.toFixed(2) ?? 0)}`}
                   description="Total revenue from all orders"
                 />
               )}
@@ -706,19 +777,69 @@ export default function OrdersPage() {
                 }}
                 onEditOrder={handleEditOrder}
               />
-            ) : (
-// ...
-              <div className="text-center py-12 border rounded-lg">
-                <p className="text-muted-foreground">No orders found</p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => setActiveTab("ALL")}
-                >
-                  View All Orders
-                </Button>
+              
+              {/* Pagination Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Items per page:</span>
+                  <select
+                    value={pagination.pageSize}
+                    onChange={handlePageSizeChange}
+                    className="h-8 w-16 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                  >
+                    {[5, 10, 20, 50, 100].map(size => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(1)}
+                    disabled={pagination.currentPage === 1}
+                  >
+                    «
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={pagination.currentPage === 1}
+                  >
+                    ‹
+                  </Button>
+                  
+                  <span className="px-2 text-sm">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={pagination.currentPage >= pagination.totalPages}
+                  >
+                    ›
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.totalPages)}
+                    disabled={pagination.currentPage >= pagination.totalPages}
+                  >
+                    »
+                  </Button>
+                </div>
+                
+                <div className="text-sm text-muted-foreground">
+                  {pagination.totalItems} total orders
+                </div>
               </div>
-            )}
+            
           </TabsContent>
         </Tabs>
       </div>

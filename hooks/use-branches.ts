@@ -55,12 +55,8 @@ export function useBranches({ filterByBranchName }: UseBranchesProps = {}) {
           restaurantName: 'All Restaurants'
         };
 
-        // Add 'All Branches' option if no specific branch filter is set
-        if (!filterByBranchName) {
-          branchesData.push(allBranchesOption);
-        }
         // If we have a branch name filter, try to get that specific branch
-        else if (filterByBranchName) {
+        if (filterByBranchName) {
           console.log('useBranches: Filtering branches by name:', filterByBranchName);
           try {
             const response = await branchApi.getAllBranches();
@@ -78,7 +74,7 @@ export function useBranches({ filterByBranchName }: UseBranchesProps = {}) {
               branchesData = [{
                 id: filteredBranch.id,
                 name: filteredBranch.name,
-                value: filteredBranch.id, // Using ID as value for consistency
+                value: filteredBranch.id,
                 restaurantId: filteredBranch.restaurantId,
                 restaurantName: filteredBranch.restaurant?.name || 'No Restaurant'
               }];
@@ -89,7 +85,7 @@ export function useBranches({ filterByBranchName }: UseBranchesProps = {}) {
             } else {
               console.warn('useBranches: No branch found with filter, using all branches:', filterByBranchName);
               // If no specific branch found, fall back to all branches
-              branchesData = [allBranchesOption];
+              branchesData = [];
             }
           } catch (err) {
             console.error('useBranches: Error filtering branches by name:', err);
@@ -123,13 +119,25 @@ export function useBranches({ filterByBranchName }: UseBranchesProps = {}) {
           
           console.log('useBranches: Extracted dropdown branches:', dropdownBranches);
           
-          // Map the dropdown branches to the Branch interface
-          const mappedBranches = dropdownBranches.map(branch => {
-            // Create a basic branch with required fields
+          // Create a Set to track unique branch IDs
+          const uniqueBranchIds = new Set<string>();
+          
+          // Map the dropdown branches to the Branch interface and filter duplicates
+          const mappedBranches = dropdownBranches.reduce<Branch[]>((acc, branch) => {
+            // Skip if we've already seen this branch ID
+            if (uniqueBranchIds.has(branch.id)) {
+              console.log(`useBranches: Skipping duplicate branch ID: ${branch.id}`);
+              return acc;
+            }
+            
+            // Add this branch ID to our set
+            uniqueBranchIds.add(branch.id);
+            
+            // Create the branch data
             const branchData: Branch = {
               id: branch.id,
               name: branch.name,
-              value: branch.value || branch.id, // Use value if available, otherwise fall back to id
+              value: branch.value || branch.id,
               restaurantName: branch.restaurantName || 'No Restaurant'
             };
 
@@ -138,13 +146,17 @@ export function useBranches({ filterByBranchName }: UseBranchesProps = {}) {
               branchData.restaurantId = (branch as any).restaurantId;
             }
             
-            return branchData;
-          });
+            return [...acc, branchData];
+          }, []);
           
-          // If we have branches, add them to the list
+          console.log('useBranches: Mapped branches after deduplication:', mappedBranches);
+          
+          // If we have branches, use them
           if (mappedBranches.length > 0) {
-            // If we already have branchesData (like 'All Branches'), append the new ones
-            branchesData = [...branchesData, ...mappedBranches];
+            // Add 'All Branches' as the first option if no specific branch filter is set
+            branchesData = !filterByBranchName 
+              ? [allBranchesOption, ...mappedBranches] 
+              : mappedBranches;
           } else if (branchesData.length === 0) {
             // If no branches found and no default, just add the all branches option
             branchesData = [allBranchesOption];

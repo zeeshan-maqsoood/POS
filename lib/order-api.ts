@@ -52,6 +52,8 @@ export enum OrderStatus {
   READY_FOR_PICKUP = "READY_FOR_PICKUP",
   COMPLETED = "COMPLETED",
   CANCELLED = "CANCELLED",
+  // REFUNDED = "REFUNDED",
+ 
 }
 
 export interface Order {

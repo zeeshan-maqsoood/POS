@@ -13,7 +13,8 @@ import {
   ArrowRight,
   TrendingUp,
   AlertTriangle,
-  Clock
+  Clock,
+  Receipt
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -66,6 +67,13 @@ const reportSections = [
     icon:Clock,
     href:'/dashboard/reports/time-analytics',
     color:'bg-indigo-50 text-indigo-600'
+  },
+  {
+    title: 'Day End Report',
+    description: 'Daily cash reconciliation and sales summary',
+    icon: Receipt,
+    href: '/dashboard/reports/day-end',
+    color: 'bg-amber-50 text-amber-600'
   }
 ];
 

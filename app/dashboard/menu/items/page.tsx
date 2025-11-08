@@ -85,24 +85,46 @@ console.log(user,"userprofile")
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this menu item?")) return
+    if (!confirm("Are you sure you want to delete this menu item?")) return;
 
+    // Store the current items in case we need to revert
+    const previousItems = [...menuItems];
+    
+    // Optimistically update the UI by removing the item from the local state
+    setMenuItems(prevItems => prevItems.filter(item => item.id !== id));
+    
     try {
-      await menuItemApi.deleteItem(id)
-      toast({
-        title: "Success",
-        description: "Menu item deleted successfully.",
-      })
-      fetchMenuItems() // Refresh the list
-    } catch (err) {
-      console.error("Failed to delete menu item:", err)
+      const response = await menuItemApi.deleteItem(id);
+      
+      if (response.data?.success) {
+        toast({
+          title: "Success",
+          description: response.data.message || "Menu item deleted successfully.",
+        });
+      } else {
+        // If the server returns success: false
+        throw new Error(response.data?.message || 'Failed to delete menu item');
+      }
+    } catch (err: any) {
+      console.error("Failed to delete menu item:", err);
+      
+      // Revert the optimistic update if the deletion fails
+      setMenuItems(previousItems);
+      
+      let errorMessage = "Failed to delete menu item. ";
+      if (err.response?.data?.message) {
+        errorMessage += err.response.data.message;
+      } else if (err.message) {
+        errorMessage += err.message;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to delete menu item.",
+        description: errorMessage,
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleToggleStatus = async (id: string, isAvailable: boolean) => {
     try {

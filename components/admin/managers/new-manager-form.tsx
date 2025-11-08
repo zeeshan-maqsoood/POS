@@ -1026,12 +1026,12 @@ export function ManagerForm({ initialData, isEditing = false, onSubmit, onCancel
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
+                      {/* <SelectItem value="ADMIN">Admin</SelectItem> */}
                       <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="CASHIER">Cashier</SelectItem>
-                      <SelectItem value="WAITER">Waiter</SelectItem>
+                      {/* <SelectItem value="CASHIER">Cashier</SelectItem>
+                      <SelectItem value="WAITER">Waiter</SelectItem> */}
                       <SelectItem value="KITCHEN_STAFF">Kitchen Staff</SelectItem>
-                      <SelectItem value="USER">User</SelectItem>
+                      {/* <SelectItem value="USER">User</SelectItem> */}
                     </SelectContent>
                   </Select>
                   <FormMessage />

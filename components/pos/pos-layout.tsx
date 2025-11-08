@@ -684,8 +684,6 @@ export function POSLayout({ editOrderData }: POSLayoutProps) {
 
     setCart([]);
     await fetchOccupiedTables();
-
-    toast.success(editOrderData?.data?.id ? 'Order updated successfully!' : 'Order placed successfully!');
   };
 
   const clearSearch = () => {

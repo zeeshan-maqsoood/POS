@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import PermissionGate from '@/components/auth/permission-gate';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { PaymentCalculator } from './payment-calculator';
 import { orderApi, PaymentMethod, OrderStatus, OrderType } from '@/lib/order-api';
 import { useSocket } from '@/contexts/SocketContext';
 import {
@@ -18,7 +19,7 @@ import {
 import { CartItem, MenuItem } from '@/lib/types';
 import { restaurantApi, Restaurant } from '@/lib/restaurant-api';
 import { branchApi, Branch } from '@/lib/branch-api';
-
+import { PaymentStatus } from '@/lib/order-api';
 interface OrderSummaryProps {
   cart: CartItem[];
   onUpdateCart: (items: CartItem[]) => void;
@@ -89,14 +90,35 @@ export function OrderSummary({
   userBranchId,
 }: OrderSummaryProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [lastOrder, setLastOrder] = useState<any>(null);
   const [showPrintView, setShowPrintView] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [lastOrder, setLastOrder] = useState<any>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isCafe, setIsCafe] = useState(false);
   const { socket } = useSocket();
 
   const isManager = userRole === 'MANAGER';
 
   // Auto-select restaurant and branch for managers
+  // Check if selected restaurant is a cafe
+  useEffect(() => {
+    const checkIfCafe = async () => {
+      if (selectedRestaurant) {
+        try {
+          const response = await restaurantApi.getRestaurantById(selectedRestaurant);
+console.log(response,"restaurantResponse")
+          if (response?.data) {
+            setIsCafe(response.data?.data?.businessType === 'CAFE');
+          }
+        } catch (error) {
+          console.error('Error fetching restaurant details:', error);
+        }
+      }
+    };
+
+    checkIfCafe();
+  }, [selectedRestaurant]);
+
   useEffect(() => {
     if (isManager && userRestaurantId && !selectedRestaurant) {
       onRestaurantChange(userRestaurantId);
@@ -180,7 +202,19 @@ export function OrderSummary({
     }, 0);
   }, [cart]);
 
-  const handlePlaceOrder = async () => {
+  const handlePaymentComplete = async (amountPaid: number, change: number) => {
+    setShowPaymentModal(false);
+    await handlePlaceOrder(amountPaid, change);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+    }).format(amount);
+  };
+
+  const handlePlaceOrder = async (amountPaid?: number, change: number = 0) => {
     // Update order
     if (isEditMode && editOrderData?.id) {
       try {
@@ -254,6 +288,13 @@ export function OrderSummary({
           }
         }
 
+        const paymentInfo = amountPaid !== undefined ? {
+          amountPaid,
+          change,
+          paymentMethod: PaymentMethod.CASH,
+          paymentStatus: 'PAID' as const
+        } : {};
+
         const payload = {
           tableNumber: orderType === 'DINE_IN' ? tableNumber : null,
           customerName: customerName || null,
@@ -263,7 +304,11 @@ export function OrderSummary({
           subtotal: cartTotal,
           total: cartTotal,
           orderType,
-          status: OrderStatus.PENDING,
+          status: amountPaid !== undefined ? OrderStatus.COMPLETED : OrderStatus.PENDING,
+          notes: amountPaid !== undefined 
+            ? `Paid: ${formatCurrency(amountPaid)}, Change: ${formatCurrency(change)}`
+            : '',
+          ...paymentInfo,
           _printData: {
             isUpdate: true,
             updatedItems: updatedItems,
@@ -271,7 +316,9 @@ export function OrderSummary({
           }
         };
 
-        const res = await orderApi.updateOrder(editOrderData.id, payload);
+        // Remove non-order properties before sending to API
+        const { _printData, ...orderData } = payload;
+        const res = await orderApi.updateOrder(editOrderData.id, orderData);
         if (res?.data?.data) {
           toast.success('Order updated successfully!');
           const updatedOrder = {
@@ -326,18 +373,24 @@ export function OrderSummary({
         branchName: (selectedBranch && branches.find(branch => branch.id === selectedBranch)?.name) || '',
         restaurantId: selectedRestaurant || undefined,
         subtotal: cartTotal,
+        tax: 0, // Add default tax value
         total: cartTotal,
-        status: OrderStatus.PENDING,
+        status: amountPaid !== undefined ? OrderStatus.COMPLETED : OrderStatus.PENDING,
         orderType,
-        notes: '',
-      } as const;
-
-      const res = await orderApi.createOrder(payload as any);
+        notes: amountPaid !== undefined 
+          ? `Paid: ${formatCurrency(amountPaid)}, Change: ${formatCurrency(change)}`
+          : '',
+        paymentStatus: amountPaid !== undefined ? 'PAID' : 'PENDING'
+      };
+      const res = await orderApi.createOrder(payload);
       if (res?.data?.data) {
         setLastOrder(res.data.data);
         if (socket) {
           socket.emit('new-order', {
-            order: { ...payload, branchId: selectedBranch },
+            order: { 
+              ...payload, 
+              branchName: selectedBranch 
+            },
             createdByRole: userRole,
           });
         }
@@ -345,7 +398,7 @@ export function OrderSummary({
         const orderData = res.data.data;
         onOrderPlaced?.(orderData.id, orderData);
         setLastOrder(orderData);
-        setShowPrintView(true);
+        // setShowPrintView(true);
         toast.success('Order placed successfully!');
       } else {
         toast.error('Failed to place order');
@@ -1133,18 +1186,22 @@ export function OrderSummary({
   useEffect(() => {
     if (lastOrder) {
       if (!isEditMode) {
-        // Auto-print the receipt for new orders
-        const timer = setTimeout(() => {
-          handleDirectPrint(lastOrder, false, []);
-        }, 500);
-        
-        return () => clearTimeout(timer);
+        // Auto-print the receipt for new orders, but not for cafes
+        if (!isCafe) {
+          const timer = setTimeout(() => {
+            handleDirectPrint(lastOrder, false, []);
+          }, 500);
+          
+          return () => clearTimeout(timer);
+        }
       } else if (lastOrder._printData?.isUpdate) {
-        // For updated orders, show the print dialog with only the updated items
-        setShowPrintView(true);
+        // For updated orders, show the print dialog with only the updated items, but not for cafes
+        if (!isCafe) {
+          setShowPrintView(true);
+        }
       }
     }
-  }, [lastOrder, isEditMode, handleDirectPrint]);
+  }, [lastOrder, isEditMode, handleDirectPrint, isCafe]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -1224,7 +1281,8 @@ export function OrderSummary({
                     {lastOrder._printData?.isUpdate ? 'NEW ITEMS' : 'ORDER ITEMS'}
                   </div>
                   {(lastOrder._printData?.isUpdate ? 
-                    getNewItems(lastOrder._printData?.updatedItems, lastOrder._printData?.originalItems) : 
+                    
+                    (lastOrder._printData?.updatedItems, lastOrder._printData?.originalItems) : 
                     lastOrder.items || []
                   ).map((item: any, index: number) => (
                     <div key={index} className="flex justify-between text-sm mb-1">
@@ -1426,27 +1484,75 @@ export function OrderSummary({
 
         <div className="space-y-2">
           <PermissionGate required={['ORDER_CREATE', 'POS_UPDATE']} disableInsteadOfHide>
-            <Button
-              className="w-full mt-3"
-              size="lg"
-              onClick={handlePlaceOrder}
-              disabled={
-                isPlacingOrder || 
-                cart.length === 0 ||
-                !selectedRestaurant ||
-                !selectedBranch ||
-                (orderType === 'DINE_IN' && !tableNumber && !isManager) ||
-                (orderType === 'TAKEAWAY' && !customerName.trim() && !isManager)
-              }
-            >
-              {isPlacingOrder ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
-                </>
-              ) : (
-                `Place Order ( £${cartTotal.toFixed(2)})`
-              )}
-            </Button>
+            {isCafe ? (
+              <>
+                <Button
+                  className="w-full mt-3"
+                  size="lg"
+                  onClick={() => setShowPaymentModal(true)}
+                  disabled={
+                    isPlacingOrder || 
+                    cart.length === 0 ||
+                    !selectedRestaurant ||
+                    !selectedBranch ||
+                    (orderType === 'DINE_IN' && !tableNumber && !isManager) ||
+                    (orderType === 'TAKEAWAY' && !customerName.trim() && !isManager)
+                  }
+                >
+                  {isPlacingOrder ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
+                    </>
+                  ) : (
+                    `Pay Now ( £${cartTotal.toFixed(2)})`
+                  )}
+                </Button>
+
+                {showPaymentModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-lg bg-white p-6">
+                      <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Payment</h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowPaymentModal(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <PaymentCalculator
+                        totalAmount={cartTotal}
+                        onPaymentComplete={handlePaymentComplete}
+                        onCancel={() => setShowPaymentModal(false)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <Button
+                className="w-full mt-3"
+                size="lg"
+                onClick={() => handlePlaceOrder()}
+                disabled={
+                  isPlacingOrder || 
+                  cart.length === 0 ||
+                  !selectedRestaurant ||
+                  !selectedBranch ||
+                  (orderType === 'DINE_IN' && !tableNumber && !isManager) ||
+                  (orderType === 'TAKEAWAY' && !customerName.trim() && !isManager)
+                }
+              >
+                {isPlacingOrder ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Placing...
+                  </>
+                ) : (
+                  `Place Order ( £${cartTotal.toFixed(2)})`
+                )}
+              </Button>
+            )}
           </PermissionGate>
 
           {cart.length > 0 && (

@@ -258,6 +258,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                     ? "bg-black text-white shadow-lg shadow-primary/25"
                     : "text-muted-foreground hover:bg-black hover:text-white lg:text-sidebar-foreground lg:hover:bg-black lg:hover:text-white"
                 )}
+                onClick={() => setIsOpen(false)}
               >
                 <item.icon className="mr-3 h-5 w-5 group-hover:scale-110 transition-transform" />
                 {item.name}

@@ -173,40 +173,53 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
   const [isIngredientDropdownOpen, setIsIngredientDropdownOpen] = React.useState(false)
   const [ingredientSearchTerm, setIngredientSearchTerm] = React.useState("")
 
+  // Set default values based on initialData
+  const defaultValues = React.useMemo(() => ({
+    name: "",
+    description: "",
+    price: 0,
+    isRequired: false,
+    isActive: true,
+    type: "SINGLE" as const,
+    minSelection: 0,
+    maxSelection: 1,
+    restaurantId: isAdmin ? "" : (getUserRestaurantId() || ""),
+    branchId: isAdmin ? "" : (getUserBranchId() || ""),
+    ingredients: [],
+    ...(initialData ? {
+      ...initialData,
+      price: typeof initialData.price === 'number' ? initialData.price : Number(initialData.price || 0),
+      minSelection: typeof initialData.minSelection === 'number' ? initialData.minSelection : Number(initialData.minSelection || 0),
+      maxSelection: typeof initialData.maxSelection === 'number' ? initialData.maxSelection : Number(initialData.maxSelection || 1),
+      restaurantId: initialData.restaurantId || (user?.restaurant?.id || ''),
+      branchId: initialData.branchId || (getBranchId(user?.branch) || ''),
+      type: initialData.type || "SINGLE",
+      ingredients: initialData.modifierIngredients?.map((ing: any) => ({
+        id: ing.id || uuidv4(),
+        inventoryItemId: ing.inventoryItemId,
+        name: ing.inventoryItem?.name || "Unknown",
+        quantity: ing.quantity || 1,
+        unit: ing.unit || "units",
+      })) || [],
+    } : {})
+  }), [initialData, isAdmin, user]);
+
   const form = useForm<ModifierFormValues>({
     resolver: zodResolver(modifierFormSchema),
-    mode: 'onChange', // Enable validation on change
-    defaultValues: initialData
-      ? {
-          ...initialData,
-          price: typeof initialData.price === 'number' ? initialData.price : Number(initialData.price || 0),
-          minSelection: typeof initialData.minSelection === 'number' ? initialData.minSelection : Number(initialData.minSelection || 0),
-          maxSelection: typeof initialData.maxSelection === 'number' ? initialData.maxSelection : Number(initialData.maxSelection || 1),
-          restaurantId: initialData.restaurantId || (user?.restaurant?.id || ''),
-          branchId: initialData.branchId || (getBranchId(user?.branch) || ''),
-          type: initialData.type || "SINGLE",
-          ingredients: initialData.modifierIngredients?.map((ing: any) => ({
-            id: ing.id,
-            inventoryItemId: ing.inventoryItemId,
-            name: ing.inventoryItem?.name || "Unknown",
-            quantity: ing.quantity,
-            unit: ing.unit || "units",
-          })) || [],
-        }
-      : {
-          name: "",
-          description: "",
-          price: 0,
-          isRequired: false,
-          isActive: true,
-          type: "SINGLE" as const,
-          minSelection: 0,
-          maxSelection: 1,
-          restaurantId: isAdmin ? "" : (getUserRestaurantId() || ""),
-          branchId: isAdmin ? "" : (getUserBranchId() || ""),
-          ingredients: [],
-        },
-  })
+    mode: 'onChange',
+    defaultValues,
+    shouldUnregister: false,
+  });
+
+  // Log form errors for debugging
+  React.useEffect(() => {
+    const subscription = form.watch((value, { name, type }) => {
+      if (Object.keys(form.formState.errors).length > 0) {
+        console.log('Form validation errors:', form.formState.errors);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   const { fields: ingredientFields, append, remove } = useFieldArray({
     control: form.control,
@@ -712,8 +725,12 @@ export function ModifierForm({ initialData, onSuccess, onCancel }: ModifierFormP
             </Button>
             <Button 
               type="submit" 
-              disabled={isLoading || !isValid}
-              title={!isValid ? 'Please fill in all required fields' : 'Save modifier'}
+              disabled={isLoading || !form.formState.isValid}
+              title={!form.formState.isValid ? 
+                Object.entries(form.formState.errors)
+                  .map(([field, error]) => `${field}: ${error?.message || 'Invalid'}`)
+                  .join('\n') 
+                : 'Save modifier'}
             >
               {isLoading ? (
                 <>

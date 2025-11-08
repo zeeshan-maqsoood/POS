@@ -232,7 +232,7 @@ export function SalesCategoryPieChart({ initialData }: SalesCategoryPieChartProp
                   />
                   <span className="truncate">{entry.categoryName}</span>
                   <span className="ml-auto font-medium">
-                    {formatPounds(entry.sales)}
+                    {formatPounds(entry.value)}
                   </span>
                 </div>
               ))}

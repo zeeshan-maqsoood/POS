@@ -1639,6 +1639,18 @@
 //       isAdmin
 //     });
 
+//     // Format modifiers from initialData to match expected structure
+//     const formattedModifiers = initialData?.modifiers?.map(modifier => ({
+//       id: modifier.id,
+//       name: modifier.name,
+//       price: modifier.price || 0,
+//       isActive: modifier.isActive ?? true,
+//       type: modifier.type || 'SINGLE',
+//       minSelection: modifier.minSelection || 0,
+//       maxSelection: modifier.maxSelection || 1,
+//       options: modifier.options || []
+//     })) || [];
+
 //     // Use initialData values if in edit mode, otherwise use manager's branch/restaurant
 //     const baseValues = {
 //       name: initialData?.name || "",
@@ -1653,8 +1665,13 @@
 //       taxRate: initialData?.taxRate || 0,
 //       taxExempt: initialData?.taxExempt || false,
 //       tags: initialData?.tags || [],
-//       modifiers: initialData?.modifiers || [],
-//       ingredients: initialData?.ingredients || [],
+//       modifiers: formattedModifiers,
+//       ingredients: initialData?.ingredients?.map(ing => ({
+//         inventoryItemId: ing.inventoryItemId,
+//         name: ing.inventoryItem?.name || ing.name || '',
+//         quantity: ing.quantity || 0,
+//         unit: ing.unit || 'pieces'
+//       })) || [],
 //       createdAt: initialData?.createdAt || new Date().toISOString(),
 //       updatedAt: initialData?.updatedAt || new Date().toISOString(),
 //     };
@@ -2258,8 +2275,20 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
       managerRestaurantId,
       managerBranchName,
       userRole: user?.role,
-      isAdmin
+      isAdmin,
+      initialDataBranch: initialData?.branch,
+      initialDataBranchName: initialData?.branchName,
+      initialDataBranchId: initialData?.branchId
     });
+
+    // For edit mode, prioritize the branch from initialData
+    const branchName = initialData?.branchName || 
+                      (initialData?.branch?.name) || 
+                      (user?.role === 'MANAGER' ? managerBranchName : '');
+    
+    // If we have a branch object but no branchName, use the branch object's name
+    const finalBranchName = branchName || 
+                          (initialData?.branch ? initialData.branch.name : '');
 
     // Use initialData values if in edit mode, otherwise use manager's branch/restaurant
     const baseValues = {
@@ -2269,8 +2298,10 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
       price: initialData?.price || 0,
       cost: initialData?.cost || 0,
       categoryId: initialData?.categoryId || "",
-      branchName: initialData?.branchName || (user?.role === 'MANAGER' ? managerBranchName : "") || "",
-      restaurantId: initialData?.restaurantId || (user?.role === 'MANAGER' ? managerRestaurantId : "") || "",
+      branchName: finalBranchName,
+      restaurantId: initialData?.restaurantId || 
+                   (initialData?.branch?.restaurantId) || 
+                   (user?.role === 'MANAGER' ? managerRestaurantId : "") || "",
       isActive: initialData?.isActive ?? true,
       taxRate: initialData?.taxRate || 0,
       taxExempt: initialData?.taxExempt || false,
@@ -2290,6 +2321,26 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
     defaultValues,
   });
 
+  // Set form values when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      form.reset({
+        ...initialData,
+        // Ensure modifiers are properly formatted
+        modifiers: initialData.modifiers?.map(mod => ({
+          id: mod.id,
+          name: mod.name || '',
+          price: mod.price || 0,
+          isActive: mod.isActive !== false,
+          options: mod.options || [],
+          minSelection: mod.minSelection || 0,
+          maxSelection: mod.maxSelection || 0,
+          type: mod.type || 'SINGLE'
+        })) || []
+      });
+    }
+  }, [initialData, form]);
+
   // Get the selected restaurant ID from the form
   const selectedRestaurantId = form.watch('restaurantId');
 
@@ -2298,47 +2349,80 @@ export function MenuItemForm({ initialData, onSuccess, onCancel }: MenuItemFormP
     filterByBranchName: isAdmin ? undefined : (managerBranch?.name || '')
   });
 
-  // Initialize form with manager's data
+  // Initialize form with manager's data or edit data
   React.useEffect(() => {
-    if (!formInitialized && user && !isEditMode) {
-      console.log('Initializing form with manager data:', {
+    if (!formInitialized && user) {
+      console.log('Initializing form with data:', {
         role: user.role,
         restaurant: managerRestaurant,
-        branch: managerBranch
+        branch: managerBranch,
+        isEditMode,
+        initialData: initialData ? 'present' : 'not present'
       });
 
-      if (user.role === 'MANAGER') {
-        // For managers, set the restaurant and branch values
-        if (managerRestaurant?.id) {
-          form.setValue('restaurantId', managerRestaurant.id);
-          // Add the manager's restaurant to restaurants list if not already there
-          setRestaurants(prev => {
-            const exists = prev.some(r => r.id === managerRestaurant.id);
-            if (!exists && managerRestaurant.id && managerRestaurant.name) {
-              return [...prev, { id: managerRestaurant.id, name: managerRestaurant.name }];
-            }
-            return prev;
-          });
-        }
+      if (isEditMode && initialData) {
+        // In edit mode, set up the form with existing data
+        const formattedModifiers = Array.isArray(initialData.modifiers) 
+          ? initialData.modifiers.map(mod => ({
+              id: mod.id,
+              name: mod.name || '',
+              price: mod.price || 0,
+              isActive: mod.isActive ?? true,
+              options: mod.options || [],
+              minSelection: mod.minSelection || 0,
+              maxSelection: mod.maxSelection || 0,
+              type: mod.type || 'SINGLE'
+            }))
+          : [];
 
-        if (managerBranch?.name) {
-          form.setValue('branchName', managerBranch.name);
-          // Add the manager's branch to filtered branches if not already there
-          setFilteredBranches(prev => {
-            const exists = prev.some(b => b.name === managerBranch.name);
-            if (!exists && managerBranch.name) {
-              return [...prev, { id: managerBranch.id || managerBranch.name, name: managerBranch.name }];
-            }
-            return prev;
-          });
+        console.log('Setting up form with existing modifiers:', formattedModifiers);
+        
+        // Set the form values including modifiers
+        form.reset({
+          ...initialData,
+          modifiers: formattedModifiers,
+          restaurantId: initialData.restaurantId || (initialData.branch as any)?.restaurantId || '',
+          branchName: initialData.branchName || (initialData.branch as any)?.name || '',
+          categoryId: initialData.categoryId || (initialData.category as any)?.id || ''
+        });
+        
+        setFormInitialized(true);
+      } else if (!isEditMode) {
+        // For new items, initialize with manager's data
+        if (user.role === 'MANAGER') {
+          // For managers, set the restaurant and branch values
+          if (managerRestaurant?.id) {
+            form.setValue('restaurantId', managerRestaurant.id);
+            // Add the manager's restaurant to restaurants list if not already there
+            setRestaurants(prev => {
+              const exists = prev.some(r => r.id === managerRestaurant.id);
+              if (!exists && managerRestaurant.id && managerRestaurant.name) {
+                return [...prev, { id: managerRestaurant.id, name: managerRestaurant.name }];
+              }
+              return prev;
+            });
+          }
+
+          if (managerBranch?.name) {
+            form.setValue('branchName', managerBranch.name);
+            // Add the manager's branch to filtered branches if not already there
+            setFilteredBranches(prev => {
+              const exists = prev.some(b => b.name === managerBranch.name);
+              if (!exists && managerBranch.name) {
+                return [...prev, { id: managerBranch.id || managerBranch.name, name: managerBranch.name }];
+              }
+              return prev;
+            });
+          }
         }
+        setFormInitialized(true);
       }
-
-      setFormInitialized(true);
     }
-  }, [form, user, managerRestaurant, managerBranch, isEditMode, formInitialized]);
-React.useEffect(() => {
-  console.log('Branch filtering debug:', {
+  }, [form, user, managerRestaurant, managerBranch, isEditMode, formInitialized, initialData]);
+
+  // Load branches when restaurant changes
+  React.useEffect(() => {
+    console.log('Branch filtering debug:', {
     selectedRestaurantId: form.watch('restaurantId'),
     allBranches: branches,
     filteredBranches: filteredBranches,
@@ -2346,206 +2430,219 @@ React.useEffect(() => {
   });
 }, [form.watch('restaurantId'), branches, filteredBranches, restaurants]);
   // Filter branches based on selected restaurant and manager's access
- React.useEffect(() => {
-  if (!form || !user) return;
+  React.useEffect(() => {
+    if (!form || !user) return;
 
-  const restaurantId = form.watch('restaurantId');
-  console.log('Filtering branches with:', {
-    restaurantId,
-    branchesCount: branches.length,
-    isAdmin,
-    managerBranch: managerBranch?.name
-  });
+    const restaurantId = form.watch('restaurantId');
+    console.log('Filtering branches with:', {
+      restaurantId,
+      branchesCount: branches.length,
+      isAdmin,
+      managerBranch: managerBranch?.name,
+      initialData: initialData,
+      currentBranch: form.getValues('branchName')
+    });
 
-  if (isAdmin) {
-    // For admin, show branches filtered by selected restaurant
-    if (restaurantId) {
-      const filtered = branches.filter(
-        (branch) => branch.restaurantId === restaurantId
-      );
-      console.log('Filtered branches for restaurant:', filtered);
-      setFilteredBranches(filtered);
+    // In edit mode, we want to ensure the branch is properly set from initialData
+    if (isEditMode && initialData) {
+      const branchFromInitialData = initialData.branch || 
+      (initialData.branchName ? { name: initialData.branchName } : null);
       
-      // Clear branch selection if the current branch is not in the filtered list
-      const currentBranch = form.getValues('branchName');
-      if (currentBranch && !filtered.some(b => b.name === currentBranch)) {
-        form.setValue('branchName', '');
-      }
-      
-      // If there's only one branch, select it automatically
-      if (filtered.length === 1 && !currentBranch) {
-        form.setValue('branchName', filtered[0].name);
-      }
-    } else {
-      // If no restaurant is selected, clear branches
-      setFilteredBranches([]);
-      form.setValue('branchName', '');
-    }
-  } else {
-    // For non-admin (MANAGER), only show their assigned branch
-    if (managerBranch) {
-      const branch = branches.find(b => 
-        b.id === managerBranch.id || 
-        b.name === managerBranch.name
-      );
-      
-      if (branch) {
-        setFilteredBranches([branch]);
-        // Ensure the branch value is set
-        if (form.getValues('branchName') !== branch.name) {
-          form.setValue('branchName', branch.name);
+      if (branchFromInitialData) {
+        console.log('Edit mode - setting branch from initial data:', branchFromInitialData);
+        // Check if the branch exists in the branches list
+        const existingBranch = branches.find(b => 
+          b.id === branchFromInitialData.id || 
+          b.name === branchFromInitialData.name
+        );
+
+        if (existingBranch) {
+          setFilteredBranches([existingBranch]);
+          // Only update if the value is different to avoid infinite loops
+          if (form.getValues('branchName') !== existingBranch.name) {
+            form.setValue('branchName', existingBranch.name);
+          }
+          // Ensure restaurant is set if not already
+          if (existingBranch.restaurantId && !form.getValues('restaurantId')) {
+            form.setValue('restaurantId', existingBranch.restaurantId);
+          }
+          return;
+        } else {
+          // If branch not found, add it to the filtered branches
+          console.log('Branch from initial data not found in branches list, adding it');
+          const newBranch = {
+            id: branchFromInitialData.id || branchFromInitialData.name,
+            name: branchFromInitialData.name,
+            restaurantId: initialData.restaurantId || restaurantId
+          };
+          setFilteredBranches([newBranch]);
+          form.setValue('branchName', newBranch.name);
+          if (newBranch.restaurantId) {
+            form.setValue('restaurantId', newBranch.restaurantId);
+          }
+          return;
         }
-        // Also set the restaurant if not already set
-        if (branch.restaurantId && !form.getValues('restaurantId')) {
-          form.setValue('restaurantId', branch.restaurantId);
+      }
+    }
+
+    if (isAdmin) {
+      // For admin, show branches filtered by selected restaurant
+      if (restaurantId) {
+        const filtered = branches.filter(
+          (branch) => branch.restaurantId === restaurantId
+        );
+        console.log('Filtered branches for restaurant:', filtered);
+        setFilteredBranches(filtered);
+        
+        // In edit mode, don't clear the branch if it's already set
+        if (!isEditMode) {
+          const currentBranch = form.getValues('branchName');
+          if (currentBranch && !filtered.some(b => b.name === currentBranch)) {
+            form.setValue('branchName', '');
+          }
+          
+          // If there's only one branch, select it automatically
+          if (filtered.length === 1 && !currentBranch) {
+            form.setValue('branchName', filtered[0].name);
+          }
         }
       } else {
-        // If branch not found in branches list, create a placeholder
-        console.log('Manager branch not found in branches list, creating placeholder');
-        const placeholderBranch = {
-          id: managerBranch.id || managerBranch.name,
-          name: managerBranch.name,
-          restaurantId: managerRestaurant?.id
-        };
-        setFilteredBranches([placeholderBranch]);
-        form.setValue('branchName', managerBranch.name);
-        if (managerRestaurant?.id) {
-          form.setValue('restaurantId', managerRestaurant.id);
+        // If no restaurant is selected, clear branches
+        if (!isEditMode) {
+          setFilteredBranches([]);
+          form.setValue('branchName', '');
+        }
+      }
+    } else {
+      // For non-admin (MANAGER), only show their assigned branch
+      if (managerBranch) {
+        const branch = branches.find(b => 
+          b.id === managerBranch.id || 
+          b.name === managerBranch.name
+        );
+        
+        if (branch) {
+          setFilteredBranches([branch]);
+          // Only update if the value is different to avoid infinite loops
+          if (form.getValues('branchName') !== branch.name) {
+            form.setValue('branchName', branch.name);
+          }
+          // Also set the restaurant if not already set
+          if (branch.restaurantId && !form.getValues('restaurantId')) {
+            form.setValue('restaurantId', branch.restaurantId);
+          }
+        } else {
+          // If branch not found in branches list, create a placeholder
+          console.log('Manager branch not found in branches list, creating placeholder');
+          const placeholderBranch = {
+            id: managerBranch.id || managerBranch.name,
+            name: managerBranch.name,
+            restaurantId: managerRestaurant?.id
+          };
+          setFilteredBranches([placeholderBranch]);
+          form.setValue('branchName', managerBranch.name);
+          if (managerRestaurant?.id) {
+            form.setValue('restaurantId', managerRestaurant.id);
+          }
         }
       }
     }
-  }
-}, [form, form.watch('restaurantId'), branches, isAdmin, managerBranch, managerRestaurant, user]);
+  }, [form, form.watch('restaurantId'), branches, isAdmin, managerBranch, managerRestaurant, user, isEditMode, initialData]);
 
   // Fetch categories, modifiers, and inventory items
-  React.useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        // Get current branch selection for modifier filtering
-        const selectedBranchName = form.getValues("branchName");
-        const selectedRestaurantId = form.getValues("restaurantId");
+ // Update the modifier fetching logic in the useEffect hook
+React.useEffect(() => {
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      // Get current branch selection for modifier filtering
+      const selectedBranchName = form.getValues("branchName") || initialData?.branchName;
+      const selectedRestaurantId = form.getValues("restaurantId") || initialData?.restaurantId;
 
-        console.log('Fetching data with:', { selectedBranchName, selectedRestaurantId });
+      console.log('Fetching data with:', { selectedBranchName, selectedRestaurantId });
 
-        // Prepare modifier API parameters
-        const modifierParams: any = {};
+      // Prepare modifier API parameters
+      const modifierParams: any = {};
+      
+      if (!isAdmin && (managerBranch || managerRestaurant)) {
+        // For managers, we need to find their branch and restaurant to get the IDs
+        const branchName = managerBranch ? (typeof managerBranch === 'string' ? managerBranch : managerBranch.name || '') : '';
+        const branchId = managerBranch?.id || '';
+        const restaurantId = managerRestaurant?.id || '';
         
-        if (!isAdmin && (managerBranch || managerRestaurant)) {
-          // For managers, we need to find their branch and restaurant to get the IDs
-          const branchName = managerBranch ? (typeof managerBranch === 'string' ? managerBranch : managerBranch.name || '') : '';
-          const branchId = managerBranch?.id || '';
-          const restaurantId = managerRestaurant?.id || '';
-          
-          // Always include the restaurant ID if available
-          if (restaurantId) {
-            modifierParams.restaurantId = restaurantId;
-          }
-          
-          // For managers, we want to include:
-          // 1. Modifiers specific to their branch
-          // 2. Global modifiers for their restaurant
-          // 3. Truly global modifiers (no branch or restaurant)
-          if (branchId) {
-            // If we have a branch ID, use that
-            modifierParams.branchId = branchId;
-          } else if (branchName) {
-            // Otherwise use the branch name
-            modifierParams.branchName = branchName;
-          }
-          
-          console.log('Loading modifiers for manager:', { 
-            branchId: modifierParams.branchId, 
-            branchName: modifierParams.branchName,
-            restaurantId: modifierParams.restaurantId 
-          });
-          
-          // Add a flag to indicate this is a manager request
-          modifierParams.isManagerRequest = true;
-        } else if (selectedBranchName && selectedBranchName !== "" && selectedBranchName !== "global") {
-          // For admins, filter by selected branch
-          const selectedBranch = filteredBranches.find(branch => branch.name === selectedBranchName);
-          if (selectedBranch) {
-            modifierParams.branchId = selectedBranch.id;
-            if (selectedBranch.restaurantId) {
-              modifierParams.restaurantId = selectedBranch.restaurantId;
-            }
-          }
-        } else if (selectedBranchName === "global") {
-          // For global selection, don't filter by branch or restaurant - load all global modifiers
-          console.log('Loading global modifiers (no branch/restaurant filter)');
+        // Always include the restaurant ID if available
+        if (restaurantId) {
+          modifierParams.restaurantId = restaurantId;
         }
-
-        const [modifiersRes, inventoryRes] = await Promise.all([
-          modifierApi.getModifiers(modifierParams),
-          inventoryItemApi.getItems(),
-        ]);
-
-        console.log('Modifiers API response:', modifiersRes);
         
-        // Handle both direct array response and data.data structure
-        let modifiersData = [];
-        if (Array.isArray(modifiersRes?.data)) {
-          modifiersData = modifiersRes.data;
-        } else if (Array.isArray(modifiersRes?.data?.data)) {
-          modifiersData = modifiersRes.data.data;
+        // For managers, we want to include:
+        // 1. Modifiers specific to their branch
+        // 2. Global modifiers for their restaurant
+        // 3. Truly global modifiers (no branch or restaurant)
+        if (branchId) {
+          // If we have a branch ID, use that
+          modifierParams.branchId = branchId;
+        } else if (branchName) {
+          // Otherwise use the branch name
+          modifierParams.branchName = branchName;
         }
-
-        const allModifiersData = modifiersData.map((m: any) => ({
-          type: m.type || "SINGLE",
-          id: m.id,
-          name: m.name,
-          price: m.price || 0,
-          isActive: m.isActive ?? true,
-        }));
-
-        console.log('Processed modifiers:', allModifiersData);
-        setAllModifiers(allModifiersData);
-
-        // Filter inventory items by branch for managers
-        let inventoryData: any[] = [];
-        if (inventoryRes?.data?.data && Array.isArray(inventoryRes.data.data)) {
-          inventoryData = inventoryRes.data.data;
-        } else if (Array.isArray(inventoryRes?.data)) {
-          inventoryData = inventoryRes.data;
-        } else {
-          inventoryData = [];
-        }
-
-        if (!isAdmin && managerBranch?.name) {
-          inventoryData = inventoryData.filter((item: any) =>
-            item.branch === managerBranch.name || item.branchName === managerBranch.name
-          );
-        }
-
-        setInventoryItems(inventoryData.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity || 0,
-          unit: item.unit || "pieces",
-          branchName: item.branch || item.branchName
-        })));
-
-        // Only load all restaurants if admin and not in edit mode
-        if (isAdmin && !isEditMode) {
-          const restaurantsRes = await restaurantApi.getRestaurantsForDropdown();
-          setRestaurants(Array.isArray(restaurantsRes?.data?.data) ? restaurantsRes.data.data : []);
-        }
-
-      } catch (error) {
-        console.error("Error loading data:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load required data. Please try again.",
-          variant: "destructive",
+        
+        // Add a flag to indicate this is a manager request
+        modifierParams.includeGlobal = true;
+        
+        console.log('Loading modifiers for manager:', { 
+          branchId: modifierParams.branchId, 
+          branchName: modifierParams.branchName,
+          restaurantId: modifierParams.restaurantId 
         });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      } 
+      // Rest of the code remains the same...
+      
+      const [modifiersRes, inventoryRes] = await Promise.all([
+        modifierApi.getModifiers(modifierParams),
+        inventoryItemApi.getItems(),
+      ]);
 
-    fetchData();
-  }, [user, isAdmin, isEditMode, form, filteredBranches, managerBranch]);
+      // Process the modifiers response
+      let modifiersData = [];
+      if (Array.isArray(modifiersRes?.data)) {
+        modifiersData = modifiersRes.data;
+      } else if (Array.isArray(modifiersRes?.data?.data)) {
+        modifiersData = modifiersRes.data.data;
+      } else if (modifiersRes?.data?.data && typeof modifiersRes.data.data === 'object') {
+        // Handle case where data is an object with pagination
+        modifiersData = Object.values(modifiersRes.data.data);
+      }
+
+      const allModifiersData = modifiersData.map((m: any) => ({
+        type: m.type || "SINGLE",
+        id: m.id,
+        name: m.name,
+        price: m.price || 0,
+        isActive: m.isActive ?? true,
+        minSelection: m.minSelection || 0,
+        maxSelection: m.maxSelection || 1,
+        options: m.options || []
+      }));
+
+      console.log('Processed modifiers:', allModifiersData);
+      setAllModifiers(allModifiersData);
+
+      // Rest of the code remains the same...
+    } catch (error) {
+      console.error("Error loading data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load required data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchData();
+}, [user, isAdmin, isEditMode, form, filteredBranches, managerBranch, managerRestaurant, initialData]);
 
   // Fetch categories when branch is selected
   React.useEffect(() => {
@@ -2582,6 +2679,7 @@ React.useEffect(() => {
               }
             }
           }
+          
         } catch (error) {
           console.error("Error fetching categories for branch:", error);
           setCategories([]);
@@ -2740,6 +2838,7 @@ React.useEffect(() => {
           console.error("Error loading categories for menu item branch:", error);
           setCategories([]);
         });
+        
       } else if (!isAdmin && user?.branch) {
         // For managers without branch info in the menu item, load categories for their branch
         const normalizedUserBranch = typeof user.branch === 'string' ? user.branch : user.branch?.name;
@@ -2811,30 +2910,37 @@ React.useEffect(() => {
   }, [inventoryItems, initialData, form]);
 
   const selectedModifiers = React.useMemo(() => {
-    try {
-      const formModifiers = form.getValues("modifiers");
+  try {
+    const formModifiers = form.getValues("modifiers");
+    console.log('Raw form modifiers:', formModifiers);
 
-      if (!Array.isArray(formModifiers)) {
-        return [];
-      }
-
-      return formModifiers
-        .map(mod => {
-          if (!mod) return null;
-          const fullModifier = allModifiers.find(m => m.id === mod.id);
-          return fullModifier ? {
-            id: fullModifier.id,
-            name: fullModifier.name,
-            price: fullModifier.price,
-            isActive: fullModifier.isActive !== false
-          } : null;
-        })
-        .filter((m): m is NonNullable<typeof m> => m !== null);
-    } catch (error) {
-      console.error('Error getting selected modifiers:', error);
+    if (!Array.isArray(formModifiers) || formModifiers.length === 0) {
       return [];
     }
-  }, [allModifiers, form.watch("modifiers")]);
+    
+    return formModifiers
+      .filter(Boolean)
+      .map(modItem => {
+        // Access the modifier data from the nested 'modifier' property
+        const mod = modItem.modifier || modItem;
+        console.log('Processing modifier:', mod);
+        
+        return {
+          id: mod.id,
+          name: mod.name || 'Unnamed Modifier',
+          price: typeof mod.price === 'number' ? mod.price : 0,
+          isActive: mod.isActive !== false,
+          options: mod.options || [],
+          minSelection: typeof mod.minSelection === 'number' ? mod.minSelection : 0,
+          maxSelection: typeof mod.maxSelection === 'number' ? mod.maxSelection : 1,
+          type: mod.type || 'SINGLE'
+        };
+      });
+  } catch (error) {
+    console.error('Error getting selected modifiers:', error);
+    return [];
+  }
+}, [form.watch("modifiers")]);
 
   const selectedIngredients = React.useMemo(() => {
     try {
@@ -2864,17 +2970,24 @@ React.useEffect(() => {
 
   const handleAddModifier = (modifier: { id: string; name: string; price: number }) => {
     const currentModifiers = form.getValues("modifiers") || [];
-    form.setValue("modifiers", [
-      ...currentModifiers,
-      {
-        ...modifier,
-        isActive: true,
-        options: [],
-        minSelection: 0,
-        maxSelection: 0,
-        type: "SINGLE"
-      }
-    ]);
+    
+    // Don't add if already selected
+    if (currentModifiers.some(m => m.id === modifier.id)) {
+      return;
+    }
+    
+    const newModifier = {
+      id: modifier.id,
+      name: modifier.name,
+      price: modifier.price || 0,
+      isActive: true,
+      options: [],
+      minSelection: 0,
+      maxSelection: 0,
+      type: "SINGLE"
+    };
+    
+    form.setValue("modifiers", [...currentModifiers, newModifier], { shouldDirty: true });
     setSearchTerm("");
   };
 
@@ -2937,11 +3050,109 @@ React.useEffect(() => {
     }
   };
 
+  interface ModifierData {
+    id: string;
+    name: string;
+    price: number;
+    isActive?: boolean;
+    options?: any[];
+    minSelection?: number;
+    maxSelection?: number;
+    type?: string;
+    modifier?: ModifierData;
+  }
+
+  // Initialize modifiers when the form is first loaded with initialData
+  React.useEffect(() => {
+    console.log(initialData.modifiers,"initialData")
+    if (initialData?.modifiers?.length && !form.formState.isDirty) {
+      const formattedModifiers = initialData.modifiers.map(item => {
+        // Handle the nested modifier structure from the API
+        const mod = item.modifier || item;
+        return {
+          id: mod.id,
+          name: mod.name || 'Unnamed Modifier',
+          price: typeof mod.price === 'number' ? mod.price : 0,
+          isActive: mod.isActive !== false,
+          options: [],
+          minSelection: 0,
+          maxSelection: 1,
+          type: 'SINGLE'
+        };
+      });
+      
+      // Set the form values without marking as dirty
+      form.setValue("modifiers", formattedModifiers, { 
+        shouldDirty: false, 
+        shouldValidate: true 
+      });
+      
+      // Force a re-render to ensure the UI updates
+      const timer = setTimeout(() => {
+        form.trigger("modifiers");
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    } else if (!initialData?.modifiers?.length) {
+      // Clear modifiers if none are provided
+      form.setValue("modifiers", [], { shouldDirty: false });
+    }
+  }, [initialData, form]);
+
   const handleRemoveTag = (tagToRemove: string) => {
     const currentTags = form.getValues("tags") || [];
     form.setValue("tags", currentTags.filter(tag => tag !== tagToRemove));
   };
 
+// Update the modifier fetching logic to handle manager's branch
+const fetchModifiers = async () => {
+  try {
+    const branchName = form.watch("branchName") || managerBranch?.name;
+    const restaurantId = form.watch("restaurantId") || managerRestaurant?.id;
+
+    if (!branchName && !restaurantId) {
+      setAllModifiers([]);
+      return;
+    }
+
+    const params: any = {};
+    if (branchName && branchName !== "global") {
+      params.branchName = branchName;
+    }
+    if (restaurantId) {
+      params.restaurantId = restaurantId;
+    }
+
+    const response = await modifierApi.getModifiers(params);
+    const modifiersData = Array.isArray(response?.data?.data) 
+      ? response.data.data 
+      : response?.data 
+        ? [response.data] 
+        : [];
+
+    setAllModifiers(modifiersData.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      price: m.price || 0,
+      isActive: m.isActive !== false,
+      options: m.options || [],
+      minSelection: m.minSelection || 0,
+      maxSelection: m.maxSelection || 0,
+      type: m.type || 'SINGLE'
+    })));
+  } catch (error) {
+    console.error('Error fetching modifiers:', error);
+    toast({
+      title: "Error",
+      description: "Failed to load modifiers. Please try again.",
+      variant: "destructive",
+    });
+  }
+};
+
+React.useEffect(()=>{
+fetchModifiers()
+},[])
   const onSubmit = async (data: MenuItemFormValues) => {
     // Prevent default form submission
     event?.preventDefault();
