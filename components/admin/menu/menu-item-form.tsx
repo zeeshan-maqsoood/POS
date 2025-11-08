@@ -3064,8 +3064,8 @@ React.useEffect(() => {
 
   // Initialize modifiers when the form is first loaded with initialData
   React.useEffect(() => {
-    console.log(initialData.modifiers,"initialData")
-    if (initialData?.modifiers?.length && !form.formState.isDirty) {
+    console.log(initialData?.modifiers, "initialData");
+    if (initialData && initialData.modifiers?.length && !form.formState.isDirty) {
       const formattedModifiers = initialData.modifiers.map(item => {
         // Handle the nested modifier structure from the API
         const mod = item.modifier || item;
