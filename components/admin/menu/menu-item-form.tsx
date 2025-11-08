@@ -2991,13 +2991,7 @@ React.useEffect(() => {
     setSearchTerm("");
   };
 
-  const handleRemoveModifier = (modifierId: string) => {
-    const currentModifiers = form.getValues("modifiers") || [];
-    form.setValue(
-      "modifiers",
-      currentModifiers.filter(mod => mod.id !== modifierId)
-    );
-  };
+  // handleRemoveModifier is now defined later in the file with enhanced functionality
 
   const handleAddIngredient = (inventoryItem: { id: string; name: string; unit: string }) => {
     const currentIngredients = form.getValues("ingredients") || [];
@@ -3060,7 +3054,34 @@ React.useEffect(() => {
     maxSelection?: number;
     type?: string;
     modifier?: ModifierData;
+    // Add other possible properties that might be present
+    [key: string]: any;
   }
+
+  // Track removed modifiers to prevent them from reappearing
+  const removedModifierIds = React.useRef<Set<string>>(new Set());
+  
+  // Load removed modifiers from localStorage on component mount
+  React.useEffect(() => {
+    if (initialData?.id) {
+      const storedRemoved = localStorage.getItem(`removedModifiers_${initialData.id}`);
+      if (storedRemoved) {
+        removedModifierIds.current = new Set(JSON.parse(storedRemoved));
+      }
+    }
+    
+    // Cleanup function to clear the stored removed modifiers when component unmounts
+    return () => {
+      if (initialData?.id) {
+        localStorage.removeItem(`removedModifiers_${initialData.id}`);
+      }
+    };
+  }, [initialData?.id]);
+
+  // Type guard to check if an object is a ModifierData
+  const isModifierData = (item: any): item is ModifierData => {
+    return item && typeof item === 'object' && 'id' in item && 'name' in item && 'price' in item;
+  };
 
   // Initialize modifiers when the form is first loaded with initialData
   React.useEffect(() => {
@@ -3068,6 +3089,7 @@ React.useEffect(() => {
     
     if (!initialData) {
       console.log('No initial data available');
+      form.setValue("modifiers", [], { shouldDirty: false });
       return;
     }
 
@@ -3078,51 +3100,133 @@ React.useEffect(() => {
       return;
     }
 
-    // Only initialize if form is not dirty
-    if (form.formState.isDirty) {
-      console.log('Form is dirty, skipping modifier initialization');
+    // Only initialize if form is not dirty or we're in edit mode with no existing modifiers
+    const currentModifiers = form.getValues("modifiers") || [];
+    if (form.formState.isDirty && currentModifiers.length > 0) {
+      console.log('Form is dirty and has modifiers, skipping reinitialization');
       return;
     }
 
     console.log('Initializing modifiers from initial data');
     
-    const formattedModifiers = initialData.modifiers.map(item => {
-      // Handle both nested and flat modifier structures
-      const mod = item.modifier || item;
-      
-      // Log the raw modifier data for debugging
-      console.log('Processing modifier:', mod);
-      
-      // Ensure we have all required fields with proper fallbacks
-      return {
-        id: mod.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
-        name: mod.name || 'Unnamed Modifier',
-        price: typeof mod.price === 'number' ? mod.price : 0,
-        isActive: mod.isActive !== false,
-        options: Array.isArray(mod.options) ? mod.options : [],
-        minSelection: typeof mod.minSelection === 'number' ? mod.minSelection : 0,
-        maxSelection: typeof mod.maxSelection === 'number' ? mod.maxSelection : 1,
-        type: mod.type || 'SINGLE',
-        // Preserve the original modifier reference if it exists
-        ...(mod.modifier ? { modifier: mod.modifier } : {})
-      };
-    });
-    
-    console.log('Formatted modifiers:', formattedModifiers);
-    
-    // Set the form values without marking as dirty
-    form.setValue("modifiers", formattedModifiers, { 
-      shouldDirty: false, 
-      shouldValidate: true 
-    });
+    // First, fetch all available modifiers to ensure we have the latest data
+    const fetchAndProcessModifiers = async () => {
+      try {
+        const branchName = form.watch("branchName") || managerBranch?.name;
+        const restaurantId = form.watch("restaurantId") || managerRestaurant?.id;
+        
+        const params: any = {};
+        if (branchName && branchName !== "global") {
+          params.branchName = branchName;
+        }
+        if (restaurantId) {
+          params.restaurantId = restaurantId;
+        }
 
-    // Trigger validation after a short delay to ensure form is ready
-    const timer = setTimeout(() => {
-      form.trigger("modifiers");
-    }, 100);
+        const response = await modifierApi.getModifiers(params);
+        const allModifiers = Array.isArray(response?.data?.data) ? response.data.data : [];
+        
+        // If we have a menu item ID, load any previously removed modifiers
+        if (initialData?.id) {
+          const storedRemoved = localStorage.getItem(`removedModifiers_${initialData.id}`);
+          if (storedRemoved) {
+            removedModifierIds.current = new Set(JSON.parse(storedRemoved));
+          }
+        }
+        
+        const formattedModifiers = initialData.modifiers
+          // Filter out any modifiers that were previously removed
+          .filter((item: any) => {
+            const mod = item.modifier || item;
+            return !removedModifierIds.current.has(mod.id) && !removedModifierIds.current.has(item.id);
+          })
+          .map((item: any) => {
+            // Handle both nested and flat modifier structures
+            const mod = item.modifier || item;
+            
+            // Skip if this modifier was removed
+            if (removedModifierIds.current.has(mod.id)) {
+              return null;
+            }
+            
+            // Find the full modifier data from the fetched list
+            const fullModifier = allModifiers.find((m: any) => m.id === mod.id);
+            
+            // If we have the full modifier data, use it
+            if (fullModifier) {
+              return {
+                id: fullModifier.id,
+                name: fullModifier.name || 'Unnamed Modifier',
+                price: typeof fullModifier.price === 'number' ? fullModifier.price : 0,
+                isActive: fullModifier.isActive !== false,
+                options: Array.isArray(fullModifier.options) ? fullModifier.options : [],
+                minSelection: typeof fullModifier.minSelection === 'number' ? fullModifier.minSelection : 0,
+                maxSelection: typeof fullModifier.maxSelection === 'number' ? fullModifier.maxSelection : 1,
+                type: fullModifier.type || 'SINGLE'
+              };
+            }
+            
+            // Fall back to the existing data if full modifier not found
+            return {
+              id: mod.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
+              name: mod.name || 'Unnamed Modifier',
+              price: typeof mod.price === 'number' ? mod.price : 0,
+              isActive: mod.isActive !== false,
+              options: Array.isArray(mod.options) ? mod.options : [],
+              minSelection: typeof mod.minSelection === 'number' ? mod.minSelection : 0,
+              maxSelection: typeof mod.maxSelection === 'number' ? mod.maxSelection : 1,
+              type: mod.type || 'SINGLE'
+            };
+          })
+          .filter((mod): mod is ModifierData => mod !== null);
+        
+        console.log('Formatted modifiers after filtering:', formattedModifiers);
+        
+        // Only update if there are changes to prevent infinite loops
+        const currentFormModifiers = form.getValues("modifiers") || [];
+        if (JSON.stringify(currentFormModifiers) !== JSON.stringify(formattedModifiers)) {
+          // Set the form values without marking as dirty
+          form.setValue("modifiers", formattedModifiers, { 
+            shouldDirty: false, 
+            shouldValidate: true 
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching modifiers:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load modifier data. Some modifiers may not display correctly.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchAndProcessModifiers();
+  }, [initialData, form, managerBranch, managerRestaurant]);
+
+  // Handle removing a modifier
+  const handleRemoveModifier = (modifierId: string) => {
+    if (!modifierId) return;
     
-    return () => clearTimeout(timer);
-  }, [initialData, form]);
+    const currentModifiers = form.getValues("modifiers") || [];
+    const updatedModifiers = currentModifiers.filter(mod => mod.id !== modifierId);
+    
+    // Add to removed modifiers set to prevent it from reappearing
+    if (modifierId && !modifierId.startsWith('temp-')) {
+      removedModifierIds.current.add(modifierId);
+      // Save to localStorage
+      if (initialData?.id) {
+        localStorage.setItem(
+          `removedModifiers_${initialData.id}`, 
+          JSON.stringify(Array.from(removedModifierIds.current))
+        );
+      }
+    }
+    
+    // Update the form with the removed modifier
+    form.setValue("modifiers", updatedModifiers, { shouldDirty: true });
+    form.trigger();
+  };
 
   const handleRemoveTag = (tagToRemove: string) => {
     const currentTags = form.getValues("tags") || [];
@@ -3215,12 +3319,12 @@ fetchModifiers()
         ...(branchName !== "global" && selectedBranch?.name && {
           branchName: selectedBranch.name
         }),
-        // Handle modifiers properly
-        ...(modifiers && modifiers.length > 0 && {
-          modifiers: {
-            connect: modifiers.map(({ id }) => ({ id }))
-          }
-        }),
+        // Handle modifiers - send as an object with a connect property
+        modifiers: {
+          connect: modifiers
+            ?.filter(m => m.id && !m.id.startsWith('temp-'))
+            .map(({ id }) => ({ id })) || []
+        },
         ingredients: {
           create: ingredients.map(ing => ({
             inventoryItemId: ing.inventoryItemId,

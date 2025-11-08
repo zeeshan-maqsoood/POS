@@ -35,6 +35,7 @@ import {
 } from "recharts";
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import React from 'react';
 
 // Define colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -110,6 +111,12 @@ export default function AnalyticsPage() {
   
   const reportRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Get unique branches from revenueByBranch
+  const uniqueBranches = React.useMemo(() => {
+    const branches = analyticsData.revenueByBranch?.map(b => b.branch) || [];
+    return [...new Set(branches)]; // Remove duplicates using Set
+  }, [analyticsData.revenueByBranch]);
 
   // Fetch analytics data when date range or branch changes
   useEffect(() => {

@@ -82,7 +82,7 @@ export default function OrdersPage() {
       setLoading(true);
       try {
         let restaurantsData: Restaurant[] = [];
-        
+
         if (isManager) {
           // For managers, only show their restaurant
           const restaurantId = user?.restaurantId || (user as any)?.restaurant?.id;
@@ -92,7 +92,7 @@ export default function OrdersPage() {
             if (managerRestaurant) {
               restaurantsData = [managerRestaurant];
               setSelectedRestaurant(managerRestaurant.id);
-              
+
               // If manager has a branch, set it
               const branchId = user?.branchId || (user as any)?.branch?.id || (user as any)?.branch;
               if (branchId) {
@@ -113,11 +113,11 @@ export default function OrdersPage() {
           // as we'll handle that in a separate effect
           setSelectedRestaurant('all');
         }
-        
+
         console.log('Loaded restaurants:', restaurantsData);
         setRestaurants(restaurantsData);
         setRestaurantsLoaded(true);
-        
+
       } catch (error) {
         console.error('Error loading restaurants:', error);
       } finally {
@@ -132,7 +132,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (restaurantsLoaded && !isManager) {
       console.log('Restaurant changed to:', selectedRestaurant);
-      
+
       // Only fetch branches if a specific restaurant is selected
       if (selectedRestaurant !== 'all') {
         setLoading(true);
@@ -182,11 +182,11 @@ export default function OrdersPage() {
   const fetchOrders = async (status?: OrderStatus | 'ALL', page: number = 1) => {
     try {
       let branchName: string | undefined;
-      
+
       if (selectedBranch !== 'all') {
         const branch = filteredBranches.find(branch => branch.id === selectedBranch);
         branchName = branch?.name;
-        
+
         if (selectedBranch && !branchName) {
           console.error('Selected branch not found in filteredBranches', {
             selectedBranch,
@@ -217,10 +217,10 @@ export default function OrdersPage() {
       });
 
       console.log('Orders API Response:', response);
-      
+
       let ordersList: any[] = [];
       let totalItems = 0;
-      
+
       // Handle different response formats
       if (Array.isArray(response.data)) {
         // If the API returns a simple array, we can't do proper pagination
@@ -236,10 +236,10 @@ export default function OrdersPage() {
         ordersList = response.data.data.data;
         totalItems = response.data.data.meta?.total || response.data.data.total || 0;
       }
-      
+
       console.log('Parsed orders list:', ordersList);
       setOrders(ordersList);
-      
+
       // Update pagination
       const totalPages = Math.ceil(totalItems / pagination.pageSize);
       setPagination(prev => ({
@@ -248,7 +248,7 @@ export default function OrdersPage() {
         totalItems,
         totalPages: Math.max(1, totalPages) // Ensure at least 1 page
       }));
-      
+
       if (ordersList.length === 0) {
         console.log('No orders found with current filters');
       }
@@ -282,7 +282,7 @@ export default function OrdersPage() {
   useEffect(() => {
     const loadData = async () => {
       if (!restaurantsLoaded) return;
-      
+
       console.log('Fetching orders with params:', {
         activeTab,
         selectedRestaurant,
@@ -291,7 +291,7 @@ export default function OrdersPage() {
         page: pagination.currentPage,
         pageSize: pagination.pageSize
       });
-      
+
       setLoading(true);
       try {
         // Always fetch the first page when filters change
@@ -309,18 +309,18 @@ export default function OrdersPage() {
         setLoading(false);
       }
     };
-    
+
     const timer = setTimeout(() => {
       loadData();
     }, 0);
-    
+
     return () => clearTimeout(timer);
   }, [activeTab, selectedRestaurant, selectedBranch, restaurantsLoaded]);
-  
+
   // Handle page changes separately to avoid unnecessary refetches
   useEffect(() => {
     if (!restaurantsLoaded) return;
-    
+
     const loadPage = async () => {
       setLoading(true);
       try {
@@ -331,7 +331,7 @@ export default function OrdersPage() {
         setLoading(false);
       }
     };
-    
+
     loadPage();
   }, [pagination.currentPage, pagination.pageSize]);
 
@@ -503,15 +503,15 @@ export default function OrdersPage() {
   useEffect(() => {
     const loadData = async () => {
       if (!restaurantsLoaded) return;
-      
+
       setLoading(true);
       try {
-        const branchName = selectedBranch === 'all' 
-          ? undefined 
+        const branchName = selectedBranch === 'all'
+          ? undefined
           : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-            
+
         await Promise.all([
-          fetchOrders(activeTab), 
+          fetchOrders(activeTab),
           fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
         ]);
       } catch (error) {
@@ -524,38 +524,38 @@ export default function OrdersPage() {
     const timer = setTimeout(() => {
       loadData();
     }, 0);
-    
+
     return () => clearTimeout(timer);
   }, [restaurantsLoaded]); // Only run when restaurants are loaded
 
   // Handle filter changes
   useEffect(() => {
     if (!restaurantsLoaded) return;
-    
+
     const timer = setTimeout(() => {
-      const branchName = selectedBranch === 'all' 
-        ? undefined 
+      const branchName = selectedBranch === 'all'
+        ? undefined
         : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-      
+
       console.log('Filter changed - fetching data:', {
         selectedRestaurant,
         selectedBranch,
         branchName,
         activeTab
       });
-      
+
       setLoading(true);
       Promise.all([
         fetchOrders(activeTab),
         fetchStats(
-          selectedRestaurant === 'all' ? undefined : selectedRestaurant, 
+          selectedRestaurant === 'all' ? undefined : selectedRestaurant,
           branchName
         )
       ]).finally(() => {
         setLoading(false);
       });
     }, 300); // Small debounce to prevent rapid updates
-    
+
     return () => clearTimeout(timer);
   }, [selectedRestaurant, selectedBranch, activeTab, restaurantsLoaded]);
 
@@ -603,9 +603,9 @@ export default function OrdersPage() {
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Restaurant</label>
-            <Select 
-              value={selectedRestaurant} 
-              onValueChange={setSelectedRestaurant} 
+            <Select
+              value={selectedRestaurant}
+              onValueChange={setSelectedRestaurant}
               disabled={!restaurantsLoaded || isManager}
             >
               <SelectTrigger>
@@ -631,8 +631,8 @@ export default function OrdersPage() {
             >
               <SelectTrigger>
                 <SelectValue placeholder={
-                  isManager 
-                    ? (user?.branch?.name || "No branch assigned") 
+                  isManager
+                    ? (user?.branch?.name || "No branch assigned")
                     : !restaurantsLoaded
                       ? "Loading..."
                       : selectedRestaurant === 'all'
@@ -752,13 +752,13 @@ export default function OrdersPage() {
                   setLoading(true);
                   await orderApi.updatePaymentStatus(orderId, paymentStatus, paymentMethod);
                   const branchName = selectedBranch === 'all' ? undefined : filteredBranches.find(branch => branch.id === selectedBranch)?.name || undefined;
-                  
+
                   // Refresh both orders and stats when payment status or method changes
                   await Promise.all([
-                    fetchOrders(activeTab), 
+                    fetchOrders(activeTab),
                     fetchStats(selectedRestaurant === 'all' ? undefined : selectedRestaurant, branchName)
                   ]);
-                  
+
                   // If payment status is updated to PAID, set the order to print
                   if (paymentStatus === 'PAID') {
                     const order = orders.find(o => o.id === orderId);
@@ -774,80 +774,80 @@ export default function OrdersPage() {
                 } finally {
                   setLoading(false);
                 }
-                }}
-                onEditOrder={handleEditOrder}
-              />
-              
-              {/* Pagination Controls */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Items per page:</span>
-                  <select
-                    value={pagination.pageSize}
-                    onChange={handlePageSizeChange}
-                    className="h-8 w-16 rounded-md border border-input bg-background px-2 py-1 text-sm"
-                  >
-                    {[5, 10, 20, 50, 100].map(size => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(1)}
-                    disabled={pagination.currentPage === 1}
-                  >
-                    «
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(pagination.currentPage - 1)}
-                    disabled={pagination.currentPage === 1}
-                  >
-                    ‹
-                  </Button>
-                  
-                  <span className="px-2 text-sm">
-                    Page {pagination.currentPage} of {pagination.totalPages}
-                  </span>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(pagination.currentPage + 1)}
-                    disabled={pagination.currentPage >= pagination.totalPages}
-                  >
-                    ›
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(pagination.totalPages)}
-                    disabled={pagination.currentPage >= pagination.totalPages}
-                  >
-                    »
-                  </Button>
-                </div>
-                
-                <div className="text-sm text-muted-foreground">
-                  {pagination.totalItems} total orders
-                </div>
+              }}
+              onEditOrder={handleEditOrder}
+            />
+
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Items per page:</span>
+                <select
+                  value={pagination.pageSize}
+                  onChange={handlePageSizeChange}
+                  className="h-8 w-16 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                >
+                  {[5, 10, 20, 50, 100].map(size => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
               </div>
-            
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={pagination.currentPage === 1}
+                >
+                  «
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.currentPage - 1)}
+                  disabled={pagination.currentPage === 1}
+                >
+                  ‹
+                </Button>
+
+                <span className="px-2 text-sm">
+                  Page {pagination.currentPage} of {pagination.totalPages}
+                </span>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  disabled={pagination.currentPage >= pagination.totalPages}
+                >
+                  ›
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.totalPages)}
+                  disabled={pagination.currentPage >= pagination.totalPages}
+                >
+                  »
+                </Button>
+              </div>
+
+              <div className="text-sm text-muted-foreground">
+                {pagination.totalItems} total orders
+              </div>
+            </div>
+
           </TabsContent>
         </Tabs>
       </div>
-      
+
       {/* Order Print View - Using a portal to avoid layout issues */}
       {typeof window !== 'undefined' && orderToPrint && (
-        <OrderPrintView 
-          order={orderToPrint} 
+        <OrderPrintView
+          order={orderToPrint}
           onAfterPrint={handleAfterPrint}
           key={`print-${orderToPrint.id}-${Date.now()}`}
         />
@@ -1034,10 +1034,10 @@ function OrderList({ orders, onStatusUpdate, onPaymentStatusUpdate, onEditOrder 
                           <option value="">Updating...</option>
                         ) : (
                           Object.values(OrderStatus).map((status) => {
-                            const displayText = status.split('_').map(w => 
+                            const displayText = status.split('_').map(w =>
                               w.charAt(0) + w.slice(1).toLowerCase()
                             ).join(' ');
-                            
+
                             return (
                               <option
                                 key={status}
