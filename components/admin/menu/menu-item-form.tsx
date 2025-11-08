@@ -3064,39 +3064,64 @@ React.useEffect(() => {
 
   // Initialize modifiers when the form is first loaded with initialData
   React.useEffect(() => {
-    console.log(initialData?.modifiers, "initialData");
-    if (initialData && initialData.modifiers?.length && !form.formState.isDirty) {
-      const formattedModifiers = initialData.modifiers.map(item => {
-        // Handle the nested modifier structure from the API
-        const mod = item.modifier || item;
-        return {
-          id: mod.id,
-          name: mod.name || 'Unnamed Modifier',
-          price: typeof mod.price === 'number' ? mod.price : 0,
-          isActive: mod.isActive !== false,
-          options: [],
-          minSelection: 0,
-          maxSelection: 1,
-          type: 'SINGLE'
-        };
-      });
-      
-      // Set the form values without marking as dirty
-      form.setValue("modifiers", formattedModifiers, { 
-        shouldDirty: false, 
-        shouldValidate: true 
-      });
-      
-      // Force a re-render to ensure the UI updates
-      const timer = setTimeout(() => {
-        form.trigger("modifiers");
-      }, 100);
-      
-      return () => clearTimeout(timer);
-    } else if (!initialData?.modifiers?.length) {
-      // Clear modifiers if none are provided
-      form.setValue("modifiers", [], { shouldDirty: false });
+    console.log('Initial data modifiers:', initialData?.modifiers);
+    
+    if (!initialData) {
+      console.log('No initial data available');
+      return;
     }
+
+    // If no modifiers, ensure the field is initialized as empty array
+    if (!initialData.modifiers || !Array.isArray(initialData.modifiers)) {
+      console.log('No modifiers to initialize or invalid modifiers format');
+      form.setValue("modifiers", [], { shouldDirty: false });
+      return;
+    }
+
+    // Only initialize if form is not dirty
+    if (form.formState.isDirty) {
+      console.log('Form is dirty, skipping modifier initialization');
+      return;
+    }
+
+    console.log('Initializing modifiers from initial data');
+    
+    const formattedModifiers = initialData.modifiers.map(item => {
+      // Handle both nested and flat modifier structures
+      const mod = item.modifier || item;
+      
+      // Log the raw modifier data for debugging
+      console.log('Processing modifier:', mod);
+      
+      // Ensure we have all required fields with proper fallbacks
+      return {
+        id: mod.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
+        name: mod.name || 'Unnamed Modifier',
+        price: typeof mod.price === 'number' ? mod.price : 0,
+        isActive: mod.isActive !== false,
+        options: Array.isArray(mod.options) ? mod.options : [],
+        minSelection: typeof mod.minSelection === 'number' ? mod.minSelection : 0,
+        maxSelection: typeof mod.maxSelection === 'number' ? mod.maxSelection : 1,
+        type: mod.type || 'SINGLE',
+        // Preserve the original modifier reference if it exists
+        ...(mod.modifier ? { modifier: mod.modifier } : {})
+      };
+    });
+    
+    console.log('Formatted modifiers:', formattedModifiers);
+    
+    // Set the form values without marking as dirty
+    form.setValue("modifiers", formattedModifiers, { 
+      shouldDirty: false, 
+      shouldValidate: true 
+    });
+
+    // Trigger validation after a short delay to ensure form is ready
+    const timer = setTimeout(() => {
+      form.trigger("modifiers");
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, [initialData, form]);
 
   const handleRemoveTag = (tagToRemove: string) => {
