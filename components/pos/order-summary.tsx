@@ -400,6 +400,13 @@ console.log(response,"restaurantResponse")
         setLastOrder(orderData);
         // setShowPrintView(true);
         toast.success('Order placed successfully!');
+        
+        // Reset form for new order
+        onClearCart();
+        onCustomerNameChange('');
+        if (orderType === 'DINE_IN') {
+          onTableNumberChange('');
+        }
       } else {
         toast.error('Failed to place order');
       }
@@ -1562,19 +1569,6 @@ console.log(response,"restaurantResponse")
               className="w-full"
             >
               Clear Cart
-            </Button>
-          )}
-
-          {lastOrder && (
-            <Button
-              onClick={() => {
-                setShowPrintView(true);
-              }}
-              variant="outline"
-              className="w-full"
-            >
-              <Printer className="h-4 w-4 mr-2" />
-              Print Receipt Again
             </Button>
           )}
         </div>
