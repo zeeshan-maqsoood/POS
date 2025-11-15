@@ -98,7 +98,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           { name: "Restaurants", href: "/dashboard/restaurants", icon: Building2 },
           { name: "Analytics", href: "/dashboard/analytics", icon: BarChart2 },
           { name: "Reports", href: "/dashboard/reports", icon: BarChart2 },
-          { name: "Inventory", href: "/dashboard/Inventory", icon: Warehouse },
+          // { name: "Inventory", href: "/dashboard/Inventory", icon: Warehouse },
         ]
       }
 
